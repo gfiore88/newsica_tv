@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+env/
+.env
+
+# Media Files (Audio / Video generati localmente)
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.wav
+*.mp3
+*.flac
+*.ogg
+tmp_audio/
+tmp_video/
+output/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
