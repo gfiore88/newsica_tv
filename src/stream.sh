@@ -43,16 +43,24 @@ if [ ! -f "$FFMPEG_CMD" ]; then
   FFMPEG_CMD="ffmpeg" # Fallback
 fi
 
-FILTER="[0:v][2:v]overlay=W-w-50:50[bg]; [bg]drawbox=y=ih-80:color=black@0.7:width=iw:height=80:t=fill[bg_box]; [bg_box]drawtext=textfile='$TICKER_FILE':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=40:y=h-60:x=w-mod(t*200\,w+tw):alpha=0.9[ticker]; [ticker]drawbox=x=0:y=ih-80:color=red@1:width=250:height=80:t=fill[ticker_box]; [ticker_box]drawtext=text='ULTIMORA':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=35:x=20:y=h-58[ticker_final]; [ticker_final]drawtext=text='%{localtime\:%H\\\\\:%M\\\\\:%S}':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=30:x=w-180:y=20:box=1:boxcolor=black@0.6:boxborderw=5[outv]"
+FILTER='[2:v]scale=100:100[logo_small]; [0:v][logo_small]overlay=W-w-50:50[bg]; [bg]drawbox=y=ih-80:color=black@0.7:width=iw:height=80:t=fill[bg_box]; [bg_box]drawtext=textfile='"$TICKER_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=40:y=h-60:x=w-mod(t*200\,w+tw):alpha=0.9[ticker]; [ticker]drawbox=x=0:y=ih-80:color=red@1:width=250:height=80:t=fill[ticker_box]; [ticker_box]drawtext=text='"'"'ULTIMORA'"'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=35:x=20:y=h-58[ticker_final]; [ticker_final]drawtext=text='"'"'%{localtime\:%H.%M.%S}'"'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=30:x=w-180:y=20:box=1:boxcolor=black@0.6:boxborderw=5[outv]'
 
-$FFMPEG_CMD -re \
-  -f lavfi -i "color=c=0x0a1128:s=1920x1080:r=30" \
-  -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
-  -i "$LOGO_FILE" \
-  -filter_complex "$FILTER" \
-  -map "[outv]" -map 1:a \
-  -c:v libx264 -preset veryfast \
-  -b:v 6000k -minrate 6000k -maxrate 6000k -bufsize 12000k -nal-hrd cbr \
-  -pix_fmt yuv420p -g 60 \
-  -c:a aac -b:a 128k -ar 44100 \
-  -f flv "$YOUTUBE_STREAM_URL/$YOUTUBE_STREAM_KEY"
+
+while true; do
+  echo "🚀 Avvio istanza FFmpeg..."
+  $FFMPEG_CMD -re \
+    -f lavfi -i "color=c=0x0a1128:s=1280x720:r=15" \
+    -re -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
+    -i "$LOGO_FILE" \
+    -filter_complex "$FILTER" \
+    -map "[outv]" -map 1:a \
+    -c:v h264_videotoolbox -b:v 6000k \
+    -pix_fmt yuv420p -g 30 \
+    -c:a aac -b:a 128k -ar 44100 \
+    -f flv "$YOUTUBE_STREAM_URL/$YOUTUBE_STREAM_KEY"
+    
+  echo "⚠️ FFmpeg si è disconnesso o ha crashato. Riavvio in 5 secondi..."
+  sleep 5
+done
+
+

@@ -4,8 +4,32 @@ import subprocess
 import random
 import glob
 import sys
+import threading
+import queue
 
-# ... (resto delle definizioni invariato) ...
+# Cartelle di progetto
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TMP_DIR = os.path.join(BASE_DIR, "tmp")
+MUSIC_DIR = os.path.join(BASE_DIR, "assets", "music")
+AUDIO_PIPE = os.path.join(TMP_DIR, "audio_pipe")
+
+# Coda per l'audio (5000 chunks = circa 7 minuti di audio)
+audio_queue = queue.Queue(maxsize=5000)
+
+def ensure_folders():
+    os.makedirs(TMP_DIR, exist_ok=True)
+    if not os.path.exists(AUDIO_PIPE):
+        try:
+            os.mkfifo(AUDIO_PIPE)
+            print(f"✅ Pipe creata in {AUDIO_PIPE}")
+        except OSError as e:
+            print(f"⚠️ Errore creazione pipe: {e}")
+
+def get_random_music():
+    files = glob.glob(os.path.join(MUSIC_DIR, "*.wav")) + glob.glob(os.path.join(MUSIC_DIR, "*.mp3"))
+    if not files:
+        return None
+    return random.choice(files)
 
 def run_pipeline():
     print("\n--- 🔄 Avvio ciclo di aggiornamento news ---")
@@ -22,7 +46,7 @@ def run_pipeline():
     print("Sintesi vocale (TTS)...")
     subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "tts_generator.py")])
 
-def mix_and_pipe(music_file, voice_file, fifo):
+def mix_and_queue(music_file, voice_file):
     print(f"Mixaggio in corso: Voce + {os.path.basename(music_file)}")
     
     cmd = [
@@ -30,25 +54,93 @@ def mix_and_pipe(music_file, voice_file, fifo):
         "-y",
         "-i", voice_file,
         "-i", music_file,
-        "-filter_complex", "[1:a]volume=0.1[music]; [0:a][music]amix=inputs=2:duration=first",
+        "-filter_complex", "[0:a]apad[voice_padded]; [1:a]volume=0.6[m]; [m][voice_padded]sidechaincompress=threshold=0.03:ratio=20:attack=50:release=1000[music]; [0:a][music]amix=inputs=2:duration=longest:dropout_transition=0",
         "-f", "s16le",
         "-ar", "24000",
         "-ac", "1",
         "pipe:1"
     ]
     
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     
-    print("Inviando l'audio alla pipe...")
+    print("Caricamento audio nella coda...")
+    count = 0
     while True:
         data = process.stdout.read(4096)
         if not data:
             break
-        fifo.write(data)
-        fifo.flush() # Forza la scrittura
+        audio_queue.put(data) # Questo si blocca se la coda è piena
+        count += 1
             
     process.wait()
-    print("✅ Blocco audio inviato alla pipe.")
+    print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
+
+def feeder_worker(fifo):
+    print("🧵 Thread Feeder avviato.")
+    # PCM 16-bit mono a 24000Hz = 48000 byte al secondo
+    # Un chunk di 4096 byte dura circa 0.0853 secondi (4096 / 48000)
+    RATE = 48000
+    CHUNK = 4096
+    SLEEP_TIME = CHUNK / RATE
+    silence = b'\x00' * CHUNK
+    
+    while True:
+        try:
+            # Prova a prendere dati senza bloccare
+            data = audio_queue.get(block=False)
+            fifo.write(data)
+            fifo.flush()
+            audio_queue.task_done()
+        except queue.Empty:
+            # Se la coda è vuota, invia un chunk di silenzio
+            try:
+                fifo.write(silence)
+                fifo.flush()
+                # Dormi per il tempo equivalente alla durata del chunk
+                # per emulare il tempo reale e non saturare la pipe!
+                time.sleep(SLEEP_TIME)
+            except BrokenPipeError:
+                print("❌ Errore: Pipe rotta (FFmpeg si è disconnesso).")
+                break
+        except BrokenPipeError:
+            print("❌ Errore: Pipe rotta (FFmpeg si è disconnesso).")
+            break
+    print("🧵 Thread Feeder terminato.")
+
+def generator_worker():
+    print("🤖 Thread Generatore avviato.")
+    # Genera il primo blocco
+    run_pipeline()
+    
+    while True:
+        try:
+            voice_file = os.path.join(TMP_DIR, "audio.wav")
+            music_file = get_random_music()
+            
+            if not os.path.exists(voice_file):
+                print("❌ Errore: file voce non generato. Riprovo tra 10 secondi...")
+                time.sleep(10)
+                continue
+                
+            if not music_file:
+                print("⚠️ Nessuna musica trovata. Uso solo la voce.")
+                with open(voice_file, 'rb') as f:
+                    while True:
+                        data = f.read(4096)
+                        if not data:
+                            break
+                        audio_queue.put(data)
+            else:
+                mix_and_queue(music_file, voice_file)
+                
+            print("🚀 Genero già il prossimo blocco in background...")
+            
+            # Rigenera le news per il prossimo blocco senza aspettare!
+            run_pipeline()
+            
+        except Exception as e:
+            print(f"💥 Errore nel ciclo del generatore: {e}")
+            time.sleep(10)
 
 def main():
     ensure_folders()
@@ -56,40 +148,46 @@ def main():
     print("🎬 Regia NewsicaTV avviata.")
     print("💡 Assicurati che lo streaming FFmpeg stia leggendo da 'tmp/audio_pipe'")
     
-    # Apriamo la pipe in scrittura UNA VOLTA SOLA e la teniamo aperta per sempre
-    # Questo impedisce a FFmpeg di ricevere EOF e chiudersi!
-    print("In attesa che FFmpeg si colleghi alla pipe in lettura...")
-    with open(AUDIO_PIPE, 'wb') as fifo:
-        while True:
-            try:
-                # Esegui la pipeline per generare i file
-                run_pipeline()
-                
-                voice_file = os.path.join(TMP_DIR, "audio.wav")
-                music_file = get_random_music()
-                
-                if not os.path.exists(voice_file):
-                    print("❌ Errore: file voce non generato. Riprovo tra 10 secondi...")
-                    time.sleep(10)
-                    continue
-                    
-                if not music_file:
-                    print("⚠️ Nessuna musica trovata in assets/music/. Uso solo la voce.")
-                    with open(voice_file, 'rb') as f:
-                        fifo.write(f.read())
+    # Avvia il thread che genera le news in background
+    t = threading.Thread(target=generator_worker, daemon=True)
+    t.start()
+    
+    RATE = 48000
+    CHUNK = 4096
+    SLEEP_TIME = CHUNK / RATE
+    silence = b'\x00' * CHUNK
+    
+    while True:
+        print("\n📡 In attesa che FFmpeg si colleghi alla pipe in lettura...")
+        try:
+            with open(AUDIO_PIPE, 'wb') as fifo:
+                print("✅ FFmpeg collegato! Trasmissione in corso...")
+                while True:
+                    try:
+                        # Prende i dati dalla coda con un timeout breve
+                        data = audio_queue.get(timeout=0.1)
+                        fifo.write(data)
                         fifo.flush()
-                else:
-                    mix_and_pipe(music_file, voice_file, fifo)
-                    
-                print("⏳ Attesa 5 minuti prima del prossimo aggiornamento...")
-                time.sleep(300) # Attendi 5 minuti prima di aggiornare le news
-                
-            except KeyboardInterrupt:
-                print("\n👋 Regia interrotta dall'utente.")
-                break
-            except Exception as e:
-                print(f"💥 Errore nel ciclo di regia: {e}")
-                time.sleep(10)
+                        audio_queue.task_done()
+                    except queue.Empty:
+                        # Se la coda è vuota (es. durante la generazione), manda silenzio
+                        try:
+                            fifo.write(silence)
+                            fifo.flush()
+                            time.sleep(SLEEP_TIME)
+                        except BrokenPipeError:
+                            print("❌ Pipe rotta (FFmpeg si è disconnesso).")
+                            break
+                    except BrokenPipeError:
+                        print("❌ Pipe rotta (FFmpeg si è disconnesso).")
+                        break
+        except Exception as e:
+            print(f"⚠️ Errore nell'apertura della pipe: {e}")
+            time.sleep(2)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n👋 Regia interrotta dall'utente.")
+        sys.exit(0)

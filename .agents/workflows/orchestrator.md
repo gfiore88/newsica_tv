@@ -10,6 +10,8 @@ Sei l'Agente Coordinatore per il progetto NewsicaTV. Il tuo obiettivo è garanti
 
 > 🚨 **REGOLA D'ORO ASSOLUTA**: TUTTO LOCALE, TUTTO GRATIS. È severamente vietato l'uso di API a pagamento o servizi in cloud SaaS. Tutto deve funzionare in locale tramite Python, bash, FFmpeg, Kokoro AI e modelli LLM/Audio liberi.
 
+> 📝 **REGOLA DI DOCUMENTAZIONE**: Niente è completato finché non è documentato. Ogni decisione tecnica significativa deve produrre un ADR in `docs/decisions/` e la Roadmap (`docs/10_roadmap.md`) deve essere aggiornata di conseguenza prima di considerare chiuso un task.
+
 ---
 
 ## Pipeline Standard di Progetto

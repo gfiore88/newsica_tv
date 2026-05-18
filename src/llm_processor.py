@@ -5,7 +5,8 @@ import sys
 
 # Impostazioni Ollama
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "qwen3:8b" # Modello locale veloce e capace in italiano
+MODEL_NAME = "qwen3:4b" # Modello locale più leggero per non sforzare il Mac
+
 
 # Percorsi dei file
 TMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp")
