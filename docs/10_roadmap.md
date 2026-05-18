@@ -14,6 +14,6 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 **Obiettivo:** Estendere la rotazione all'infinito e preparare il rilascio al pubblico.
 - [/] Stream Scheduler: Script di "loop infinito" per ruotare le notizie e aggiornarle a intervalli regolari (In corso: `director.py`).
 - [/] Music Integrator: Inserimento di brani musicali dell'utente nei "tempi morti" e transizioni (In corso: integrazione WAV utente).
-- [ ] Gestione Errori (Watchdog): Riavvio automatico dello script FFmpeg in caso di caduta connessione o crash.
+- [x] Gestione Errori (Watchdog): Loop di riavvio in `stream.sh` e creato `watchdog.sh` per `director.py`.
 - [/] Grafica Dinamica: Ticker aggiornati in tempo reale e sovrimpressioni (Completato: Orologio e box ULTIMORA fisso).
 - [ ] **Lancio Ufficiale**: Diretta pubblica sul canale NewsicaTV.

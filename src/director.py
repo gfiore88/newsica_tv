@@ -31,6 +31,17 @@ def get_random_music():
         return None
     return random.choice(files)
 
+def get_filler_process(music_file):
+    cmd = [
+        "ffmpeg",
+        "-i", music_file,
+        "-f", "s16le",
+        "-ar", "24000",
+        "-ac", "1",
+        "pipe:1"
+    ]
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
 def run_pipeline():
     print("\n--- 🔄 Avvio ciclo di aggiornamento news ---")
     
@@ -74,38 +85,6 @@ def mix_and_queue(music_file, voice_file):
             
     process.wait()
     print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
-
-def feeder_worker(fifo):
-    print("🧵 Thread Feeder avviato.")
-    # PCM 16-bit mono a 24000Hz = 48000 byte al secondo
-    # Un chunk di 4096 byte dura circa 0.0853 secondi (4096 / 48000)
-    RATE = 48000
-    CHUNK = 4096
-    SLEEP_TIME = CHUNK / RATE
-    silence = b'\x00' * CHUNK
-    
-    while True:
-        try:
-            # Prova a prendere dati senza bloccare
-            data = audio_queue.get(block=False)
-            fifo.write(data)
-            fifo.flush()
-            audio_queue.task_done()
-        except queue.Empty:
-            # Se la coda è vuota, invia un chunk di silenzio
-            try:
-                fifo.write(silence)
-                fifo.flush()
-                # Dormi per il tempo equivalente alla durata del chunk
-                # per emulare il tempo reale e non saturare la pipe!
-                time.sleep(SLEEP_TIME)
-            except BrokenPipeError:
-                print("❌ Errore: Pipe rotta (FFmpeg si è disconnesso).")
-                break
-        except BrokenPipeError:
-            print("❌ Errore: Pipe rotta (FFmpeg si è disconnesso).")
-            break
-    print("🧵 Thread Feeder terminato.")
 
 def generator_worker():
     print("🤖 Thread Generatore avviato.")
@@ -157,6 +136,8 @@ def main():
     SLEEP_TIME = CHUNK / RATE
     silence = b'\x00' * CHUNK
     
+    filler_proc = None
+    
     while True:
         print("\n📡 In attesa che FFmpeg si colleghi alla pipe in lettura...")
         try:
@@ -166,24 +147,61 @@ def main():
                     try:
                         # Prende i dati dalla coda con un timeout breve
                         data = audio_queue.get(timeout=0.1)
+                        
+                        # Se c'è un filler attivo, lo chiudiamo perché abbiamo di nuovo le news!
+                        if filler_proc is not None:
+                            print("📰 News pronte! Fermo la musica di riempimento.")
+                            filler_proc.terminate()
+                            filler_proc.wait()
+                            filler_proc = None
+                            
                         fifo.write(data)
                         fifo.flush()
                         audio_queue.task_done()
                     except queue.Empty:
-                        # Se la coda è vuota (es. durante la generazione), manda silenzio
-                        try:
-                            fifo.write(silence)
-                            fifo.flush()
-                            time.sleep(SLEEP_TIME)
-                        except BrokenPipeError:
-                            print("❌ Pipe rotta (FFmpeg si è disconnesso).")
-                            break
+                        # Se la coda è vuota (es. durante la generazione), usa il filler
+                        if filler_proc is None:
+                            music_file = get_random_music()
+                            if music_file:
+                                print(f"🎵 Coda vuota! Avvio musica di riempimento: {os.path.basename(music_file)}")
+                                filler_proc = get_filler_process(music_file)
+                        
+                        if filler_proc:
+                            data = filler_proc.stdout.read(CHUNK)
+                            if not data:
+                                # Il file è finito
+                                filler_proc.wait()
+                                filler_proc = None
+                                continue
+                            
+                            try:
+                                fifo.write(data)
+                                fifo.flush()
+                                time.sleep(SLEEP_TIME)
+                            except BrokenPipeError:
+                                print("❌ Pipe rotta (FFmpeg si è disconnesso).")
+                                break
+                        else:
+                            # Se non c'è musica, manda silenzio
+                            try:
+                                fifo.write(silence)
+                                fifo.flush()
+                                time.sleep(SLEEP_TIME)
+                            except BrokenPipeError:
+                                print("❌ Pipe rotta (FFmpeg si è disconnesso).")
+                                break
                     except BrokenPipeError:
                         print("❌ Pipe rotta (FFmpeg si è disconnesso).")
                         break
         except Exception as e:
             print(f"⚠️ Errore nell'apertura della pipe: {e}")
             time.sleep(2)
+        finally:
+            if filler_proc is not None:
+                print("🛑 Chiudo il processo di riempimento...")
+                filler_proc.terminate()
+                filler_proc.wait()
+                filler_proc = None
 
 if __name__ == "__main__":
     try:
