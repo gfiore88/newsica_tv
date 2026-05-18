@@ -2,6 +2,7 @@ import json
 import requests
 import os
 import sys
+import re
 
 # Impostazioni Ollama
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -51,6 +52,39 @@ if character not in PROMPTS:
 SYSTEM_PROMPT = PROMPTS[character]
 
 
+def clean_text(value):
+    value = re.sub(r"<[^>]+>", " ", value or "")
+    value = re.sub(r"\s+", " ", value)
+    return value.strip()
+
+
+def build_fallback_script(filtered_news):
+    if character == "sport":
+        opening = "Un saluto a tutti gli appassionati di sport! Oggi giornata ricca di emozioni."
+        closing = "Per lo sport è tutto. Restate con noi su NewsicaTV."
+    elif character == "meteo":
+        opening = "Ed eccoci agli aggiornamenti meteo. Vediamo cosa ci riservano le prossime ore."
+        closing = "Per il meteo è tutto. A tra poco con nuovi aggiornamenti."
+    else:
+        opening = "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
+        closing = "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
+
+    lines = [opening]
+    for item in filtered_news[:4]:
+        title = clean_text(item.get("title", ""))
+        summary = clean_text(item.get("summary", ""))
+        if title and summary:
+            lines.append(f"{title}. {summary}")
+        elif title:
+            lines.append(title)
+
+    if len(lines) == 1:
+        lines.append("Al momento non ci sono nuovi aggiornamenti verificati per questa rubrica.")
+
+    lines.append(closing)
+    return "\n\n".join(lines)
+
+
 def generate_script():
     print("Avvio della rielaborazione editoriale tramite LLM (Ollama locale)...")
     
@@ -89,6 +123,8 @@ def generate_script():
         
     print(f"Ho letto {len(filtered_news)} notizie per {character}. Invio al modello {MODEL_NAME}...")
     
+    fallback_script = build_fallback_script(filtered_news)
+
     # Payload per Ollama
     payload = {
         "model": MODEL_NAME,
@@ -98,10 +134,13 @@ def generate_script():
     }
     
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=120)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=8)
         response.raise_for_status()
         result = response.json()
         script = result.get('response', '').strip()
+        if not script:
+            print("⚠️ Ollama ha restituito un copione vuoto. Uso fallback locale.")
+            script = fallback_script
         
         with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
             f.write(script)
@@ -112,7 +151,10 @@ def generate_script():
         
     except requests.exceptions.RequestException as e:
         print(f"❌ Errore di connessione a Ollama. Assicurati che l'app Ollama sia avviata. Dettagli: {e}")
-        sys.exit(1)
+        print("⚠️ Uso copione fallback locale per non bloccare la rotazione degli agenti.")
+        with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+            f.write(fallback_script)
+        print(f"✅ Copione fallback generato e salvato in {OUTPUT_FILE}")
 
 if __name__ == "__main__":
     generate_script()

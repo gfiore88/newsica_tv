@@ -12,6 +12,14 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
 MUSIC_DIR = os.path.join(BASE_DIR, "assets", "music")
 AUDIO_PIPE = os.path.join(TMP_DIR, "audio_pipe")
+PCM_SAMPLE_RATE = 24000
+PCM_CHANNELS = 1
+PCM_CHUNK_BYTES = 4096
+FFMPEG_CMD = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"
+if not os.path.exists(FFMPEG_CMD):
+    FFMPEG_CMD = "/opt/homebrew/bin/ffmpeg"
+if not os.path.exists(FFMPEG_CMD):
+    FFMPEG_CMD = "ffmpeg"
 
 # Coda per l'audio (5000 chunks = circa 7 minuti di audio)
 audio_queue = queue.Queue(maxsize=5000)
@@ -25,50 +33,65 @@ def ensure_folders():
         except OSError as e:
             print(f"⚠️ Errore creazione pipe: {e}")
 
-def get_random_music():
-    files = glob.glob(os.path.join(MUSIC_DIR, "*.wav")) + glob.glob(os.path.join(MUSIC_DIR, "*.mp3"))
-    if not files:
-        return None
-    return random.choice(files)
+_MUSIC_CACHE = []
 
-def get_filler_process(music_file):
+def get_random_music():
+    global _MUSIC_CACHE
+    if not _MUSIC_CACHE:
+        _MUSIC_CACHE = glob.glob(os.path.join(MUSIC_DIR, "*.wav")) + glob.glob(os.path.join(MUSIC_DIR, "*.mp3"))
+    if not _MUSIC_CACHE:
+        return None
+    return random.choice(_MUSIC_CACHE)
+
+def queue_pcm_from_file(audio_file):
     cmd = [
-        "ffmpeg",
-        "-i", music_file,
+        FFMPEG_CMD,
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", audio_file,
         "-f", "s16le",
-        "-ar", "24000",
-        "-ac", "1",
+        "-ar", str(PCM_SAMPLE_RATE),
+        "-ac", str(PCM_CHANNELS),
         "pipe:1"
     ]
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    count = 0
+    while True:
+        data = process.stdout.read(PCM_CHUNK_BYTES)
+        if not data:
+            break
+        audio_queue.put(data)
+        count += 1
+    process.wait()
+    print(f"✅ Audio voce caricato nella coda ({count} chunks).")
 
 def run_pipeline(character="news"):
     print(f"\n--- 🔄 Avvio ciclo di aggiornamento news ({character}) ---")
     
     # 1. Scraper
     print("Scraping news...")
-    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "scraper.py")])
+    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "scraper.py")], check=True)
     
     # 2. LLM Processor
     print("Elaborazione testo (LLM)...")
-    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "llm_processor.py"), character])
+    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "llm_processor.py"), character], check=True)
     
     # 3. TTS Generator
     print("Sintesi vocale (TTS)...")
-    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "tts_generator.py"), character])
+    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "tts_generator.py"), character], check=True)
 
 def mix_and_queue(music_file, voice_file):
     print(f"Mixaggio in corso: Voce + {os.path.basename(music_file)}")
     
     cmd = [
-        "ffmpeg",
+        FFMPEG_CMD,
         "-y",
         "-i", voice_file,
         "-i", music_file,
         "-filter_complex", "[0:a]apad[voice_padded]; [1:a]volume=0.6[m]; [m][voice_padded]sidechaincompress=threshold=0.03:ratio=20:attack=50:release=1000[music]; [0:a][music]amix=inputs=2:duration=longest:dropout_transition=0",
         "-f", "s16le",
-        "-ar", "24000",
-        "-ac", "1",
+        "-ar", str(PCM_SAMPLE_RATE),
+        "-ac", str(PCM_CHANNELS),
         "pipe:1"
     ]
     
@@ -77,7 +100,7 @@ def mix_and_queue(music_file, voice_file):
     print("Caricamento audio nella coda...")
     count = 0
     while True:
-        data = process.stdout.read(4096)
+        data = process.stdout.read(PCM_CHUNK_BYTES)
         if not data:
             break
         audio_queue.put(data) # Questo si blocca se la coda è piena
@@ -108,12 +131,7 @@ def generator_worker():
                 
             if not music_file:
                 print("⚠️ Nessuna musica trovata. Uso solo la voce.")
-                with open(voice_file, 'rb') as f:
-                    while True:
-                        data = f.read(4096)
-                        if not data:
-                            break
-                        audio_queue.put(data)
+                queue_pcm_from_file(voice_file)
             else:
                 mix_and_queue(music_file, voice_file)
                 
@@ -138,12 +156,7 @@ def main():
     t = threading.Thread(target=generator_worker, daemon=True)
     t.start()
     
-    RATE = 48000
-    CHUNK = 4096
-    SLEEP_TIME = CHUNK / RATE
-    silence = b'\x00' * CHUNK
-    
-    filler_proc = None
+    silence = b'\x00' * PCM_CHUNK_BYTES
     
     while True:
         print("\n📡 In attesa che FFmpeg si colleghi alla pipe in lettura...")
@@ -152,63 +165,25 @@ def main():
                 print("✅ FFmpeg collegato! Trasmissione in corso...")
                 while True:
                     try:
-                        # Prende i dati dalla coda con un timeout breve
-                        data = audio_queue.get(timeout=0.1)
-                        
-                        # Se c'è un filler attivo, lo chiudiamo perché abbiamo di nuovo le news!
-                        if filler_proc is not None:
-                            print("📰 News pronte! Fermo la musica di riempimento.")
-                            filler_proc.terminate()
-                            filler_proc.wait()
-                            filler_proc = None
-                            
+                        data = audio_queue.get_nowait()
                         fifo.write(data)
                         fifo.flush()
                         audio_queue.task_done()
                     except queue.Empty:
-                        # Se la coda è vuota (es. durante la generazione), usa il filler
-                        if filler_proc is None:
-                            music_file = get_random_music()
-                            if music_file:
-                                print(f"🎵 Coda vuota! Avvio musica di riempimento: {os.path.basename(music_file)}")
-                                filler_proc = get_filler_process(music_file)
-                        
-                        if filler_proc:
-                            data = filler_proc.stdout.read(CHUNK)
-                            if not data:
-                                # Il file è finito
-                                filler_proc.wait()
-                                filler_proc = None
-                                continue
-                            
-                            try:
-                                fifo.write(data)
-                                fifo.flush()
-                                time.sleep(SLEEP_TIME)
-                            except BrokenPipeError:
-                                print("❌ Pipe rotta (FFmpeg si è disconnesso).")
-                                break
-                        else:
-                            # Se non c'è musica, manda silenzio
-                            try:
-                                fifo.write(silence)
-                                fifo.flush()
-                                time.sleep(SLEEP_TIME)
-                            except BrokenPipeError:
-                                print("❌ Pipe rotta (FFmpeg si è disconnesso).")
-                                break
+                        # Mantiene sempre viva la FIFO: se la generazione e' in corso,
+                        # FFmpeg riceve silenzio PCM invece di restare senza input.
+                        try:
+                            fifo.write(silence)
+                            fifo.flush()
+                        except BrokenPipeError:
+                            print("❌ Pipe rotta (FFmpeg si è disconnesso).")
+                            break
                     except BrokenPipeError:
                         print("❌ Pipe rotta (FFmpeg si è disconnesso).")
                         break
         except Exception as e:
             print(f"⚠️ Errore nell'apertura della pipe: {e}")
             time.sleep(2)
-        finally:
-            if filler_proc is not None:
-                print("🛑 Chiudo il processo di riempimento...")
-                filler_proc.terminate()
-                filler_proc.wait()
-                filler_proc = None
 
 if __name__ == "__main__":
     try:

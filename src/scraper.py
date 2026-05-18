@@ -18,7 +18,14 @@ def fetch_latest_news(feed_url, max_items=3):
     Scarica le ultime notizie da un feed RSS.
     Restituisce una lista di dizionari con 'title', 'summary' e 'link'.
     """
-    parsed_feed = feedparser.parse(feed_url)
+    try:
+        response = requests.get(feed_url, timeout=8)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"⚠️ Errore recupero feed {feed_url}: {e}")
+        return []
+
+    parsed_feed = feedparser.parse(response.content)
     news_items = []
     
     for entry in parsed_feed.entries[:max_items]:
@@ -87,4 +94,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
