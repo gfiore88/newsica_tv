@@ -42,8 +42,8 @@ def get_filler_process(music_file):
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-def run_pipeline():
-    print("\n--- 🔄 Avvio ciclo di aggiornamento news ---")
+def run_pipeline(character="news"):
+    print(f"\n--- 🔄 Avvio ciclo di aggiornamento news ({character}) ---")
     
     # 1. Scraper
     print("Scraping news...")
@@ -51,11 +51,11 @@ def run_pipeline():
     
     # 2. LLM Processor
     print("Elaborazione testo (LLM)...")
-    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "llm_processor.py")])
+    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "llm_processor.py"), character])
     
     # 3. TTS Generator
     print("Sintesi vocale (TTS)...")
-    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "tts_generator.py")])
+    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "tts_generator.py"), character])
 
 def mix_and_queue(music_file, voice_file):
     print(f"Mixaggio in corso: Voce + {os.path.basename(music_file)}")
@@ -86,10 +86,15 @@ def mix_and_queue(music_file, voice_file):
     process.wait()
     print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
 
+CHARACTERS = ["news", "sport", "meteo"]
+char_idx = 0
+
 def generator_worker():
+    global char_idx
     print("🤖 Thread Generatore avviato.")
     # Genera il primo blocco
-    run_pipeline()
+    run_pipeline(CHARACTERS[char_idx])
+    char_idx = (char_idx + 1) % len(CHARACTERS)
     
     while True:
         try:
@@ -115,11 +120,13 @@ def generator_worker():
             print("🚀 Genero già il prossimo blocco in background...")
             
             # Rigenera le news per il prossimo blocco senza aspettare!
-            run_pipeline()
+            run_pipeline(CHARACTERS[char_idx])
+            char_idx = (char_idx + 1) % len(CHARACTERS)
             
         except Exception as e:
             print(f"💥 Errore nel ciclo del generatore: {e}")
             time.sleep(10)
+
 
 def main():
     ensure_folders()

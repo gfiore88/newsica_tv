@@ -13,15 +13,43 @@ TMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp")
 INPUT_FILE = os.path.join(TMP_DIR, "raw_news.json")
 OUTPUT_FILE = os.path.join(TMP_DIR, "script.txt")
 
-SYSTEM_PROMPT = """Sei lo speaker principale di NewsicaTV, una Web TV H24 in diretta.
-Il tuo compito è prendere una serie di notizie grezze (in formato JSON) e trasformarle in un copione fluido, professionale e coinvolgente, pronto per essere letto ad alta voce.
-Linee guida tassative:
-1. Inizia sempre con una sigla parlata tipo: "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
-2. Scrivi in modo estremamente discorsivo e radiofonico (frasi brevi, ritmo televisivo).
-3. NON fare elenchi puntati. Usa transizioni tra le notizie (es. "Passiamo ora agli esteri...", "Cambiando decisamente argomento...").
-4. Concludi sempre con una formula di chiusura tipo: "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
-5. Produci ESCLUSIVAMENTE il testo del copione, senza commenti o preamboli.
+PROMPTS = {
+    "news": """Sei Chiara, la conduttrice principale di NewsicaTV, una Web TV H24 in diretta.
+Il tuo compito è prendere una serie di notizie grezze (in formato JSON) e trasformarle in un copione fluido, professionale e istituzionale, pronto per essere letto ad alta voce.
+Linee guida:
+1. Inizia sempre con: "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
+2. Scrivi in modo discorsivo (frasi brevi, ritmo televisivo).
+3. NON fare elenchi puntati. Usa transizioni tra le notizie.
+4. Concludi con: "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
+5. Produci ESCLUSIVAMENTE il testo del copione.
+""",
+    "sport": """Sei Leo, il giornalista sportivo di NewsicaTV.
+Il tuo compito è prendere le notizie (in formato JSON) e trasformarle in un copione dinamico ed entusiasta.
+Linee guida:
+1. Inizia sempre con: "Un saluto a tutti gli appassionati di sport! Oggi giornata ricca di emozioni..."
+2. Usa un tono energico e termini dinamici.
+3. Produci ESCLUSIVAMENTE il testo del copione.
+""",
+    "meteo": """Sei il Colonnello, l'esperto meteo di NewsicaTV.
+Il tuo compito è trasformare le notizie o i dati meteo in un copione rassicurante e tecnico.
+Linee guida:
+1. Inizia sempre con: "Ed eccoci agli aggiornamenti meteo. Vediamo cosa ci riservano le prossime ore."
+2. Usa un tono calmo e preciso.
+3. Produci ESCLUSIVAMENTE il testo del copione.
 """
+}
+
+# Leggi il personaggio dagli argomenti (default: news)
+character = "news"
+if len(sys.argv) > 1:
+    character = sys.argv[1]
+
+if character not in PROMPTS:
+    print(f"⚠️ Personaggio '{character}' non trovato. Uso 'news'.")
+    character = "news"
+
+SYSTEM_PROMPT = PROMPTS[character]
+
 
 def generate_script():
     print("Avvio della rielaborazione editoriale tramite LLM (Ollama locale)...")
@@ -37,13 +65,29 @@ def generate_script():
             print(f"Errore nella lettura del JSON: {e}")
             sys.exit(1)
             
+    # Filtra le notizie in base al personaggio
+    filtered_news = []
+    for item in news_items:
+        source = item.get('source', '')
+        if character == "news" and ("ansa_ultimora" in source or "ansa_mondo" in source):
+            filtered_news.append(item)
+        elif character == "sport" and "sport" in source:
+            filtered_news.append(item)
+        elif character == "meteo" and "meteo" in source:
+            filtered_news.append(item)
+            
+    # Se non ci sono notizie per quel personaggio, usa quelle generali come fallback
+    if not filtered_news:
+        print(f"⚠️ Nessuna notizia specifica per '{character}'. Uso quelle generali.")
+        filtered_news = [item for item in news_items if "ansa_ultimora" in item.get('source', '')]
+        
     # Prepariamo le notizie in testo
     news_text = "Ecco le notizie da rielaborare:\n\n"
-    for item in news_items:
+    for item in filtered_news:
         news_text += f"- TITOLO: {item['title']}\n"
         news_text += f"  SINTESI: {item['summary']}\n\n"
         
-    print(f"Ho letto {len(news_items)} notizie. Invio al modello {MODEL_NAME}...")
+    print(f"Ho letto {len(filtered_news)} notizie per {character}. Invio al modello {MODEL_NAME}...")
     
     # Payload per Ollama
     payload = {

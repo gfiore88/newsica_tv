@@ -48,9 +48,9 @@ FILTER='[2:v]scale=100:100[logo_small]; [0:v][logo_small]overlay=W-w-50:50[bg]; 
 
 while true; do
   echo "🚀 Avvio istanza FFmpeg..."
-  $FFMPEG_CMD -re \
-    -f lavfi -i "color=c=0x0a1128:s=1280x720:r=15" \
-    -re -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
+  $FFMPEG_CMD \
+    -thread_queue_size 4096 -re -f lavfi -i "color=c=0x0a1128:s=1280x720:r=15" \
+    -thread_queue_size 4096 -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
     -i "$LOGO_FILE" \
     -filter_complex "$FILTER" \
     -map "[outv]" -map 1:a \
