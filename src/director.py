@@ -23,6 +23,7 @@ STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
 PROGRAM_FILE = os.path.join(TMP_DIR, "current_program.txt")
 NEXT_PROGRAM_FILE = os.path.join(TMP_DIR, "next_program.txt")
+CHIME_AUDIO_FILE = os.path.join(TMP_DIR, "hourly_chime.wav")
 ACCENT_FILES = {
     "news": os.path.join(TMP_DIR, "accent_news.txt"),
     "sport": os.path.join(TMP_DIR, "accent_sport.txt"),
@@ -513,6 +514,13 @@ def main():
     # Avvia ticker agent in background
     ticker_thread = threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "ticker_agent.py")]), daemon=True)
     ticker_thread.start()
+
+    # Avvia hourly chime agent in background
+    chime_thread = threading.Thread(
+        target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "hourly_chime_agent.py")]),
+        daemon=True
+    )
+    chime_thread.start()
     
     silence = b'\x00' * PCM_CHUNK_BYTES
     last_schedule_key = get_wallclock_schedule_key()
@@ -567,6 +575,34 @@ def main():
                                 manual_block_override_index = None
                                 last_schedule_key = get_wallclock_schedule_key()
                                 generate_schedule()
+                            elif cmd.startswith("HOURLY_CHIME_READY"):
+                                parts = cmd.split("|")
+                                chime_file = parts[1] if len(parts) > 1 else CHIME_AUDIO_FILE
+                                print(f"🔔 Comando ricevuto: HOURLY_CHIME_READY. Riproduco rintocco orario!")
+
+                                if os.path.exists(chime_file):
+                                    # Interrompe il flusso corrente senza toccare breaking_news_active
+                                    schedule_interrupt_event.set()
+                                    stop_current_process("🔔 Pausa per rintocco orario.")
+                                    clear_audio_queue()
+
+                                    chime_info = {
+                                        "status": "ON_AIR",
+                                        "current_block": "chime",
+                                        "current_title": "🔔 SEGNALE ORARIO",
+                                        "next_block": "",
+                                        "next_start": "",
+                                        "breaking_news_available": False,
+                                        "last_update": ""
+                                    }
+                                    # Riproduce il rintocco come audio prioritario
+                                    queue_pcm_from_file(chime_file, chime_info, is_breaking_news=True)
+                                    print("🔔 Rintocco orario accodato. Ripristino palinsesto a breve.")
+                                    # Dopo la fine del rintocco il loop normale riprenderà
+                                    # (schedule_interrupt_event è già settato, il generator_worker
+                                    #  avvierà un nuovo ciclo al termine del blocco corrente)
+                                else:
+                                    print(f"⚠️ File rintocco non trovato: {chime_file}")
                             elif cmd == "TRIGGER_BREAKING_NEWS":
                                 print("🚨 Comando ricevuto: TRIGGER_BREAKING_NEWS. Avvio agente in background...")
                                 threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")])).start()
