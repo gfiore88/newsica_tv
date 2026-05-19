@@ -28,7 +28,7 @@ SERVICES = {
     },
     "stream": {
         "label": "Stream",
-        "patterns": [r"src/stream\.sh"],
+        "patterns": [r"src/stream\.sh", r"ffmpeg.*rtmp://a\.rtmp\.youtube\.com/live2"],
         "command": ["bash", os.path.join(BASE_DIR, "src", "stream.sh")],
         "log": os.path.join(TMP_DIR, "stream.log"),
     },
@@ -357,7 +357,7 @@ def restart_service_route():
 
     if requested_service == "all":
         restarted = {}
-        for service_name in ("stream", "director"):
+        for service_name in ("director", "stream"):
             restarted[service_name] = restart_service(service_name)
         return jsonify({
             "status": "OK",

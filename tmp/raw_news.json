@@ -36,9 +36,9 @@
         "source": "ansa_sport"
     },
     {
-        "title": "La camminata breve che rimette in moto la giornata",
-        "summary": "Anche dieci minuti a passo tranquillo aiutano a staccare dagli schermi e a rientrare con piu' energia.",
-        "link": "local://wellness/camminata-breve",
+        "title": "La borraccia sulla scrivania come promemoria gentile",
+        "summary": "Bere con regolarita' diventa piu' facile quando l'acqua e' visibile e a portata di mano.",
+        "link": "local://wellness/borraccia",
         "source": "wellness_tip"
     },
     {
@@ -48,14 +48,8 @@
         "source": "ansa_lifestyle"
     },
     {
-        "title": "Educazione emotiva questa sconosciuta,  solo 1 italiano su 4 alfabetizzato alle emozioni",
-        "summary": "MINDex 2026, tra la Gen Z prevale l'impulsività. L’affetto il sentimento più difficile da articolare",
-        "link": "https://www.ansa.it/canale_lifestyle/notizie/societa_diritti/2026/05/18/educazione-emotiva-questa-sconosciuta-solo-1-italiano-su-4-alfabetizzato-alle-emozioni_a948281d-a2a6-48f7-89c6-e30c9e217b8d.html",
-        "source": "ansa_lifestyle"
-    },
-    {
         "title": "Meteo Italia",
-        "summary": "Nord Italia - Milano: coperto, cielo nuvoloso, temperatura 18.0°C. Centro Italia - Roma: parzialmente nuvoloso, temperatura 21.5°C. Sud e Isole - Napoli: prevalentemente sereno, temperatura 20.1°C.",
+        "summary": "Nord Italia - Milano: coperto, cielo nuvoloso, temperatura 18.4°C. Centro Italia - Roma: parzialmente nuvoloso, temperatura 21.8°C. Sud e Isole - Napoli: prevalentemente sereno, temperatura 20.5°C.",
         "link": "https://open-meteo.com",
         "source": "meteo"
     }

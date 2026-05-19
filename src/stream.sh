@@ -3,6 +3,51 @@
 # Spostati nella root del progetto indipendentemente da dove viene lanciato lo script
 cd "$(dirname "$0")/.."
 
+mkdir -p runtime tmp
+
+LOCK_DIR="runtime/stream.lock"
+LOCK_OWNER_BASHPID=""
+acquire_stream_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "$$" > "$LOCK_DIR/pid"
+    LOCK_OWNER_BASHPID="$BASHPID"
+    return 0
+  fi
+
+  existing_pid=""
+  if [ -f "$LOCK_DIR/pid" ]; then
+    existing_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  fi
+
+  if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
+    echo "❌ ERRORE: stream.sh è già in esecuzione o il lock è detenuto da un processo vivo (PID $existing_pid). Evito una seconda importazione YouTube."
+    exit 1
+  fi
+
+  echo "⚠️ Lock stream stale trovato. Lo rimuovo e riprovo..."
+  rm -rf "$LOCK_DIR"
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "$$" > "$LOCK_DIR/pid"
+    LOCK_OWNER_BASHPID="$BASHPID"
+    return 0
+  fi
+
+  echo "❌ ERRORE: impossibile acquisire il lock dello stream. Un'altra istanza potrebbe essere partita nello stesso momento."
+  exit 1
+}
+
+release_stream_lock() {
+  if [ "$BASHPID" != "$LOCK_OWNER_BASHPID" ]; then
+    return
+  fi
+
+  if [ -f "$LOCK_DIR/pid" ] && [ "$(cat "$LOCK_DIR/pid" 2>/dev/null || true)" = "$$" ]; then
+    rm -rf "$LOCK_DIR"
+  fi
+}
+
+acquire_stream_lock
+
 # Carica variabili d'ambiente
 if [ -f .env ]; then
   export $(cat .env | xargs)
@@ -78,6 +123,7 @@ cleanup() {
     kill "$FFMPEG_PID" 2>/dev/null || true
     wait "$FFMPEG_PID" 2>/dev/null || true
   fi
+  release_stream_lock
 }
 trap 'cleanup; exit 0' INT TERM
 trap 'cleanup' EXIT
@@ -124,9 +170,10 @@ while true; do
     -thread_queue_size 4096 -re -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
     -filter_complex "$FILTER" \
     -map "[outv]" -map 1:a \
-    -c:v h264_videotoolbox -b:v 4000k \
-    -maxrate 4500k -bufsize 9000k \
-    -pix_fmt yuv420p -r 30 -g 60 \
+    -c:v libx264 -preset veryfast -tune stillimage \
+    -b:v 3000k -minrate 3000k -maxrate 3000k -bufsize 6000k \
+    -x264-params "nal-hrd=cbr:force-cfr=1:filler=1" \
+    -pix_fmt yuv420p -r 30 -g 60 -keyint_min 60 -sc_threshold 0 \
     -c:a aac -b:a 128k -ar 44100 \
     -f flv "$YOUTUBE_STREAM_URL/$YOUTUBE_STREAM_KEY" &
 
