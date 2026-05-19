@@ -1,0 +1,107 @@
+{
+  "characters": [
+    {
+      "id": "news",
+      "display_name": "Chiara",
+      "rubric_type": "news",
+      "voice": "if_sara",
+      "speed": 1.0,
+      "prompt": "editorial/prompts/news.md",
+      "sources": [
+        "ansa_ultimora",
+        "ansa_mondo",
+        "ansa_cronaca",
+        "ansa_politica",
+        "ansa_economia",
+        "ansa_cultura",
+        "ansa_tecnologia",
+        "sky_tg24"
+      ],
+      "jingle": "assets/jingles/newsicatv_jingle.mp3",
+      "jingle_label": "jingle NewsicaTV",
+      "intro_template": "È il momento di {title}, la rubrica di informazione di NewsicaTV.",
+      "accent": "0xef4444",
+      "format": "multipart_radio_show"
+    },
+    {
+      "id": "sport",
+      "display_name": "Leo",
+      "rubric_type": "sport",
+      "voice": "im_nicola",
+      "speed": 1.05,
+      "prompt": "editorial/prompts/sport.md",
+      "sources": [
+        "ansa_sport"
+      ],
+      "jingle": "assets/jingles/jingle_sport.mp3",
+      "jingle_label": "jingle sport",
+      "intro_template": "Ora spazio a {title}, la rubrica sportiva di NewsicaTV.",
+      "accent": "0x22c55e",
+      "format": "multipart_radio_show"
+    },
+    {
+      "id": "meteo",
+      "display_name": "Colonnello",
+      "rubric_type": "meteo",
+      "voice": "im_nicola",
+      "speed": 0.95,
+      "prompt": "editorial/prompts/meteo.md",
+      "sources": [
+        "meteo"
+      ],
+      "jingle": "assets/jingles/newsicatv_jingle.mp3",
+      "jingle_label": "jingle NewsicaTV",
+      "intro_template": "Apriamo {title}, il nostro aggiornamento meteo su NewsicaTV.",
+      "accent": "0x38bdf8",
+      "format": "single_part"
+    },
+    {
+      "id": "wellness",
+      "display_name": "Maya",
+      "rubric_type": "wellness",
+      "voice": "if_sara",
+      "speed": 0.85,
+      "prompt": "editorial/prompts/wellness.md",
+      "sources": [
+        "ansa_salute_benessere",
+        "ansa_lifestyle"
+      ],
+      "jingle": "assets/jingles/newsicatv_jingle.mp3",
+      "jingle_label": "jingle NewsicaTV",
+      "intro_template": "Comincia {title}, la rubrica benessere di NewsicaTV.",
+      "accent": "0x14b8a6",
+      "format": "multipart_radio_show"
+    },
+    {
+      "id": "breaking_news",
+      "display_name": "Chiara",
+      "rubric_type": "breaking_news",
+      "voice": "if_sara",
+      "speed": 1.1,
+      "prompt": "editorial/prompts/breaking_news.md",
+      "sources": [
+        "ansa_ultimora"
+      ],
+      "jingle": "assets/jingles/jingle_breaking_news.mp3",
+      "jingle_label": "jingle breaking news",
+      "intro_template": "Interrompiamo le trasmissioni per un'Edizione Straordinaria.",
+      "accent": "0xdc2626",
+      "format": "single_part"
+    },
+    {
+      "id": "music_only",
+      "display_name": "NewsicaTV",
+      "rubric_type": "music_only",
+      "voice": "if_sara",
+      "speed": 1.0,
+      "prompt": null,
+      "sources": [],
+      "jingle": "assets/jingles/newsicatv_jingle.mp3",
+      "jingle_label": "jingle NewsicaTV",
+      "intro_template": "Musica senza interruzioni su NewsicaTV.",
+      "accent": "0x8b5cf6",
+      "format": "music_only"
+    }
+  ]
+}
+

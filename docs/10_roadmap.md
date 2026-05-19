@@ -28,7 +28,8 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 
 ## MVP 3 — La "Svolta": Regia AI e Identità Editoriale
 **Obiettivo:** Trasformare la playlist automatica in una vera web TV con regia autonoma, interruzioni dinamiche e format strutturati.
-- [ ] **Refactor Architetturale Modulare**: separare character, prompt, fonti, TTS, audio playout, overlay e runtime director in moduli dedicati mantenendo entrypoint compatibili.
+- [ ] **Refactor Architetturale Modulare**: separare character, prompt, fonti, TTS, audio playout, overlay e runtime director in moduli dedicati mantenendo entrypoint compatibili. Fasi 1-2 avviate: character registry, prompt esterni, fallback editoriali, config TTS centralizzata e sources modulari.
+- [ ] **Musica AI Locale**: generare brani brevi da 30-60 secondi con tool open-source locali, depositarli in `assets/ai_music/` e alternarli ai brani manuali senza dipendenze cloud.
 - [ ] **Regia AI Centrale (`DirectorAgent`)**: Refactoring del motore per gestire palinsesti veri e mantenere un file di stato in tempo reale (`runtime/on-air-state.json`).
 - [ ] **Breaking News Interrupt**: Agente `BreakingNewsAgent` con calcolo score urgenza, capace di interrompere il programma attuale, mandare ultim'ora con jingle speciale e riprendere.
 - [ ] **Palinsesto Giornaliero Automatico**: Generazione schedulata ogni mattina (file `.md` e `.json`) per definire rubriche diverse a seconda dell'orario (mattina veloce, sera riepilogo, ecc.).

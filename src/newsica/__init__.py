@@ -1,0 +1,2 @@
+"""NewsicaTV application package."""
+

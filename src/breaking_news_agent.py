@@ -7,6 +7,7 @@ import requests
 import re
 from kokoro_onnx import Kokoro
 import soundfile as sf
+from newsica.domain.characters import get_character
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
@@ -18,6 +19,7 @@ FFMPEG_CMD = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg" if os.path.exists("/opt/
 
 def generate_breaking_news():
     print("🚨 Avvio pipeline Breaking News...")
+    character = get_character("breaking_news")
     
     # 1. Recupero la prima notizia di ultimora da raw_news.json
     raw_news_path = os.path.join(TMP_DIR, "raw_news.json")
@@ -52,16 +54,7 @@ def generate_breaking_news():
         # 2. Rielaborazione testo tramite LLM (Ollama locale)
         OLLAMA_URL = "http://localhost:11434/api/generate"
         MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:12b")
-        SYSTEM_PROMPT = (
-            "Sei la conduttrice di NewsicaTV.\n"
-            "Il tuo compito è prendere una singola notizia importante e trasformarla in un comunicato urgente, drammatico ed emozionante per un'Edizione Straordinaria televisiva improvvisa.\n"
-            "Linee guida:\n"
-            "1. Inizia SEMPRE esattamente con: \"Interrompiamo le trasmissioni per un'Edizione Straordinaria.\"\n"
-            "2. Scrivi con un tono calmo ma estremamente urgente, drammatico ed autorevole.\n"
-            "3. Spiega la notizia in modo chiaro e conciso. Massimo 3 frasi totali.\n"
-            "4. Concludi con: \"Restate sintonizzati su NewsicaTV per ulteriori aggiornamenti.\"\n"
-            "5. NON usare parentesi, note di regia o elenchi. Produci ESCLUSIVAMENTE il testo del copione da leggere."
-        )
+        SYSTEM_PROMPT = character.read_prompt()
         
         payload = {
             "model": MODEL_NAME,
@@ -101,7 +94,7 @@ def generate_breaking_news():
         onnx_path = os.path.join(BASE_DIR, "kokoro-v1.0.onnx")
         voices_path = os.path.join(BASE_DIR, "voices-v1.0.bin")
         kokoro = Kokoro(onnx_path, voices_path)
-        samples, sample_rate = kokoro.create(testo, voice="if_sara", speed=1.1, lang="it")
+        samples, sample_rate = kokoro.create(testo, voice=character.voice, speed=character.speed, lang="it")
         sf.write(voice_audio, samples, sample_rate)
         print("✅ Voce Breaking News generata con successo.")
     except Exception as e:
@@ -112,11 +105,12 @@ def generate_breaking_news():
     # 5. Preparazione jingle di apertura breaking news
     print("🔔 Preparazione jingle breaking news...")
     alarm_audio = os.path.join(TMP_DIR, "alarm_jingle.wav")
-    if os.path.exists(BREAKING_JINGLE_FILE):
-        print(f"🎶 Uso jingle breaking news: {os.path.basename(BREAKING_JINGLE_FILE)}")
+    breaking_jingle = character.jingle_path or BREAKING_JINGLE_FILE
+    if os.path.exists(breaking_jingle):
+        print(f"🎶 Uso jingle breaking news: {os.path.basename(breaking_jingle)}")
         subprocess.run([
             FFMPEG_CMD, "-y", "-hide_banner", "-loglevel", "error",
-            "-i", BREAKING_JINGLE_FILE,
+            "-i", breaking_jingle,
             "-ar", "24000", "-ac", "1", alarm_audio
         ], check=True)
     else:

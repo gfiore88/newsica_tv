@@ -13,3 +13,9 @@
 | 10 | /orchestrator | ✅ Done | Risoluzione architettura news, caching scraper e bug ripetizione wellness |
 | 11 | /python_engineer | ✅ Done | Risoluzione collisione segnale orario e pulizia import soundfile |
 | 12 | /streaming_expert | Done | Corretto overlay ON AIR sovrapposto all'orologio e disattivati accenti instabili |
+| 13 | /python_engineer | Done | Refactor Fase 1: estratti character registry, prompt, fallback editoriali e config TTS |
+| 14 | /python_engineer | Done | Refactor Fase 2: estratti registry fonti, RSS, rotazione, wellness e meteo da scraper |
+| 15 | /python_engineer | ✅ Done | Transizione sincrona chime/breaking news per eliminazione vuoti audio |
+| 16 | /python_engineer | Done | Refactor Fase 3a: estratti audio playout, music library e predisposta rotazione brani AI locali |
+| 17 | /python_engineer | Done | Fix trigger UI segnale orario: comando manuale forza il chime anche vicino a cambi fascia |
+| 18 | /python_engineer | Done | Segnale orario UI con `jingle_ora_esatta.mp3` e voce TTS sull'orario reale, inclusi i minuti |

@@ -1,0 +1,25 @@
+import feedparser
+import requests
+
+
+def fetch_latest_news(feed_url, max_items=3):
+    try:
+        response = requests.get(feed_url, timeout=8)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"⚠️ Errore recupero feed {feed_url}: {e}")
+        return []
+
+    parsed_feed = feedparser.parse(response.content)
+    news_items = []
+
+    for entry in parsed_feed.entries[:max_items]:
+        news_items.append({
+            "title": entry.title,
+            "summary": entry.get("description", ""),
+            "link": entry.link,
+            "published": entry.get("published", ""),
+        })
+
+    return news_items
+

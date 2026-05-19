@@ -5,6 +5,7 @@ import signal
 import subprocess
 import time
 from schedule_generator import get_current_schedule, generate_schedule
+from newsica.audio.settings import resolve_ffmpeg_cmd
 
 app = Flask(__name__)
 
@@ -13,6 +14,10 @@ RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
 STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
+HOUR_CHIME_JINGLE_FILE = os.path.join(BASE_DIR, "assets", "jingles", "jingle_ora_esatta.mp3")
+HOUR_CHIME_OUTPUT_FILE = os.path.join(TMP_DIR, "hourly_chime.wav")
+HOUR_CHIME_VOICE_FILE = os.path.join(TMP_DIR, "hourly_chime_voice.wav")
+FFMPEG_CMD = resolve_ffmpeg_cmd()
 PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python3")
 if not os.path.exists(PYTHON_EXEC):
     PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python")
@@ -22,7 +27,13 @@ if not os.path.exists(PYTHON_EXEC):
 SERVICES = {
     "director": {
         "label": "Regia",
-        "patterns": [r"src/watchdog\.sh", r"src/director\.py"],
+        "patterns": [
+            r"src/watchdog\.sh",
+            r"src/director\.py",
+            r"src/ticker_agent\.py",
+            r"src/hourly_chime_agent\.py",
+            r"src/breaking_news_agent\.py",
+        ],
         "command": [PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "director.py")],
         "log": os.path.join(TMP_DIR, "director.log"),
     },
@@ -327,25 +338,46 @@ def send_command():
 
 @app.route('/api/chime', methods=['POST'])
 def trigger_chime():
-    """Genera immediatamente un rintocco orario TTS e lo invia al director."""
-    import datetime
-    import random
+    """Genera il segnale orario manuale: jingle + voce con ora reale."""
     import sys
+
+    if not os.path.exists(HOUR_CHIME_JINGLE_FILE):
+        return jsonify({
+            "status": "ERROR",
+            "message": f"Jingle ora esatta non trovato: {HOUR_CHIME_JINGLE_FILE}",
+        }), 500
 
     sys.path.insert(0, os.path.join(BASE_DIR, "src"))
     try:
-        from hourly_chime_agent import build_chime_text, generate_chime_audio, CHIME_AUDIO_FILE
+        from hourly_chime_agent import build_exact_chime_text, generate_chime_audio
     except Exception as e:
         return jsonify({"status": "ERROR", "message": f"Import agente fallito: {e}"}), 500
 
-    hour = datetime.datetime.now().hour
-    text = build_chime_text(hour)
-
-    ok = generate_chime_audio(text)
-    if not ok:
+    text = build_exact_chime_text()
+    if not generate_chime_audio(text, HOUR_CHIME_VOICE_FILE):
         return jsonify({"status": "ERROR", "message": "Generazione TTS fallita."}), 500
 
-    cmd = f"HOURLY_CHIME_READY|{CHIME_AUDIO_FILE}"
+    try:
+        subprocess.run([
+            FFMPEG_CMD,
+            "-y",
+            "-hide_banner",
+            "-loglevel", "error",
+            "-i", HOUR_CHIME_JINGLE_FILE,
+            "-i", HOUR_CHIME_VOICE_FILE,
+            "-filter_complex",
+            "[0:a]aresample=24000,aformat=channel_layouts=mono[j];"
+            "[1:a]aresample=24000,aformat=channel_layouts=mono[v];"
+            "[j][v]concat=n=2:v=0:a=1[a]",
+            "-map", "[a]",
+            "-ar", "24000",
+            "-ac", "1",
+            HOUR_CHIME_OUTPUT_FILE,
+        ], check=True)
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": f"Preparazione jingle ora esatta fallita: {e}"}), 500
+
+    cmd = f"HOURLY_CHIME_READY|{HOUR_CHIME_OUTPUT_FILE}|force"
     try:
         with open(CONTROL_FILE, "w") as f:
             f.write(cmd)

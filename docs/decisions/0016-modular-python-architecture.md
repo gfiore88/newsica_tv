@@ -2,7 +2,7 @@
 
 ## Stato
 
-Proposta
+Accettata - Fase 1 in corso
 
 ## Contesto
 
@@ -23,6 +23,16 @@ Migrare verso una struttura modulare con separazione tra:
 - apps: entrypoint compatibili per gli script attuali.
 
 Il refactor deve essere incrementale. Gli entrypoint esistenti in `src/*.py` restano disponibili durante la migrazione.
+
+La prima implementazione introduce il package `src/newsica/` e sposta fuori dagli entrypoint:
+
+- configurazione character in `src/newsica/domain/characters.json`;
+- prompt editoriali in `src/newsica/editorial/prompts/`;
+- fallback script in `src/newsica/editorial/fallback_scripts.py`;
+- filtri fonti editoriali in `src/newsica/editorial/source_filters.py`;
+- normalizzazione testo TTS in `src/newsica/audio/tts_text.py`.
+
+Gli entrypoint legacy `llm_processor.py`, `tts_generator.py`, `breaking_news_agent.py` e `director.py` restano validi e delegano gradualmente ai moduli nuovi.
 
 ## Conseguenze
 

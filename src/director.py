@@ -1,23 +1,21 @@
 import os
 import time
 import subprocess
-import random
-import glob
 import sys
 import threading
 import queue
 import json
 import datetime
 from schedule_generator import get_current_schedule, generate_schedule
+from newsica.audio.jingles import get_jingle_for_block
+from newsica.audio.playout import AudioPlayout
+from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
+from newsica.domain.characters import get_character
 
 # Cartelle di progetto
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
-MUSIC_DIR = os.path.join(BASE_DIR, "assets", "music")
-JINGLES_DIR = os.path.join(BASE_DIR, "assets", "jingles")
-CLASSIC_JINGLE_FILE = os.path.join(JINGLES_DIR, "newsicatv_jingle.mp3")
-SPORT_JINGLE_FILE = os.path.join(JINGLES_DIR, "jingle_sport.mp3")
 AUDIO_PIPE = os.path.join(TMP_DIR, "audio_pipe")
 STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
@@ -38,21 +36,20 @@ if not os.path.exists(PYTHON_EXEC):
     PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python")
 if not os.path.exists(PYTHON_EXEC):
     PYTHON_EXEC = sys.executable
-PCM_SAMPLE_RATE = 24000
-PCM_CHANNELS = 1
-PCM_CHUNK_BYTES = 4096
-FFMPEG_CMD = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"
-if not os.path.exists(FFMPEG_CMD):
-    FFMPEG_CMD = "/opt/homebrew/bin/ffmpeg"
-if not os.path.exists(FFMPEG_CMD):
-    FFMPEG_CMD = "ffmpeg"
 
 # Coda per l'audio (5000 chunks = circa 7 minuti di audio)
 audio_queue = queue.Queue(maxsize=5000)
 
 manual_block_override_index = None
 current_active_index = 0
-last_music_file = None
+breaking_news_active = False
+schedule_interrupt_event = threading.Event()
+playout = AudioPlayout(
+    audio_queue,
+    schedule_interrupt_event,
+    lambda: breaking_news_active,
+)
+FFMPEG_CMD = resolve_ffmpeg_cmd()
 
 def ensure_folders():
     os.makedirs(TMP_DIR, exist_ok=True)
@@ -80,163 +77,12 @@ def ensure_folders():
         except OSError as e:
             print(f"⚠️ Errore creazione pipe: {e}")
 
-_MUSIC_CACHE = []
-
-def get_random_music(exclude=None):
-    global _MUSIC_CACHE
-    if not _MUSIC_CACHE:
-        _MUSIC_CACHE = glob.glob(os.path.join(MUSIC_DIR, "*.wav")) + glob.glob(os.path.join(MUSIC_DIR, "*.mp3"))
-    if not _MUSIC_CACHE:
-        return None
-    candidates = [path for path in _MUSIC_CACHE if path != exclude]
-    if not candidates:
-        candidates = _MUSIC_CACHE
-    return random.choice(candidates)
-
-queue_lock = threading.RLock()
-breaking_news_active = False
-current_generator_process = None
-schedule_interrupt_event = threading.Event()
-
-def clear_audio_queue():
-    cleared = 0
-    while not audio_queue.empty():
-        try:
-            audio_queue.get_nowait()
-            audio_queue.task_done()
-            cleared += 1
-        except queue.Empty:
-            break
-    return cleared
-
-def stop_current_process(reason=""):
-    global current_generator_process
-    process = current_generator_process
-    if not process:
-        return
-
-    if reason:
-        print(reason)
-    try:
-        process.terminate()
-        process.wait(timeout=1)
-    except subprocess.TimeoutExpired:
-        try:
-            process.kill()
-            process.wait(timeout=1)
-        except Exception as e:
-            print(f"⚠️ Errore kill processo audio corrente: {e}")
-    except Exception as e:
-        print(f"⚠️ Errore terminazione processo audio corrente: {e}")
-    finally:
-        current_generator_process = None
-
-def queue_item(item):
-    while True:
-        if schedule_interrupt_event.is_set() or breaking_news_active:
-            return False
-        try:
-            audio_queue.put(item, timeout=0.5)
-            return True
-        except queue.Full:
-            continue
-
-def queue_pcm_from_file(audio_file, block_info=None, is_breaking_news=False):
-    global current_generator_process
-    if block_info:
-        audio_queue.put({"type": "metadata", "state": block_info})
-    cmd = [
-        FFMPEG_CMD,
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", audio_file,
-        "-f", "s16le",
-        "-ar", str(PCM_SAMPLE_RATE),
-        "-ac", str(PCM_CHANNELS),
-        "pipe:1"
-    ]
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    if not is_breaking_news:
-        current_generator_process = process
-        
-    count = 0
-    while True:
-        if not is_breaking_news and (breaking_news_active or schedule_interrupt_event.is_set()):
-            print("⏭️ Interrompo il caricamento audio regolare.")
-            process.terminate()
-            break
-            
-        data = process.stdout.read(PCM_CHUNK_BYTES)
-        if not data:
-            break
-        if not is_breaking_news:
-            if not queue_item({"type": "audio", "data": data}):
-                process.terminate()
-                break
-        else:
-            audio_queue.put({"type": "audio", "data": data})
-        count += 1
-        
-    process.wait()
-    if not is_breaking_news:
-        current_generator_process = None
-    print(f"✅ Audio voce caricato nella coda ({count} chunks).")
-
-def queue_jingle(jingle_file, label="jingle"):
-    global current_generator_process
-    if not os.path.exists(jingle_file):
-        print(f"⚠️ Jingle non trovato: {jingle_file}")
-        return True
-
-    print(f"🎶 Lancio {label}: {os.path.basename(jingle_file)}")
-    cmd = [
-        FFMPEG_CMD,
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", jingle_file,
-        "-f", "s16le",
-        "-ar", str(PCM_SAMPLE_RATE),
-        "-ac", str(PCM_CHANNELS),
-        "pipe:1"
-    ]
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    current_generator_process = process
-
-    while True:
-        if breaking_news_active or schedule_interrupt_event.is_set():
-            print(f"⏭️ Interrompo {label}.")
-            process.terminate()
-            break
-
-        data = process.stdout.read(PCM_CHUNK_BYTES)
-        if not data:
-            break
-        if not queue_item({"type": "audio", "data": data}):
-            process.terminate()
-            break
-
-    process.wait()
-    current_generator_process = None
-    return not schedule_interrupt_event.is_set() and not breaking_news_active
-
-def get_jingle_for_block(block_type):
-    jingles = {
-        "sport": (SPORT_JINGLE_FILE, "jingle sport"),
-    }
-    return jingles.get(block_type, (CLASSIC_JINGLE_FILE, "jingle NewsicaTV"))
-
 def add_rubric_intro_to_script(title, character):
     script_file = os.path.join(TMP_DIR, "script.txt")
     if not os.path.exists(script_file):
         return
 
-    intros = {
-        "news": f"È il momento di {title}, la rubrica di informazione di NewsicaTV.",
-        "sport": f"Ora spazio a {title}, la rubrica sportiva di NewsicaTV.",
-        "meteo": f"Apriamo {title}, il nostro aggiornamento meteo su NewsicaTV.",
-        "wellness": f"Comincia {title}, la rubrica benessere di NewsicaTV.",
-    }
-    intro = intros.get(character, f"Comincia {title}, una rubrica di NewsicaTV.")
+    intro = get_character(character).render_intro(title)
     with open(script_file, "r", encoding="utf-8") as f:
         script = f.read().strip()
     if script.startswith(intro):
@@ -261,136 +107,6 @@ def run_pipeline(character="news", title=None):
     # 3. TTS Generator
     print("Sintesi vocale (TTS)...")
     subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "tts_generator.py"), character], check=True)
-
-def mix_and_queue(music_file, voice_file, block_info=None):
-    global current_generator_process
-    print(f"Mixaggio in corso: Voce + {os.path.basename(music_file)}")
-    
-    if block_info:
-        audio_queue.put({"type": "metadata", "state": block_info})
-        
-    cmd = [
-        FFMPEG_CMD,
-        "-y",
-        "-i", voice_file,
-        "-i", music_file,
-        "-filter_complex", "[0:a]volume=1.5,asplit=2[v_main][v_side]; [1:a]volume=0.25[m]; [m][v_side]sidechaincompress=threshold=0.03:ratio=20:attack=50:release=1000[music]; [v_main][music]amix=inputs=2:duration=first:dropout_transition=0",
-        "-f", "s16le",
-        "-ar", str(PCM_SAMPLE_RATE),
-        "-ac", str(PCM_CHANNELS),
-        "pipe:1"
-    ]
-    
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    current_generator_process = process
-    
-    print("Caricamento audio nella coda...")
-    count = 0
-    while True:
-        if breaking_news_active or schedule_interrupt_event.is_set():
-            print("⏭️ Interrompo il mixaggio regolare.")
-            process.terminate()
-            break
-            
-        data = process.stdout.read(PCM_CHUNK_BYTES)
-        if not data:
-            break
-        if not queue_item({"type": "audio", "data": data}):
-            process.terminate()
-            break
-        count += 1
-            
-    process.wait()
-    current_generator_process = None
-    print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
-
-def queue_music_track(deadline):
-    global current_generator_process, last_music_file
-    if datetime.datetime.now() >= deadline or schedule_interrupt_event.is_set() or breaking_news_active:
-        return
-
-    music_file = get_random_music(exclude=last_music_file)
-    if not music_file:
-        time.sleep(1)
-        return
-    last_music_file = music_file
-
-    print(f"🎵 Brano musicale di riempimento: {os.path.basename(music_file)}")
-    cmd = [
-        FFMPEG_CMD,
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", music_file,
-        "-vn",
-        "-filter:a", "volume=0.8",
-        "-f", "s16le",
-        "-ar", str(PCM_SAMPLE_RATE),
-        "-ac", str(PCM_CHANNELS),
-        "pipe:1"
-    ]
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    current_generator_process = process
-
-    while datetime.datetime.now() < deadline:
-        if breaking_news_active or schedule_interrupt_event.is_set():
-            process.terminate()
-            break
-
-        data = process.stdout.read(PCM_CHUNK_BYTES)
-        if not data:
-            break
-        if not queue_item({"type": "audio", "data": data}):
-            process.terminate()
-            break
-
-    if process.poll() is None:
-        process.terminate()
-    process.wait()
-    current_generator_process = None
-
-def queue_single_music_track():
-    global current_generator_process, last_music_file
-    if schedule_interrupt_event.is_set() or breaking_news_active:
-        return
-
-    music_file = get_random_music(exclude=last_music_file)
-    if not music_file:
-        time.sleep(1)
-        return
-    last_music_file = music_file
-
-    print(f"🎵 Brano musicale intermedio (Full Track): {os.path.basename(music_file)}")
-    cmd = [
-        FFMPEG_CMD,
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", music_file,
-        "-vn",
-        "-filter:a", "volume=0.8",
-        "-f", "s16le",
-        "-ar", str(PCM_SAMPLE_RATE),
-        "-ac", str(PCM_CHANNELS),
-        "pipe:1"
-    ]
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    current_generator_process = process
-
-    while True:
-        if breaking_news_active or schedule_interrupt_event.is_set():
-            process.terminate()
-            break
-
-        data = process.stdout.read(PCM_CHUNK_BYTES)
-        if not data:
-            break
-        if not queue_item({"type": "audio", "data": data}):
-            process.terminate()
-            break
-
-    if process.poll() is None:
-        process.terminate()
-    process.wait()
-    current_generator_process = None
 
 def schedule_deadline(next_time_key):
     now = datetime.datetime.now()
@@ -457,9 +173,53 @@ def write_accent_files(block_type):
         with open(accent_file, "w") as f:
             f.write(" " if key == active_key else "")
 
-def enqueue_current_schedule_metadata():
+def write_state_files(state):
+    state = dict(state)
+    state["last_update"] = state.get("last_update") or time.strftime("%Y-%m-%dT%H:%M:%S")
+    with open(STATE_FILE, "w") as sf:
+        json.dump(state, sf, indent=2)
+    with open(PROGRAM_FILE, "w") as pf:
+        pf.write(state.get("current_title", "").upper())
+
+    next_title = state.get("next_block", "")
+    next_start = state.get("next_start")
+    next_label = f"A seguire: {next_title}" if next_title else ""
+    if next_label and next_start:
+        next_label = f"{next_label} - {next_start}"
+    with open(NEXT_PROGRAM_FILE, "w") as nf:
+        nf.write(next_label)
+    write_accent_files(state.get("current_block", "news"))
+
+def get_current_schedule_state():
     current_type, current_title, next_title, next_time, _ = get_current_block_info()
-    audio_queue.put({"type": "metadata", "state": build_block_info(current_type, current_title, next_title, next_time)})
+    return build_block_info(current_type, current_title, next_title, next_time)
+
+def restore_after_interrupt(prev_state, label):
+    transient_blocks = {"chime", "breaking_news"}
+    state = prev_state if prev_state and prev_state.get("current_block") not in transient_blocks else get_current_schedule_state()
+    try:
+        write_state_files(state)
+    except Exception as e:
+        print(f"⚠️ Errore ripristino stato dopo {label}: {e}")
+
+def write_fifo_chunk(fifo_fd, data, blocking=True):
+    view = memoryview(data)
+    written_total = 0
+    while written_total < len(view):
+        try:
+            next_end = min(written_total + 512, len(view))
+            written = os.write(fifo_fd, view[written_total:next_end])
+            if written == 0:
+                raise BrokenPipeError
+            written_total += written
+        except BlockingIOError:
+            if not blocking:
+                return False
+            time.sleep(0.02)
+    return True
+
+def enqueue_current_schedule_metadata():
+    audio_queue.put({"type": "metadata", "state": get_current_schedule_state()})
     return True
 
 def generator_worker():
@@ -495,9 +255,9 @@ def generator_worker():
             block_info = build_block_info(current_type, current_title, next_title, next_time)
             
             if current_type == "music_only":
-                if not queue_item({"type": "metadata", "state": block_info}):
+                if not playout.queue_item({"type": "metadata", "state": block_info}):
                     continue
-                queue_music_track(schedule_deadline(next_time))
+                playout.queue_music_track(schedule_deadline(next_time))
                 continue
 
             # Controlliamo se è uno show radiofonico multi-part
@@ -524,7 +284,7 @@ def generator_worker():
                 time.sleep(10)
                 continue
 
-            if not queue_item({"type": "metadata", "state": block_info}):
+            if not playout.queue_item({"type": "metadata", "state": block_info}):
                 continue
             
             jingle_file, jingle_label = get_jingle_for_block(current_type)
@@ -533,7 +293,7 @@ def generator_worker():
                 print(f"📻 Avvio show radiofonico multi-part per {current_title} ({num_parts} parti)!")
                 
                 # 1. Jingle di apertura rubrica
-                if not queue_jingle(jingle_file, jingle_label):
+                if not playout.queue_jingle(jingle_file, jingle_label):
                     continue
                 
                 # 2. Riproduzione sequenziale delle parti con intermezzi musicali di 3 brani completi
@@ -546,12 +306,12 @@ def generator_worker():
                     print(f"🎤 Messa in onda Parte {i}/{num_parts}...")
                     
                     # Riproduce la voce mixata col sottofondo
-                    music_file = get_random_music(exclude=last_used_music)
+                    music_file = playout.get_random_music(exclude=last_used_music)
                     if not music_file:
-                        queue_pcm_from_file(part_file)
+                        playout.queue_pcm_from_file(part_file)
                     else:
                         last_used_music = music_file
-                        mix_and_queue(music_file, part_file)
+                        playout.mix_and_queue(music_file, part_file)
                         
                     # Se non è l'ultima parte, riproduce 3 brani musicali interi (stacco radiofonico)
                     if i < num_parts:
@@ -560,21 +320,21 @@ def generator_worker():
                         for s in range(songs_between):
                             if schedule_interrupt_event.is_set() or breaking_news_active:
                                 break
-                            queue_single_music_track()
+                            playout.queue_single_music_track()
             else:
                 # Flusso classico a parte singola
-                if not queue_jingle(jingle_file, jingle_label):
+                if not playout.queue_jingle(jingle_file, jingle_label):
                     continue
                 
-                music_file = get_random_music()
+                music_file = playout.get_random_music()
                 if not music_file:
                     print("⚠️ Nessuna musica trovata. Uso solo la voce.")
-                    queue_pcm_from_file(voice_file)
+                    playout.queue_pcm_from_file(voice_file)
                 else:
-                    mix_and_queue(music_file, voice_file)
+                    playout.mix_and_queue(music_file, voice_file)
 
             if not schedule_interrupt_event.is_set() and not breaking_news_active:
-                queue_music_track(schedule_deadline(next_time))
+                playout.queue_music_track(schedule_deadline(next_time))
                 
         except Exception as e:
             print(f"💥 Errore nel ciclo del generatore: {e}")
@@ -627,18 +387,19 @@ def main():
     
     while True:
         print("\n📡 In attesa che FFmpeg si colleghi alla pipe in lettura...")
+        fifo_fd = None
         try:
-            with open(AUDIO_PIPE, 'wb') as fifo:
-                print("✅ FFmpeg collegato! Trasmissione in corso...")
-                enqueue_current_schedule_metadata()
-                while True:
+            fifo_fd = os.open(AUDIO_PIPE, os.O_WRONLY | os.O_NONBLOCK)
+            print("✅ FFmpeg collegato! Trasmissione in corso...")
+            enqueue_current_schedule_metadata()
+            while True:
                     if manual_block_override_index is None:
                         current_schedule_key = get_wallclock_schedule_key()
                         if current_schedule_key != last_schedule_key:
                             print(f"⏰ Cambio fascia palinsesto: {last_schedule_key} -> {current_schedule_key}. Tronco audio corrente.")
                             schedule_interrupt_event.set()
-                            stop_current_process("⏰ Termino il processo audio corrente per cambio fascia.")
-                            cleared = clear_audio_queue()
+                            playout.stop_current_process("⏰ Termino il processo audio corrente per cambio fascia.")
+                            cleared = playout.clear_queue()
                             print(f"⏰ Coda audio svuotata ({cleared} elementi).")
                             last_schedule_key = current_schedule_key
 
@@ -656,17 +417,17 @@ def main():
                                 manual_block_override_index = (current_active_index + 1) % len(times)
                                 print(f"⏭️ Salto al blocco successivo con indice manuale: {manual_block_override_index}")
 
-                                stop_current_process("⏭️ Termino il processo audio corrente per skip.")
-                                clear_audio_queue()
+                                playout.stop_current_process("⏭️ Termino il processo audio corrente per skip.")
+                                playout.clear_queue()
                             elif cmd.startswith("FORCE_INDEX_"):
                                 try:
                                     target_idx = int(cmd.split("_")[2])
                                     print(f"⏭️ Comando ricevuto: FORCE_INDEX_{target_idx}. Imposto indice manuale!")
                                     schedule_interrupt_event.set()
                                     manual_block_override_index = target_idx
-                                    
-                                    stop_current_process("⏭️ Termino il processo audio corrente per cambio manuale.")
-                                    clear_audio_queue()
+
+                                    playout.stop_current_process("⏭️ Termino il processo audio corrente per cambio manuale.")
+                                    playout.clear_queue()
                                 except Exception as e:
                                     print(f"⚠️ Errore nell'elaborazione di FORCE_INDEX: {e}")
                             elif cmd == "REGEN_SCHEDULE":
@@ -678,44 +439,82 @@ def main():
                             elif cmd.startswith("HOURLY_CHIME_READY"):
                                 parts = cmd.split("|")
                                 chime_file = parts[1] if len(parts) > 1 else CHIME_AUDIO_FILE
+                                force_chime = len(parts) > 2 and parts[2] == "force"
                                 print(f"🔔 Comando ricevuto: HOURLY_CHIME_READY. Riproduco rintocco orario!")
 
                                 # Salta il rintocco se coincide con l'inizio di un blocco del palinsesto (es. 16:00)
-                                try:
-                                    now = datetime.datetime.now()
-                                    nearest_hour = (now + datetime.timedelta(minutes=30)).replace(minute=0, second=0, microsecond=0)
-                                    current_hour_str = nearest_hour.strftime("%H:00")
-                                    schedule_data = get_current_schedule()
-                                    if current_hour_str in schedule_data:
-                                        block_title = schedule_data[current_hour_str]["title"]
-                                        print(f"🔔 Segnale orario delle {current_hour_str} annullato: coincide con l'inizio del blocco '{block_title}'.")
-                                        continue
-                                except Exception as e:
-                                    print(f"⚠️ Errore durante il controllo del palinsesto per chime: {e}")
+                                if not force_chime:
+                                    try:
+                                        now = datetime.datetime.now()
+                                        nearest_hour = (now + datetime.timedelta(minutes=30)).replace(minute=0, second=0, microsecond=0)
+                                        current_hour_str = nearest_hour.strftime("%H:00")
+                                        schedule_data = get_current_schedule()
+                                        if current_hour_str in schedule_data:
+                                            block_title = schedule_data[current_hour_str]["title"]
+                                            print(f"🔔 Segnale orario delle {current_hour_str} annullato: coincide con l'inizio del blocco '{block_title}'.")
+                                            continue
+                                    except Exception as e:
+                                        print(f"⚠️ Errore durante il controllo del palinsesto per chime: {e}")
 
                                 if os.path.exists(chime_file):
-                                    # Interrompe il flusso corrente senza toccare breaking_news_active
-                                    schedule_interrupt_event.set()
-                                    stop_current_process("🔔 Pausa per rintocco orario.")
-                                    clear_audio_queue()
-
+                                    print("🔔 Riproduzione sincrona del rintocco orario in corso...")
                                     chime_info = {
                                         "status": "ON_AIR",
                                         "current_block": "chime",
-                                        "current_title": "🔔 SEGNALE ORARIO",
+                                        "current_title": "SEGNALE ORARIO",
                                         "next_block": "",
                                         "next_start": "",
                                         "breaking_news_available": False,
-                                        "last_update": ""
+                                        "last_update": time.strftime("%Y-%m-%dT%H:%M:%S")
                                     }
-                                    # Riproduce il rintocco in un thread separato per non bloccare
-                                    # il main loop che deve continuare a drenare la coda verso la FIFO
-                                    def _play_chime(f=chime_file, info=chime_info):
-                                        queue_pcm_from_file(f, info, is_breaking_news=True)
-                                        print("🔔 Rintocco orario completato. Il palinsesto riprenderà a breve.")
 
-                                    threading.Thread(target=_play_chime, daemon=True).start()
-                                    print("🔔 Thread rintocco avviato.")
+                                    # Salviamo lo stato precedente per ripristinarlo
+                                    prev_state = None
+                                    if os.path.exists(STATE_FILE):
+                                        try:
+                                            with open(STATE_FILE, "r") as sf:
+                                                prev_state = json.load(sf)
+                                        except Exception:
+                                            pass
+
+                                    # Aggiorna la grafica per il segnale orario
+                                    try:
+                                        with open(STATE_FILE, "w") as sf:
+                                            json.dump(chime_info, sf, indent=2)
+                                        with open(PROGRAM_FILE, "w") as pf:
+                                            pf.write("SEGNALE ORARIO")
+                                        with open(NEXT_PROGRAM_FILE, "w") as nf:
+                                            nf.write("")
+                                        write_accent_files("chime")
+                                    except Exception as e:
+                                        print(f"⚠️ Errore aggiornamento stato per chime: {e}")
+
+                                    # Riproduce il file direttamente sulla FIFO (pausa temporanea ma preserva la coda)
+                                    cmd_ffmpeg = [
+                                        FFMPEG_CMD,
+                                        "-hide_banner",
+                                        "-loglevel", "error",
+                                        "-i", chime_file,
+                                        "-f", "s16le",
+                                        "-ar", str(PCM_SAMPLE_RATE),
+                                        "-ac", str(PCM_CHANNELS),
+                                        "pipe:1"
+                                    ]
+                                    try:
+                                        proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
+                                        chime_chunks = 0
+                                        while True:
+                                            chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
+                                            if not chunk_data:
+                                                break
+                                            write_fifo_chunk(fifo_fd, chunk_data)
+                                            chime_chunks += 1
+                                        proc.wait()
+                                        print(f"🔔 Rintocco orario riprodotto con successo ({chime_chunks} chunks).")
+                                    except Exception as e:
+                                        print(f"⚠️ Errore riproduzione chime: {e}")
+
+                                    restore_after_interrupt(prev_state, "chime")
                                 else:
                                     print(f"⚠️ File rintocco non trovato: {chime_file}")
                             elif cmd == "TRIGGER_BREAKING_NEWS":
@@ -724,33 +523,69 @@ def main():
                             elif cmd.startswith("BREAKING_NEWS_READY"):
                                 parts = cmd.split("|")
                                 bn_file = parts[1] if len(parts) > 1 else ""
-                                print("🚨 Comando ricevuto: BREAKING_NEWS_READY. Svuoto la coda per ultim'ora!")
+                                print("🚨 Comando ricevuto: BREAKING_NEWS_READY. Eseguo riproduzione sincrona!")
 
-                                # Impostiamo subito il flag
-                                breaking_news_active = True
-                                
-                                # Terminiamo il processo regolare corrente per sbloccare la coda
-                                stop_current_process("🚨 Termino il processo di generazione regolare corrente per far spazio alla Breaking News.")
-                                
-                                clear_audio_queue()
-                                        
                                 if os.path.exists(bn_file):
                                     bn_info = {
                                         "status": "ON_AIR",
                                         "current_block": "breaking_news",
-                                        "current_title": "🚨 ULTIM'ORA",
+                                        "current_title": "ULTIM'ORA",
                                         "next_block": "Ripresa Palinsesto",
                                         "next_start": "",
                                         "breaking_news_available": False,
-                                        "last_update": ""
+                                        "last_update": time.strftime("%Y-%m-%dT%H:%M:%S")
                                     }
-                                    # Carichiamo in un thread separato per non bloccare il main loop
-                                    def _play_bn(f=bn_file, info=bn_info):
-                                        queue_pcm_from_file(f, info, is_breaking_news=True)
-                                    threading.Thread(target=_play_bn, daemon=True).start()
+
+                                    # Salviamo lo stato precedente per ripristinarlo
+                                    prev_state = None
+                                    if os.path.exists(STATE_FILE):
+                                        try:
+                                            with open(STATE_FILE, "r") as sf:
+                                                prev_state = json.load(sf)
+                                        except Exception:
+                                            pass
+
+                                    # Aggiorna la grafica per l'Ultim'Ora
+                                    try:
+                                        with open(STATE_FILE, "w") as sf:
+                                            json.dump(bn_info, sf, indent=2)
+                                        with open(PROGRAM_FILE, "w") as pf:
+                                            pf.write("ULTIM'ORA")
+                                        with open(NEXT_PROGRAM_FILE, "w") as nf:
+                                            nf.write("Ripresa Palinsesto")
+                                        write_accent_files("breaking_news")
+                                    except Exception as e:
+                                        print(f"⚠️ Errore scrittura stato per breaking news: {e}")
+
+                                    # Riproduce la breaking news direttamente sulla FIFO (pausa temporanea ma preserva la coda)
+                                    cmd_ffmpeg = [
+                                        FFMPEG_CMD,
+                                        "-hide_banner",
+                                        "-loglevel", "error",
+                                        "-i", bn_file,
+                                        "-f", "s16le",
+                                        "-ar", str(PCM_SAMPLE_RATE),
+                                        "-ac", str(PCM_CHANNELS),
+                                        "pipe:1"
+                                    ]
+                                    try:
+                                        proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
+                                        bn_chunks = 0
+                                        while True:
+                                            chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
+                                            if not chunk_data:
+                                                break
+                                            write_fifo_chunk(fifo_fd, chunk_data)
+                                            bn_chunks += 1
+                                        proc.wait()
+                                        print(f"🚨 Breaking News riprodotta con successo ({bn_chunks} chunks).")
+                                    except Exception as e:
+                                        print(f"⚠️ Errore riproduzione breaking news: {e}")
+
+                                    restore_after_interrupt(prev_state, "breaking news")
                         except Exception as e:
                             print(f"⚠️ Errore comandi: {e}")
- 
+
                     try:
                         item = audio_queue.get_nowait()
                         
@@ -777,23 +612,22 @@ def main():
                             continue
                             
                         data = item["data"] if isinstance(item, dict) else item
-                        fifo.write(data)
-                        fifo.flush()
+                        write_fifo_chunk(fifo_fd, data)
                         audio_queue.task_done()
                     except queue.Empty:
                         if breaking_news_active:
                             print("🚨 Coda vuota: Breaking News completata. Ripristino palinsesto regolare.")
                             breaking_news_active = False
                             schedule_interrupt_event.set()
-                            stop_current_process("🚨 Sblocco eventuale processo audio rimasto dopo la Breaking News.")
-                            clear_audio_queue()
+                            playout.stop_current_process("🚨 Sblocco eventuale processo audio rimasto dopo la Breaking News.")
+                            playout.clear_queue()
                             enqueue_current_schedule_metadata()
                             
                         # Mantiene sempre viva la FIFO: se la generazione e' in corso,
                         # FFmpeg riceve silenzio PCM invece di restare senza input.
                         try:
-                            fifo.write(silence)
-                            fifo.flush()
+                            if not write_fifo_chunk(fifo_fd, silence, blocking=False):
+                                time.sleep(0.02)
                         except BrokenPipeError:
                             print("❌ Pipe rotta (FFmpeg si è disconnesso).")
                             break
@@ -803,6 +637,12 @@ def main():
         except Exception as e:
             print(f"⚠️ Errore nell'apertura della pipe: {e}")
             time.sleep(2)
+        finally:
+            if fifo_fd is not None:
+                try:
+                    os.close(fifo_fd)
+                except OSError:
+                    pass
 
 if __name__ == "__main__":
     try:

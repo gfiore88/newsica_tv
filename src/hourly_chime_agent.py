@@ -14,6 +14,7 @@ TMP_DIR = os.path.join(BASE_DIR, "tmp")
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
 CHIME_AUDIO_FILE = os.path.join(TMP_DIR, "hourly_chime.wav")
+CHIME_VOICE_AUDIO_FILE = os.path.join(TMP_DIR, "hourly_chime_voice.wav")
 
 # Stessa coppia onnx/voices usata dal TTS principale
 KOKORO_ONNX = os.path.join(BASE_DIR, "kokoro-v1.0.onnx")
@@ -50,6 +51,33 @@ HOUR_WORDS = {
     23: "ventitre",
 }
 
+NUMBER_WORDS = {
+    0: "zero",
+    1: "uno",
+    2: "due",
+    3: "tre",
+    4: "quattro",
+    5: "cinque",
+    6: "sei",
+    7: "sette",
+    8: "otto",
+    9: "nove",
+    10: "dieci",
+    11: "undici",
+    12: "dodici",
+    13: "tredici",
+    14: "quattordici",
+    15: "quindici",
+    16: "sedici",
+    17: "diciassette",
+    18: "diciotto",
+    19: "diciannove",
+    20: "venti",
+    30: "trenta",
+    40: "quaranta",
+    50: "cinquanta",
+}
+
 CHIME_TEMPLATES = [
     "Sono le {ora} in punto. Continuate a seguire NewsicaTV.",
     "Le {ora} in punto su NewsicaTV. Restiamo insieme.",
@@ -67,7 +95,37 @@ def build_chime_text(hour: int) -> str:
     return template.format(ora=ora)
 
 
-def generate_chime_audio(text: str) -> bool:
+def number_to_words(value: int) -> str:
+    if value in NUMBER_WORDS:
+        return NUMBER_WORDS[value]
+    tens = (value // 10) * 10
+    unit = value % 10
+    tens_word = NUMBER_WORDS.get(tens, str(tens))
+    if unit in (1, 8):
+        tens_word = tens_word[:-1]
+    return f"{tens_word}{NUMBER_WORDS[unit]}"
+
+
+def build_exact_chime_text(now=None) -> str:
+    now = now or datetime.datetime.now()
+    hour = now.hour
+    minute = now.minute
+    hour_word = HOUR_WORDS.get(hour, str(hour))
+
+    if minute == 0:
+        return build_chime_text(hour)
+
+    minute_word = number_to_words(minute)
+    if hour == 1:
+        return f"È l'una e {minute_word}. NewsicaTV è con voi."
+    if hour == 0:
+        return f"È mezzanotte e {minute_word}. NewsicaTV è con voi."
+    if hour == 12:
+        return f"È mezzogiorno e {minute_word}. NewsicaTV è con voi."
+    return f"Sono le {hour_word} e {minute_word}. NewsicaTV è con voi."
+
+
+def generate_chime_audio(text: str, output_file=CHIME_AUDIO_FILE) -> bool:
     """Genera il file WAV del rintocco con Kokoro TTS. Ritorna True se ok."""
     try:
         from kokoro_onnx import Kokoro
@@ -77,8 +135,8 @@ def generate_chime_audio(text: str) -> bool:
         samples, sample_rate = kokoro.create(
             text, voice=CHIME_VOICE, speed=CHIME_SPEED, lang="it"
         )
-        sf.write(CHIME_AUDIO_FILE, samples, sample_rate)
-        print(f"✅ Rintocco orario generato: {CHIME_AUDIO_FILE}")
+        sf.write(output_file, samples, sample_rate)
+        print(f"✅ Rintocco orario generato: {output_file}")
         return True
     except Exception as e:
         print(f"❌ Errore generazione rintocco: {e}")
