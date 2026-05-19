@@ -29,5 +29,47 @@ Lo sviluppo è supportato da un team di agenti AI specializzati con direttive pr
 - `streaming_expert.md`: Ingegnere del video output (FFmpeg)
 - E altri...
 
+## 🚀 Esecuzione e Gestione
+
+Per semplificare l'avvio, l'arresto e il monitoraggio di tutti i servizi in locale (Dashboard, Regia, Ticker, Chime e Streamer FFmpeg), è disponibile il tool unificato **`manage.sh`** nella root del progetto.
+
+### 🔑 Configurazione Iniziale
+Rendi eseguibile lo script di gestione:
+```bash
+chmod +x manage.sh
+```
+
+### 📋 Comandi Rapidi
+
+*   **Avviare tutto il sistema**:
+    ```bash
+    ./manage.sh start
+    ```
+    *Avvia la Dashboard Web (porta 5050), la regia automatica e il flusso di streaming video verso YouTube.*
+
+*   **Verificare lo stato dei servizi**:
+    ```bash
+    ./manage.sh status
+    ```
+    *Mostra graficamente quali moduli (Web, Director, FFmpeg, Ticker, Chime, Watchdog) sono attivi e con quali PID.*
+
+*   **Arrestare e ripulire il sistema**:
+    ```bash
+    ./manage.sh stop
+    ```
+    *Spegne in sicurezza tutti i processi attivi e rimuove i lockfile obsoleti per prevenire conflitti alla successiva esecuzione.*
+
+*   **Riavviare l'intero flusso**:
+    ```bash
+    ./manage.sh restart
+    ```
+
+*   **Visualizzare i log in tempo reale**:
+    ```bash
+    ./manage.sh logs
+    ```
+
+---
+
 ## 📜 Licenza
 Distribuito sotto licenza MIT. Vedi il file `LICENSE` per maggiori informazioni.
