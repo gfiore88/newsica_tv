@@ -54,8 +54,8 @@
         "source": "ansa_lifestyle"
     },
     {
-        "title": "Meteo Roma",
-        "summary": "Temperatura: 20.6°C, Vento: 8.6 km/h, Codice: 0",
+        "title": "Meteo Italia",
+        "summary": "Temperatura: 21.0°C, Vento: 9.4 km/h, Codice: 2",
         "link": "https://open-meteo.com",
         "source": "meteo"
     }
