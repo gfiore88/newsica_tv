@@ -140,7 +140,7 @@ def select_fresh_wellness(items, limit=3):
 
 def fetch_weather():
     """
-    Recupera i dati meteo attuali per Roma tramite l'API gratuita Open-Meteo.
+    Recupera i dati meteo attuali per Italia tramite l'API gratuita Open-Meteo.
     """
     url = "https://api.open-meteo.com/v1/forecast?latitude=41.89&longitude=12.51&current_weather=true"
     try:
@@ -148,7 +148,7 @@ def fetch_weather():
         data = response.json()
         current = data.get("current_weather", {})
         return {
-            "title": "Meteo Roma",
+            "title": "Meteo Italia",
             "summary": f"Temperatura: {current.get('temperature')}°C, Vento: {current.get('windspeed')} km/h, Codice: {current.get('weathercode')}",
             "link": "https://open-meteo.com",
             "source": "meteo"
