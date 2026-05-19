@@ -43,6 +43,8 @@ audio_queue = queue.Queue(maxsize=5000)
 manual_block_override_index = None
 current_active_index = 0
 breaking_news_active = False
+pregen_running = False
+pregen_done_for = None
 schedule_interrupt_event = threading.Event()
 playout = AudioPlayout(
     audio_queue,
@@ -144,6 +146,71 @@ def get_current_block_info():
     
     return block["type"], block["title"], next_block["title"], next_time_key, current_time_key
 
+def get_next_block_info():
+    try:
+        schedule_data = get_current_schedule()
+        times = sorted(schedule_data.keys())
+        current_type, current_title, next_title, next_time, current_time = get_current_block_info()
+        
+        if current_time in times:
+            current_idx = times.index(current_time)
+            next_idx = (current_idx + 1) % len(times)
+            next_time_key = times[next_idx]
+            next_block = schedule_data[next_time_key]
+            return next_block.get("type", "music_only"), next_block.get("title", ""), next_time_key
+    except Exception as e:
+        print(f"⚠️ Errore get_next_block_info: {e}")
+    return "music_only", "", ""
+
+def pregenerate_next_block_worker(character, title, time_key):
+    global pregen_done_for, pregen_running
+    try:
+        print(f"🔮 [Pre-Generazione] Avvio pre-generazione in background per il blocco delle {time_key} ({title})...")
+        
+        # 1. Assicuriamoci che la cartella pregen esista e sia vuota
+        pregen_dir = os.path.join(TMP_DIR, "pregen")
+        os.makedirs(pregen_dir, exist_ok=True)
+        for f in os.listdir(pregen_dir):
+            try:
+                os.remove(os.path.join(pregen_dir, f))
+            except Exception:
+                pass
+                
+        # 2. Esegui la pipeline normale (scriverà in tmp/)
+        run_pipeline(character, title)
+        
+        # 3. Sposta tutti i file generati da tmp/ a tmp/pregen/
+        files_to_move = ["script.txt", "is_multipart.txt", "audio.wav"]
+        # Sposta anche tutte le part1..partN
+        for f in os.listdir(TMP_DIR):
+            if f.startswith("audio_part") and f.endswith(".wav"):
+                files_to_move.append(f)
+                
+        for f in files_to_move:
+            src = os.path.join(TMP_DIR, f)
+            dst = os.path.join(pregen_dir, f)
+            if os.path.exists(src):
+                if os.path.exists(dst):
+                    os.remove(dst)
+                os.rename(src, dst)
+                
+        # 4. Scrivi il file di metadati per validare la pre-generazione
+        meta = {
+            "character": character,
+            "title": title,
+            "time_key": time_key,
+            "timestamp": time.time()
+        }
+        with open(os.path.join(pregen_dir, "pregen_meta.json"), "w") as mf:
+            json.dump(meta, mf, indent=2)
+            
+        pregen_done_for = time_key
+        print(f"🔮 [Pre-Generazione] Completata con successo per il blocco delle {time_key}!")
+    except Exception as e:
+        print(f"⚠️ [Pre-Generazione] Errore: {e}")
+    finally:
+        pregen_running = False
+
 def get_wallclock_schedule_key():
     schedule_data = get_current_schedule()
     times = sorted(schedule_data.keys())
@@ -223,7 +290,7 @@ def enqueue_current_schedule_metadata():
     return True
 
 def generator_worker():
-    global breaking_news_active
+    global breaking_news_active, pregen_running, pregen_done_for
     print("🤖 Thread Generatore avviato.")
     
     while True:
@@ -236,9 +303,43 @@ def generator_worker():
             schedule_interrupt_event.clear()
             current_type, current_title, next_title, next_time, current_time = get_current_block_info()
             
-            print(f"🚀 Genero blocco in background: {current_title} ({current_type})")
-            if current_type != "music_only":
-                run_pipeline(current_type, current_title)
+            pregen_dir = os.path.join(TMP_DIR, "pregen")
+            meta_file = os.path.join(pregen_dir, "pregen_meta.json")
+            used_pregen = False
+            
+            if os.path.exists(meta_file):
+                try:
+                    with open(meta_file, "r") as mf:
+                        meta = json.load(mf)
+                    if meta.get("time_key") == current_time and meta.get("character") == current_type:
+                        print(f"✨ [Pre-Generazione] Trovato blocco pre-generato valido per le {current_time}! Ripristino i file istantaneamente.")
+                        # Sposta tutti i file da tmp/pregen/ a tmp/
+                        for f in os.listdir(pregen_dir):
+                            if f == "pregen_meta.json":
+                                continue
+                            src = os.path.join(pregen_dir, f)
+                            dst = os.path.join(TMP_DIR, f)
+                            if os.path.exists(dst):
+                                try:
+                                    os.remove(dst)
+                                except Exception:
+                                    pass
+                            try:
+                                os.rename(src, dst)
+                            except Exception as e:
+                                print(f"⚠️ Errore spostamento file {f}: {e}")
+                        try:
+                            os.remove(meta_file)
+                        except Exception:
+                            pass
+                        used_pregen = True
+                except Exception as e:
+                    print(f"⚠️ Errore nel ripristino del blocco pre-generato: {e}")
+            
+            if not used_pregen:
+                print(f"🚀 Genero blocco in background: {current_title} ({current_type})")
+                if current_type != "music_only":
+                    run_pipeline(current_type, current_title)
             
             # Ricontrolla se si è attivata una breaking news durante la generazione
             while breaking_news_active:
@@ -257,7 +358,26 @@ def generator_worker():
             if current_type == "music_only":
                 if not playout.queue_item({"type": "metadata", "state": block_info}):
                     continue
-                playout.queue_music_track(schedule_deadline(next_time))
+                deadline = schedule_deadline(next_time)
+                while datetime.datetime.now() < deadline:
+                    if schedule_interrupt_event.is_set() or breaking_news_active:
+                        break
+                    
+                    # Controlla se mancano meno di 10 minuti al prossimo blocco e pregeneralo
+                    now = datetime.datetime.now()
+                    time_until_deadline = (deadline - now).total_seconds()
+                    
+                    if time_until_deadline <= 600 and not pregen_running and pregen_done_for != next_time:
+                        next_char, next_title, next_time_key = get_next_block_info()
+                        if next_char != "music_only":
+                            pregen_running = True
+                            threading.Thread(
+                                target=pregenerate_next_block_worker, 
+                                args=(next_char, next_title, next_time_key), 
+                                daemon=True
+                            ).start()
+                            
+                    playout.queue_single_music_track()
                 continue
 
             # Controlliamo se è uno show radiofonico multi-part
@@ -334,7 +454,27 @@ def generator_worker():
                     playout.mix_and_queue(music_file, voice_file)
 
             if not schedule_interrupt_event.is_set() and not breaking_news_active:
-                playout.queue_music_track(schedule_deadline(next_time))
+                deadline = schedule_deadline(next_time)
+
+                while datetime.datetime.now() < deadline:
+                    if schedule_interrupt_event.is_set() or breaking_news_active:
+                        break
+                    
+                    # Controlla se mancano meno di 10 minuti al prossimo blocco e pregeneralo
+                    now = datetime.datetime.now()
+                    time_until_deadline = (deadline - now).total_seconds()
+                    
+                    if time_until_deadline <= 600 and not pregen_running and pregen_done_for != next_time:
+                        next_char, next_title, next_time_key = get_next_block_info()
+                        if next_char != "music_only":
+                            pregen_running = True
+                            threading.Thread(
+                                target=pregenerate_next_block_worker, 
+                                args=(next_char, next_title, next_time_key), 
+                                daemon=True
+                            ).start()
+                            
+                    playout.queue_single_music_track()
                 
         except Exception as e:
             print(f"💥 Errore nel ciclo del generatore: {e}")
@@ -344,17 +484,52 @@ def generator_worker():
 def check_singleton(name):
     import fcntl
     lock_file_path = os.path.join(RUNTIME_DIR, f"{name}.lock")
-    try:
-        f = open(lock_file_path, "w")
-        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        global _singleton_lock
-        _singleton_lock = f
-        f.write(str(os.getpid()))
-        f.flush()
+
+    # Prova ad acquisire il lock direttamente
+    def _try_acquire():
+        f = open(lock_file_path, "r+") if os.path.exists(lock_file_path) else open(lock_file_path, "w")
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            global _singleton_lock
+            _singleton_lock = f
+            f.seek(0)
+            f.truncate()
+            f.write(str(os.getpid()))
+            f.flush()
+            return True
+        except (IOError, OSError):
+            f.close()
+            return False
+
+    if _try_acquire():
         return True
-    except (IOError, OSError):
-        print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione!")
-        return False
+
+    # Lock occupato: controlla se il processo proprietario è ancora vivo
+    try:
+        with open(lock_file_path, "r") as rf:
+            content = rf.read().strip()
+        if content:
+            existing_pid = int(content)
+            try:
+                os.kill(existing_pid, 0)  # Segnale 0 = solo verifica esistenza
+                # Il processo è vivo: vero conflitto
+                print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione! (PID {existing_pid})")
+                return False
+            except ProcessLookupError:
+                # Il processo non esiste più → lock stale
+                print(f"⚠️ Lock stale rilevato (PID {existing_pid} non è più in vita). Rimozione e riavvio.")
+                os.remove(lock_file_path)
+                return _try_acquire()
+    except Exception as e:
+        print(f"⚠️ Impossibile leggere il lock: {e}. Rimozione e riavvio.")
+        try:
+            os.remove(lock_file_path)
+        except Exception:
+            pass
+        return _try_acquire()
+
+    print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione!")
+    return False
 
 
 def main():

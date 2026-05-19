@@ -185,7 +185,9 @@ case "$1" in
     ;;
   restart)
     do_stop
-    sleep 1
+    echo -e "  -> Attesa rilascio lockfile..."
+    sleep 3
+    rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
     do_start
     ;;
   status)

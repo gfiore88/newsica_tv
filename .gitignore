@@ -38,4 +38,5 @@ logs/
 *.bin
 *.onnx
 tmp/ffmpeg_progress.txt
-
+tmp/script.txt
+tmp/ticker.txt
