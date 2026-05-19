@@ -7,6 +7,8 @@ import sys
 import threading
 import queue
 import json
+import datetime
+from schedule_generator import get_current_schedule, generate_schedule
 
 # Cartelle di progetto
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,6 +17,7 @@ RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 MUSIC_DIR = os.path.join(BASE_DIR, "assets", "music")
 AUDIO_PIPE = os.path.join(TMP_DIR, "audio_pipe")
 STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
+CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
 PCM_SAMPLE_RATE = 24000
 PCM_CHANNELS = 1
 PCM_CHUNK_BYTES = 4096
@@ -121,27 +124,45 @@ def mix_and_queue(music_file, voice_file, block_info=None):
     process.wait()
     print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
 
-CHARACTERS = ["wellness", "news", "sport", "meteo"]
-char_idx = 0
+def get_current_block_info():
+    schedule_data = get_current_schedule()
+    now = datetime.datetime.now()
+    current_time_str = now.strftime("%H:%M")
+    
+    times = sorted(schedule_data.keys())
+    current_time_key = times[0]
+    for t in times:
+        if t <= current_time_str:
+            current_time_key = t
+        else:
+            break
+            
+    block = schedule_data[current_time_key]
+    
+    next_index = times.index(current_time_key) + 1
+    next_time_key = times[next_index] if next_index < len(times) else times[0]
+    next_block = schedule_data[next_time_key]
+    
+    return block["type"], block["title"], next_block["title"]
 
 def generator_worker():
-    global char_idx
     print("🤖 Thread Generatore avviato.")
-    # Genera il primo blocco
-    current_char = CHARACTERS[char_idx]
-    run_pipeline(current_char)
-    char_idx = (char_idx + 1) % len(CHARACTERS)
     
     while True:
         try:
+            current_type, current_title, next_title = get_current_block_info()
+            
+            print(f"🚀 Genero blocco in background: {current_title} ({current_type})")
+            run_pipeline(current_type)
+            
             voice_file = os.path.join(TMP_DIR, "audio.wav")
             music_file = get_random_music()
             
             block_info = {
                 "status": "ON_AIR",
-                "current_block": current_char,
-                "current_title": f"Rubrica: {current_char.capitalize()}",
-                "next_block": CHARACTERS[char_idx],
+                "current_block": current_type,
+                "current_title": current_title,
+                "next_block": next_title,
                 "breaking_news_available": False,
                 "last_update": "" # sara' popolato al momento della messa in onda
             }
@@ -157,13 +178,6 @@ def generator_worker():
             else:
                 mix_and_queue(music_file, voice_file, block_info)
                 
-            print("🚀 Genero già il prossimo blocco in background...")
-            
-            # Rigenera le news per il prossimo blocco senza aspettare!
-            current_char = CHARACTERS[char_idx]
-            run_pipeline(current_char)
-            char_idx = (char_idx + 1) % len(CHARACTERS)
-            
         except Exception as e:
             print(f"💥 Errore nel ciclo del generatore: {e}")
             time.sleep(10)
@@ -179,6 +193,10 @@ def main():
     t = threading.Thread(target=generator_worker, daemon=True)
     t.start()
     
+    # Avvia ticker agent in background
+    ticker_thread = threading.Thread(target=lambda: subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "ticker_agent.py")]), daemon=True)
+    ticker_thread.start()
+    
     silence = b'\x00' * PCM_CHUNK_BYTES
     
     while True:
@@ -187,6 +205,52 @@ def main():
             with open(AUDIO_PIPE, 'wb') as fifo:
                 print("✅ FFmpeg collegato! Trasmissione in corso...")
                 while True:
+                    if os.path.exists(CONTROL_FILE):
+                        try:
+                            with open(CONTROL_FILE, "r") as f:
+                                cmd = f.read().strip()
+                            os.remove(CONTROL_FILE)
+                            
+                            if cmd == "FORCE_NEXT":
+                                print("⏭️ Comando ricevuto: FORCE_NEXT. Svuoto la coda audio!")
+                                while not audio_queue.empty():
+                                    try:
+                                        audio_queue.get_nowait()
+                                        audio_queue.task_done()
+                                    except queue.Empty:
+                                        break
+                            elif cmd == "REGEN_SCHEDULE":
+                                print("📅 Comando ricevuto: REGEN_SCHEDULE.")
+                                generate_schedule()
+                            elif cmd == "TRIGGER_BREAKING_NEWS":
+                                print("🚨 Comando ricevuto: TRIGGER_BREAKING_NEWS. Avvio agente in background...")
+                                import threading
+                                threading.Thread(target=lambda: subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")])).start()
+                            elif cmd.startswith("BREAKING_NEWS_READY"):
+                                parts = cmd.split("|")
+                                bn_file = parts[1] if len(parts) > 1 else ""
+                                print("🚨 Comando ricevuto: BREAKING_NEWS_READY. Svuoto la coda per ultim'ora!")
+                                while not audio_queue.empty():
+                                    try:
+                                        audio_queue.get_nowait()
+                                        audio_queue.task_done()
+                                    except queue.Empty:
+                                        break
+                                        
+                                if os.path.exists(bn_file):
+                                    bn_info = {
+                                        "status": "ON_AIR",
+                                        "current_block": "breaking_news",
+                                        "current_title": "🚨 ULTIM'ORA",
+                                        "next_block": "Ripresa Palinsesto",
+                                        "breaking_news_available": False,
+                                        "last_update": ""
+                                    }
+                                    import threading
+                                    threading.Thread(target=queue_pcm_from_file, args=(bn_file, bn_info)).start()
+                        except Exception as e:
+                            print(f"⚠️ Errore comandi: {e}")
+
                     try:
                         item = audio_queue.get_nowait()
                         

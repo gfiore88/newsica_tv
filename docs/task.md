@@ -1,13 +1,5 @@
 ## Orchestrator Status
 
-| Step | Assegnatario | Status | Note |
-|---|---|---|---|
-| 1 | /task_analyzer | Done | Analizzata lentezza stream FFmpeg/director |
-| 2 | /streaming_expert | Done | Aggiunto watchdog FFmpeg su progress e restart se out_time si blocca |
-| 3 | /python_engineer | Done | Rimosso filler live bloccante; la FIFO riceve sempre PCM o silenzio |
-| 4 | /code_reviewer | Done | `bash -n`, `py_compile` e verifica live oltre 3 minuti a speed=1x |
-| 5 | /python_engineer | Done | Corretto fallback agenti: news/sport/meteo generano copioni distinti anche con Ollama spento |
-| 6 | /orchestrator | Done | Studio documento brainstorming "svolta" e integrazione 10 feature nella Roadmap |
-| 7 | /task_analyzer | Done | Analisi e brief per la feature "Regia AI Centrale" (MVP 3) completata |
-| 8 | /python_engineer | Done | Refactoring completato: DirectorAgent crea e accoda metadati insieme all'audio per aggiornamento preciso |
-| 9 | /system_admin | Done | Directory `runtime/` creata al boot ed esclusa dal controllo di versione via `.gitignore` |
+| 1 | /task_analyzer | Done | Brief scritto per Identità Speaker e Ticker Intelligente |
+| 2 | /ai_integrator | Done | Differenziazione speaker (voci e velocità) in TTS completata |
+| 3 | /python_engineer | Done | Ticker in esecuzione parallela su `director.py` e auto-aggiornante |

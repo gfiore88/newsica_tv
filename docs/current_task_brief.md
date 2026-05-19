@@ -1,25 +1,19 @@
-# 🔎 Task Brief: Regia AI Centrale e Stato di Trasmissione (MVP 3)
+# 🔎 Task Brief: Identità Speaker e Ticker Intelligente (MVP 3)
 
 ## Obiettivo
-Trasformare l'attuale script `director.py` (che esegue un banale loop circolare su array statico) in un vero e proprio `DirectorAgent`. Il nuovo motore dovrà gestire la messa in onda in maniera strutturata ed esportare costantemente il proprio stato in un file JSON (`runtime/on-air-state.json`). Questa è la base per permettere ad altri agenti futuri (es. Ticker, Breaking News) di interagire con la diretta.
+Concludere l'MVP 3 implementando le due funzionalità che danno un'identità definitiva e televisiva al canale:
+1. **Identità Speaker**: Dare nomi (Nora, Leo, Maya, Colonnello) e caratteristiche vocali univoche a ogni format, differenziando la velocità e il tono per simulare una vera redazione tramite `tts_generator.py`.
+2. **Ticker Intelligente**: Creazione di un `ticker_agent.py` che aggiorni costantemente il testo scorrevole in basso (letto dal `drawtext` di FFmpeg), mostrando ora esatta, blocco in onda, prossima rubrica e notizie flash, senza limiti statici.
 
 ## Vincoli Tecnici
-- **Tutto Locale**: Nessuna chiamata ad API esterne a pagamento.
-- **Tracciabilità Realtime**: Il file `runtime/on-air-state.json` deve essere aggiornato con coerenza, mostrando cosa *sta effettivamente andando in onda* (o venendo inviato alla pipe FFmpeg).
-- **Continuità**: Mantenere il meccanismo di fallback PCM a silenzio e la stabilità dello stream FFmpeg verso YouTube.
+- **Tutto Locale**: Usare solo le voci ONNX locali e Python standard.
+- **Sincronia Ticker**: Il file `tmp/ticker.txt` deve essere aggiornato atomicamente ogni pochi secondi. FFmpeg (`reload=1`) lo leggerà automaticamente al volo.
 
 ## Piano di Lavoro
-1. **Fase 4 (Python Engineer)**: 
-   - Refactoring architetturale di `src/director.py`.
-   - Creazione della cartella `runtime/` e implementazione del salvataggio continuo in `runtime/on-air-state.json`.
-   - Gestione della transizione: l'aggiornamento dello stato JSON deve essere mappato al momento in cui l'audio inizia a fluire verso FFmpeg, non quando viene generato (perché la generazione è in anticipo).
-   - Abbozzare una struttura di "palinsesto" minima che sostituisca la lista circolare hardcoded, per prepararsi al task del palinsesto dinamico.
-2. **Fase 6 (System Admin)**:
-   - Configurare la gestione della directory `runtime/` (gitignore, creazione al boot, pulizia) senza conflitti.
-3. **Fase 7 (Code Reviewer)**:
-   - Verifica di thread-safety se più thread leggono/scrivono lo stato.
-   - Conferma che il refactoring non introduca blocchi (`deadlocks`) nella pipe audio.
-
-## Rischi Potenziali
-- **Disallineamento Stato/Stream**: Dato che FFmpeg e la queue consumano byte progressivamente, determinare il momento "esatto" in cui un nuovo blocco news inizia può essere complicato in Python raw. Possibile soluzione: accodare nella queue non solo bytes PCM, ma oggetti misti (metadati + generatore bytes) oppure scrivere lo stato prima di iniziare il ciclo di `fifo.write` del nuovo file.
-- **Preparazione Interruzioni**: L'architettura deve essere fatta a oggetti o comunque modulare per facilitare, nel prossimo step, lo "svuotamento" della coda in caso di un alert di breaking news.
+1. **Fase 3 (AI Integrator)**:
+   - Aggiornamento di `src/tts_generator.py` per associare le velocità corrette ai personaggi (Nora più veloce per le news, Maya più lenta per il wellness, ecc.).
+2. **Fase 4 (Python Engineer)**:
+   - Sviluppo di `src/ticker_agent.py` in esecuzione infinita.
+   - Integrazione di `ticker_agent.py` in `director.py` (avvio come thread in background al momento del boot della regia).
+3. **Fase 6 (System Admin)**:
+   - Validazione flussi e log per garantire che il Ticker non vada in errore se il file state non è pronto.

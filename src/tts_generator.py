@@ -9,17 +9,19 @@ SCRIPT_FILE = os.path.join(TMP_DIR, "script.txt")
 OUTPUT_AUDIO = os.path.join(TMP_DIR, "audio.wav")
 
 VOICES = {
-    "news": "if_sara",
-    "sport": "im_nicola",
-    "meteo": "im_nicola",
-    "wellness": "if_sara"
+    "news": "if_sara",        # Nora: anchor-woman professionista
+    "sport": "im_nicola",     # Leo: giornalista sportivo
+    "meteo": "im_nicola",     # Colonnello: esperto meteo
+    "wellness": "if_sara",    # Maya: voce solare e rilassante
+    "breaking_news": "if_sara" # Regia per interruzioni
 }
 
 VOICE_SPEEDS = {
-    "news": 0.92,
-    "sport": 0.98,
-    "meteo": 0.9,
-    "wellness": 0.9
+    "news": 1.0,         # Dinamica e autorevole
+    "sport": 1.05,       # Veloce ed energico
+    "meteo": 0.95,       # Più pacata per dare i numeri
+    "wellness": 0.85,    # Molto rilassante e lenta
+    "breaking_news": 1.1 # Urgente
 }
 
 def prepare_text_for_tts(text):
