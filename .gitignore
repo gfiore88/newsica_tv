@@ -22,6 +22,8 @@ env/
 tmp_audio/
 tmp_video/
 output/
+tmp/
+runtime/
 
 # Logs
 *.log

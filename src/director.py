@@ -6,12 +6,15 @@ import glob
 import sys
 import threading
 import queue
+import json
 
 # Cartelle di progetto
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
+RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 MUSIC_DIR = os.path.join(BASE_DIR, "assets", "music")
 AUDIO_PIPE = os.path.join(TMP_DIR, "audio_pipe")
+STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 PCM_SAMPLE_RATE = 24000
 PCM_CHANNELS = 1
 PCM_CHUNK_BYTES = 4096
@@ -26,6 +29,10 @@ audio_queue = queue.Queue(maxsize=5000)
 
 def ensure_folders():
     os.makedirs(TMP_DIR, exist_ok=True)
+    os.makedirs(RUNTIME_DIR, exist_ok=True)
+    if not os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "w") as f:
+            json.dump({"status": "OFFLINE"}, f)
     if not os.path.exists(AUDIO_PIPE):
         try:
             os.mkfifo(AUDIO_PIPE)
@@ -43,7 +50,9 @@ def get_random_music():
         return None
     return random.choice(_MUSIC_CACHE)
 
-def queue_pcm_from_file(audio_file):
+def queue_pcm_from_file(audio_file, block_info=None):
+    if block_info:
+        audio_queue.put({"type": "metadata", "state": block_info})
     cmd = [
         FFMPEG_CMD,
         "-hide_banner",
@@ -60,7 +69,7 @@ def queue_pcm_from_file(audio_file):
         data = process.stdout.read(PCM_CHUNK_BYTES)
         if not data:
             break
-        audio_queue.put(data)
+        audio_queue.put({"type": "audio", "data": data})
         count += 1
     process.wait()
     print(f"✅ Audio voce caricato nella coda ({count} chunks).")
@@ -80,9 +89,12 @@ def run_pipeline(character="news"):
     print("Sintesi vocale (TTS)...")
     subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "tts_generator.py"), character], check=True)
 
-def mix_and_queue(music_file, voice_file):
+def mix_and_queue(music_file, voice_file, block_info=None):
     print(f"Mixaggio in corso: Voce + {os.path.basename(music_file)}")
     
+    if block_info:
+        audio_queue.put({"type": "metadata", "state": block_info})
+        
     cmd = [
         FFMPEG_CMD,
         "-y",
@@ -103,7 +115,7 @@ def mix_and_queue(music_file, voice_file):
         data = process.stdout.read(PCM_CHUNK_BYTES)
         if not data:
             break
-        audio_queue.put(data) # Questo si blocca se la coda è piena
+        audio_queue.put({"type": "audio", "data": data}) # Questo si blocca se la coda è piena
         count += 1
             
     process.wait()
@@ -116,13 +128,23 @@ def generator_worker():
     global char_idx
     print("🤖 Thread Generatore avviato.")
     # Genera il primo blocco
-    run_pipeline(CHARACTERS[char_idx])
+    current_char = CHARACTERS[char_idx]
+    run_pipeline(current_char)
     char_idx = (char_idx + 1) % len(CHARACTERS)
     
     while True:
         try:
             voice_file = os.path.join(TMP_DIR, "audio.wav")
             music_file = get_random_music()
+            
+            block_info = {
+                "status": "ON_AIR",
+                "current_block": current_char,
+                "current_title": f"Rubrica: {current_char.capitalize()}",
+                "next_block": CHARACTERS[char_idx],
+                "breaking_news_available": False,
+                "last_update": "" # sara' popolato al momento della messa in onda
+            }
             
             if not os.path.exists(voice_file):
                 print("❌ Errore: file voce non generato. Riprovo tra 10 secondi...")
@@ -131,14 +153,15 @@ def generator_worker():
                 
             if not music_file:
                 print("⚠️ Nessuna musica trovata. Uso solo la voce.")
-                queue_pcm_from_file(voice_file)
+                queue_pcm_from_file(voice_file, block_info)
             else:
-                mix_and_queue(music_file, voice_file)
+                mix_and_queue(music_file, voice_file, block_info)
                 
             print("🚀 Genero già il prossimo blocco in background...")
             
             # Rigenera le news per il prossimo blocco senza aspettare!
-            run_pipeline(CHARACTERS[char_idx])
+            current_char = CHARACTERS[char_idx]
+            run_pipeline(current_char)
             char_idx = (char_idx + 1) % len(CHARACTERS)
             
         except Exception as e:
@@ -165,7 +188,19 @@ def main():
                 print("✅ FFmpeg collegato! Trasmissione in corso...")
                 while True:
                     try:
-                        data = audio_queue.get_nowait()
+                        item = audio_queue.get_nowait()
+                        
+                        if isinstance(item, dict) and item.get("type") == "metadata":
+                            item["state"]["last_update"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                            try:
+                                with open(STATE_FILE, "w") as sf:
+                                    json.dump(item["state"], sf, indent=2)
+                            except Exception as e:
+                                print(f"⚠️ Errore scrittura stato: {e}")
+                            audio_queue.task_done()
+                            continue
+                            
+                        data = item["data"] if isinstance(item, dict) else item
                         fifo.write(data)
                         fifo.flush()
                         audio_queue.task_done()

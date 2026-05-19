@@ -8,4 +8,6 @@
 | 4 | /code_reviewer | Done | `bash -n`, `py_compile` e verifica live oltre 3 minuti a speed=1x |
 | 5 | /python_engineer | Done | Corretto fallback agenti: news/sport/meteo generano copioni distinti anche con Ollama spento |
 | 6 | /orchestrator | Done | Studio documento brainstorming "svolta" e integrazione 10 feature nella Roadmap |
-| 7 | /task_analyzer | Pending | Analisi e brief per la feature "Regia AI Centrale" (MVP 3) |
+| 7 | /task_analyzer | Done | Analisi e brief per la feature "Regia AI Centrale" (MVP 3) completata |
+| 8 | /python_engineer | Done | Refactoring completato: DirectorAgent crea e accoda metadati insieme all'audio per aggiornamento preciso |
+| 9 | /system_admin | Done | Directory `runtime/` creata al boot ed esclusa dal controllo di versione via `.gitignore` |
