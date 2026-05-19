@@ -144,6 +144,26 @@ def send_command():
         return jsonify({"status": "OK", "command": cmd})
     return jsonify({"status": "INVALID"})
 
+def check_singleton(name):
+    import fcntl
+    lock_file_path = os.path.join(RUNTIME_DIR, f"{name}.lock")
+    try:
+        f = open(lock_file_path, "w")
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        global _singleton_lock
+        _singleton_lock = f
+        f.write(str(os.getpid()))
+        f.flush()
+        return True
+    except (IOError, OSError):
+        print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione!")
+        return False
+
 if __name__ == '__main__':
+    import sys
+    if not check_singleton("dashboard"):
+        print("❌ Uscita immediata per prevenire conflitti.")
+        sys.exit(1)
+        
     print("🚀 Web Dashboard avviata su http://0.0.0.0:5050")
     app.run(host='0.0.0.0', port=5050, debug=False)

@@ -39,5 +39,23 @@ def generate_breaking_news():
         
     print("✅ Breaking News generata. Comando inoltrato a director.py.")
 
+def check_singleton(name):
+    import fcntl
+    lock_file_path = os.path.join(RUNTIME_DIR, f"{name}.lock")
+    try:
+        f = open(lock_file_path, "w")
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        global _singleton_lock
+        _singleton_lock = f
+        f.write(str(os.getpid()))
+        f.flush()
+        return True
+    except (IOError, OSError):
+        print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione!")
+        return False
+
 if __name__ == "__main__":
+    if not check_singleton("breaking_news_agent"):
+        print("❌ Uscita immediata per prevenire conflitti.")
+        sys.exit(1)
     generate_breaking_news()

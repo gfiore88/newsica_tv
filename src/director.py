@@ -53,7 +53,12 @@ def get_random_music():
         return None
     return random.choice(_MUSIC_CACHE)
 
-def queue_pcm_from_file(audio_file, block_info=None):
+queue_lock = threading.RLock()
+breaking_news_active = False
+current_generator_process = None
+
+def queue_pcm_from_file(audio_file, block_info=None, is_breaking_news=False):
+    global current_generator_process
     if block_info:
         audio_queue.put({"type": "metadata", "state": block_info})
     cmd = [
@@ -67,14 +72,25 @@ def queue_pcm_from_file(audio_file, block_info=None):
         "pipe:1"
     ]
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    if not is_breaking_news:
+        current_generator_process = process
+        
     count = 0
     while True:
+        if not is_breaking_news and breaking_news_active:
+            print("🚨 Rilevata breaking news attiva: interrompo il caricamento regolare.")
+            process.terminate()
+            break
+            
         data = process.stdout.read(PCM_CHUNK_BYTES)
         if not data:
             break
         audio_queue.put({"type": "audio", "data": data})
         count += 1
+        
     process.wait()
+    if not is_breaking_news:
+        current_generator_process = None
     print(f"✅ Audio voce caricato nella coda ({count} chunks).")
 
 def run_pipeline(character="news"):
@@ -93,6 +109,7 @@ def run_pipeline(character="news"):
     subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "tts_generator.py"), character], check=True)
 
 def mix_and_queue(music_file, voice_file, block_info=None):
+    global current_generator_process
     print(f"Mixaggio in corso: Voce + {os.path.basename(music_file)}")
     
     if block_info:
@@ -103,7 +120,7 @@ def mix_and_queue(music_file, voice_file, block_info=None):
         "-y",
         "-i", voice_file,
         "-i", music_file,
-        "-filter_complex", "[0:a]apad[voice_padded]; [1:a]volume=0.6[m]; [m][voice_padded]sidechaincompress=threshold=0.03:ratio=20:attack=50:release=1000[music]; [0:a][music]amix=inputs=2:duration=longest:dropout_transition=0",
+        "-filter_complex", "[0:a]volume=1.5[v_boost]; [v_boost]apad[voice_padded]; [1:a]volume=0.25[m]; [m][voice_padded]sidechaincompress=threshold=0.03:ratio=20:attack=50:release=1000[music]; [v_boost][music]amix=inputs=2:duration=longest:dropout_transition=0",
         "-f", "s16le",
         "-ar", str(PCM_SAMPLE_RATE),
         "-ac", str(PCM_CHANNELS),
@@ -111,10 +128,16 @@ def mix_and_queue(music_file, voice_file, block_info=None):
     ]
     
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    current_generator_process = process
     
     print("Caricamento audio nella coda...")
     count = 0
     while True:
+        if breaking_news_active:
+            print("🚨 Rilevata breaking news attiva: interrompo il mixaggio regolare.")
+            process.terminate()
+            break
+            
         data = process.stdout.read(PCM_CHUNK_BYTES)
         if not data:
             break
@@ -122,6 +145,7 @@ def mix_and_queue(music_file, voice_file, block_info=None):
         count += 1
             
     process.wait()
+    current_generator_process = None
     print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
 
 def get_current_block_info():
@@ -146,15 +170,26 @@ def get_current_block_info():
     return block["type"], block["title"], next_block["title"]
 
 def generator_worker():
+    global breaking_news_active
     print("🤖 Thread Generatore avviato.")
     
     while True:
         try:
+            # Se c'è una breaking news attiva, aspetta che finisca prima di avviare un nuovo ciclo
+            while breaking_news_active:
+                print("⏳ Generatore in attesa: Breaking News in corso...")
+                time.sleep(1)
+                
             current_type, current_title, next_title = get_current_block_info()
             
             print(f"🚀 Genero blocco in background: {current_title} ({current_type})")
             run_pipeline(current_type)
             
+            # Ricontrolla se si è attivata una breaking news durante la generazione
+            while breaking_news_active:
+                print("⏳ Generatore in attesa: Breaking News in corso...")
+                time.sleep(1)
+                
             voice_file = os.path.join(TMP_DIR, "audio.wav")
             music_file = get_random_music()
             
@@ -183,8 +218,27 @@ def generator_worker():
             time.sleep(10)
 
 
+def check_singleton(name):
+    import fcntl
+    lock_file_path = os.path.join(RUNTIME_DIR, f"{name}.lock")
+    try:
+        f = open(lock_file_path, "w")
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        global _singleton_lock
+        _singleton_lock = f
+        f.write(str(os.getpid()))
+        f.flush()
+        return True
+    except (IOError, OSError):
+        print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione!")
+        return False
+
+
 def main():
     ensure_folders()
+    if not check_singleton("director"):
+        print("❌ Uscita immediata per prevenire conflitti.")
+        sys.exit(1)
     
     print("🎬 Regia NewsicaTV avviata.")
     print("💡 Assicurati che lo streaming FFmpeg stia leggendo da 'tmp/audio_pipe'")
@@ -224,12 +278,24 @@ def main():
                                 generate_schedule()
                             elif cmd == "TRIGGER_BREAKING_NEWS":
                                 print("🚨 Comando ricevuto: TRIGGER_BREAKING_NEWS. Avvio agente in background...")
-                                import threading
                                 threading.Thread(target=lambda: subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")])).start()
                             elif cmd.startswith("BREAKING_NEWS_READY"):
                                 parts = cmd.split("|")
                                 bn_file = parts[1] if len(parts) > 1 else ""
                                 print("🚨 Comando ricevuto: BREAKING_NEWS_READY. Svuoto la coda per ultim'ora!")
+                                
+                                global breaking_news_active
+                                # Impostiamo subito il flag
+                                breaking_news_active = True
+                                
+                                # Terminiamo il processo regolare corrente per sbloccare la coda
+                                if current_generator_process:
+                                    print("🚨 Termino il processo di generazione regolare corrente per far spazio alla Breaking News.")
+                                    try:
+                                        current_generator_process.terminate()
+                                    except Exception as e:
+                                        print(f"⚠️ Errore terminazione processo regolare: {e}")
+                                
                                 while not audio_queue.empty():
                                     try:
                                         audio_queue.get_nowait()
@@ -246,11 +312,11 @@ def main():
                                         "breaking_news_available": False,
                                         "last_update": ""
                                     }
-                                    import threading
-                                    threading.Thread(target=queue_pcm_from_file, args=(bn_file, bn_info)).start()
+                                    # Carichiamo come Breaking News in modo che non venga abortito da se stesso
+                                    queue_pcm_from_file(bn_file, bn_info, is_breaking_news=True)
                         except Exception as e:
                             print(f"⚠️ Errore comandi: {e}")
-
+ 
                     try:
                         item = audio_queue.get_nowait()
                         
@@ -269,6 +335,10 @@ def main():
                         fifo.flush()
                         audio_queue.task_done()
                     except queue.Empty:
+                        if breaking_news_active:
+                            print("🚨 Coda vuota: Breaking News completata. Ripristino palinsesto regolare.")
+                            breaking_news_active = False
+                            
                         # Mantiene sempre viva la FIFO: se la generazione e' in corso,
                         # FFmpeg riceve silenzio PCM invece di restare senza input.
                         try:
