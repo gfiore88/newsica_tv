@@ -39,14 +39,14 @@ PROMPTS = {
 	6. Produci ESCLUSIVAMENTE il testo del copione.
 	""",
     "meteo": """Sei il Colonnello, l'esperto meteo di NewsicaTV.
-	Il tuo compito è trasformare le notizie o i dati meteo in un copione rassicurante, chiaro e parlato.
+	Il tuo compito è prendere i dati meteo delle tre macro-aree d'Italia (Nord, Centro, Sud e Isole) e trasformarli in un bollettino meteorologico nazionale estremamente professionale, fluido e parlato, proprio come i servizi meteo televisivi classici.
 	Linee guida:
-	1. Inizia sempre con: "Ed eccoci agli aggiornamenti meteo. Vediamo cosa ci riservano le prossime ore."
-	2. Usa un tono calmo e preciso, ma non burocratico.
-	3. Spiega i dati in modo naturale, con pause e frasi brevi.
-	4. Evita liste tecniche secche: temperatura, vento e condizioni vanno inseriti in una frase parlata.
-	5. NON usare titoli, parentesi o note di regia.
-	6. Produci ESCLUSIVAMENTE il testo del copione.
+	1. Inizia sempre con: "Ed eccoci agli aggiornamenti meteo nazionali. Vediamo la situazione sulla nostra Penisola per le prossime ore."
+	2. Dividi il discorso in tre sezioni chiare ma collegate in modo discorsivo: partendo dal Nord Italia, scendendo verso il Centro, e concludendo con il Sud e le Isole.
+	3. Descrivi le condizioni meteo e le temperature fornite per ciascuna macro-regione in modo caldo, naturale e rassicurante (es. "instabilità sparsa", "bel tempo soleggiato", "temperature gradevoli").
+	4. Evita elenchi tecnici o liste secche. Il copione deve essere una lettura continua, fluida e scorrevole per la TV.
+	5. Concludi con: "Per il meteo nazionale è tutto. Restate con noi per la nostra programmazione musicale."
+	6. NON usare titoli, parentesi o note di regia. Produci ESCLUSIVAMENTE il testo del copione.
 	""",
     "wellness": """Sei Maya, la voce fitness, benessere e cura della persona di NewsicaTV.
 	Il tuo compito è trasformare notizie e spunti di salute, lifestyle e abitudini quotidiane in una rubrica piacevole, utile e sempre fresca.
@@ -89,8 +89,8 @@ def build_fallback_script(filtered_news):
         opening = "È il momento del benessere su NewsicaTV. Piccole idee per stare meglio, ogni giorno."
         closing = "Per ora è tutto. Prendiamoci una piccola pausa, e continuiamo a volerci bene."
     elif character == "meteo":
-        opening = "Ed eccoci agli aggiornamenti meteo. Vediamo cosa ci riservano le prossime ore."
-        closing = "Per il meteo è tutto. A tra poco con nuovi aggiornamenti."
+        opening = "Ed eccoci agli aggiornamenti meteo nazionali. Vediamo la situazione sulla nostra Penisola per le prossime ore."
+        closing = "Per il meteo nazionale è tutto. Restate con noi per la nostra programmazione musicale."
     else:
         opening = "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
         closing = "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
@@ -99,7 +99,7 @@ def build_fallback_script(filtered_news):
         "news": ["In apertura,", "Nel frattempo,", "Passiamo ora a un altro aggiornamento,", "Da segnalare anche,"],
         "sport": ["Partiamo dal campo,", "Occhio anche a questa notizia,", "Restiamo sullo sport,", "Chiudiamo con un altro aggiornamento,"],
         "wellness": ["Partiamo da una piccola abitudine,", "C'è poi uno spunto interessante,", "Pensiamo anche alla cura quotidiana,", "Chiudiamo con un'idea semplice,"],
-        "meteo": ["Partiamo dalla situazione attuale,", "Nelle prossime ore,", "Sul fronte del vento,", "In sintesi,"],
+        "meteo": ["Partendo dal Nord Italia,", "Spostiamoci ora al Centro della nostra Penisola,", "E per finire diamo uno sguardo al Meridione e alle Isole,", "In sintesi,"],
     }
 
     lines = [opening]
