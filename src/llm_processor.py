@@ -28,26 +28,38 @@ NEWS_SOURCES = {
 
 PROMPTS = {
     "news": """Sei Chiara, la conduttrice principale di NewsicaTV, una Web TV H24 in diretta.
-	Il tuo compito è prendere una serie di notizie grezze (in formato JSON) e trasformarle in un copione fluido, professionale e naturale, pronto per essere letto ad alta voce.
+	Il tuo compito è prendere una serie di notizie grezze (in formato JSON) e trasformarle in un copione fluido, professionale e naturale, strutturato in 3 o 4 interventi distinti (Parti) separati da stacchi musicali.
+	
+	Struttura richiesta:
+	- Genera esattamente da 3 a 4 parti distinte.
+	- Ciascuna parte deve essere separata dalla riga contenente esattamente ed esclusivamente la parola `[MUSIC_BREAK]`. Nient'altro su quella riga.
+	- PARTE 1: Inizia sempre con: "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi." e presenta le prime notizie calde. Concludi la PARTE 1 con una transizione alla musica (es. "Ed ora, spazio alla musica su NewsicaTV. Ci risentiamo tra poco.").
+	- PARTI INTERMEDIE (Parte 2, ecc.): Inizia con un rientro naturale in studio (es. "Rieccoci in diretta su NewsicaTV, continuiamo con le notizie." o simili), presenta altre notizie o curiosità e rilancia la musica.
+	- PARTE FINALE: Inizia con un rientro in studio, leggi gli ultimi aggiornamenti e concludi dicendo: "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
+	
 	Linee guida:
-	1. Inizia sempre con: "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
-	2. Scrivi come una conduttrice reale: caldo, sobrio, presente, senza tono da comunicato stampa.
-	3. Usa frasi brevi, da 8 a 16 parole quando possibile.
-	4. Inserisci pause naturali con virgole, punti e brevi transizioni come "intanto", "nel frattempo", "passiamo ora".
-	5. Alterna il ritmo: una frase informativa, una frase di contesto, poi la notizia successiva.
-	6. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
-	7. Concludi con: "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
-	8. Produci ESCLUSIVAMENTE il testo del copione.
+	1. Scrivi come una conduttrice reale: caldo, sobrio, presente, senza tono da comunicato stampa.
+	2. Usa frasi brevi, da 8 a 16 parole quando possibile.
+	3. Usa pause naturali con virgole, punti e transizioni.
+	4. NON fare elenchi puntati. NON usare titoli, parentesi o altre note di regia.
+	5. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.
 	""",
     "sport": """Sei Leo, il giornalista sportivo di NewsicaTV.
-	Il tuo compito è prendere le notizie (in formato JSON) e trasformarle in un copione dinamico, naturale e televisivo.
+	Il tuo compito è prendere le notizie (in formato JSON) e trasformarle in uno show sportivo strutturato in 3 o 4 interventi distinti (Parti) separati da stacchi musicali.
+	
+	Struttura richiesta:
+	- Genera esattamente da 3 a 4 parti distinte.
+	- Ciascuna parte deve essere separata dalla riga contenente esattamente ed esclusivamente la parola `[MUSIC_BREAK]`. Nient'altro su quella riga.
+	- PARTE 1: Inizia sempre con: "Un saluto a tutti gli appassionati di sport! Oggi giornata ricca di emozioni..." e presenta le notizie principali. Concludi con un lancio musicale naturale (es. "E adesso, carichiamo i motori con un po' di musica! A tra poco.").
+	- PARTI INTERMEDIE (Parte 2, ecc.): Inizia con un rientro energico (es. "Di nuovo insieme Leo su NewsicaTV! Continuiamo il nostro viaggio nello sport..." o simili), presenta altri approfondimenti o notizie e rilancia la musica.
+	- PARTE FINALE: Rientra in studio, presenta gli ultimi spunti e chiudi salutando gli spettatori e augurando buon ascolto.
+	
 	Linee guida:
-	1. Inizia sempre con: "Un saluto a tutti gli appassionati di sport! Oggi giornata ricca di emozioni..."
-	2. Usa energia, ma resta credibile: niente enfasi continua e niente frasi urlate.
-	3. Usa pause, incisi brevi e transizioni come "partiamo da", "occhio anche a", "restiamo sul campo".
-	4. Frasi brevi, ritmo mosso, punteggiatura chiara.
-	5. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
-	6. Produci ESCLUSIVAMENTE il testo del copione.
+	1. Usa energia, ma resta credibile: niente enfasi continua e niente frasi urlate.
+	2. Usa pause, incisi brevi e transizioni dinamiche.
+	3. Frasi brevi, ritmo mosso, punteggiatura chiara.
+	4. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
+	5. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.
 	""",
     "meteo": """Sei il Colonnello, l'esperto meteo di NewsicaTV.
 	Il tuo compito è prendere i dati meteo delle tre macro-aree d'Italia (Nord, Centro, Sud e Isole) e trasformarli in un bollettino meteorologico nazionale estremamente professionale, fluido e parlato, proprio come i servizi meteo televisivi classici.
@@ -60,17 +72,21 @@ PROMPTS = {
 	6. NON usare titoli, parentesi o note di regia. Produci ESCLUSIVAMENTE il testo del copione.
 	""",
     "wellness": """Sei Maya, la voce fitness, benessere e cura della persona di NewsicaTV.
-	Il tuo compito è trasformare notizie e spunti di salute, lifestyle e abitudini quotidiane in una rubrica piacevole, utile e sempre fresca.
+	Il tuo compito è trasformare spunti di salute, lifestyle e abitudini quotidiane in una rubrica strutturata in 3 o 4 interventi distinti (Parti) separati da stacchi musicali.
+	
+	Struttura richiesta:
+	- Genera esattamente da 3 a 4 parti distinte.
+	- Ciascuna parte deve essere separata dalla riga contenente esattamente ed esclusivamente la parola `[MUSIC_BREAK]`. Nient'altro su quella riga.
+	- PARTE 1: Inizia sempre con: "È il momento del benessere su NewsicaTV. Piccole idee per stare meglio, ogni giorno." e introduce il tema della giornata. Concludi con una transizione alla musica (es. "Ora una piccola pausa per rilassarci con un buon brano. A tra poco.").
+	- PARTI INTERMEDIE (Parte 2, ecc.): Inizia con un rientro rilassante (es. "Eccoci di nuovo insieme a Maya, sintonizzati su NewsicaTV. Proseguiamo..." o simili), condividi consigli pratici o curiosità e rilancia la musica.
+	- PARTE FINALE: Rientra in studio, dai l'ultimo consiglio del giorno e concludi dicendo: "Per ora è tutto. Prendiamoci una piccola pausa, e continuiamo a volerci bene."
+	
 	Linee guida:
-	1. Inizia sempre con: "È il momento del benessere su NewsicaTV. Piccole idee per stare meglio, ogni giorno."
-	2. Tono: solare, vicino, concreto. Mai medico, mai prescrittivo, mai allarmista.
-	3. Inserisci un piccolo aneddoto o una scena quotidiana quando serve: una camminata, una pausa, una colazione, una routine serale.
-	4. Dai contesto pratico, ma senza trasformare la rubrica in consigli sanitari personalizzati.
-	5. Usa frasi brevi, pause naturali e immagini semplici.
-	6. Alterna fitness leggero, benessere mentale, cura della persona, alimentazione e abitudini sane.
-	7. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
-	8. Concludi con: "Per ora è tutto. Prendiamoci una piccola pausa, e continuiamo a volerci bene."
-	9. Produci ESCLUSIVAMENTE il testo del copione.
+	1. Tono: solare, vicino, concretezza. Mai medico, mai prescrittivo, mai allarmista.
+	2. Inserisci un piccolo aneddoto o una scena quotidiana quando serve.
+	3. Usa frasi brevi, pause naturali e immagini semplici.
+	4. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
+	5. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.
 	"""
 }
 
@@ -95,15 +111,21 @@ def clean_text(value):
 def build_fallback_script(filtered_news):
     if character == "sport":
         opening = "Un saluto a tutti gli appassionati di sport! Oggi giornata ricca di emozioni."
+        music_launch = "E adesso, carichiamo i motori con un po' di musica! A tra poco."
+        reentry = "Di nuovo insieme su NewsicaTV! Continuiamo il nostro viaggio nello sport."
         closing = "Per lo sport è tutto. Restate con noi su NewsicaTV."
     elif character == "wellness":
         opening = "È il momento del benessere su NewsicaTV. Piccole idee per stare meglio, ogni giorno."
+        music_launch = "Ora una piccola pausa per rilassarci con un buon brano. A tra poco."
+        reentry = "Eccoci di nuovo insieme, sintonizzati su NewsicaTV. Proseguiamo."
         closing = "Per ora è tutto. Prendiamoci una piccola pausa, e continuiamo a volerci bene."
     elif character == "meteo":
-        opening = "Ed eccoci agli aggiornamenti meteo nazionali. Vediamo la situazione sulla nostra Penisola per le prossime ore."
+        opening = "Ed eccoci agli aggiornamenti meteo nazionali. Vediamo la situazione sulla nostra Penisola per le próximas ore."
         closing = "Per il meteo nazionale è tutto. Restate con noi per la nostra programmazione musicale."
     else:
         opening = "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
+        music_launch = "Ed ora, spazio alla musica su NewsicaTV. Ci risentiamo tra poco."
+        reentry = "Rieccoci in diretta su NewsicaTV, continuiamo con le nostre notizie."
         closing = "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
 
     transitions = {
@@ -113,21 +135,47 @@ def build_fallback_script(filtered_news):
         "meteo": ["Partendo dal Nord Italia,", "Spostiamoci ora al Centro della nostra Penisola,", "E per finire diamo uno sguardo al Meridione e alle Isole,", "In sintesi,"],
     }
 
-    lines = [opening]
-    for index, item in enumerate(filtered_news[:4]):
+    if character == "meteo":
+        lines = [opening]
+        for index, item in enumerate(filtered_news[:4]):
+            title = clean_text(item.get("title", ""))
+            summary = clean_text(item.get("summary", ""))
+            transition = transitions.get(character, transitions["news"])[index]
+            if title and summary:
+                lines.append(f"{transition} {title}. {summary}")
+            elif title:
+                lines.append(f"{transition} {title}.")
+        if len(lines) == 1:
+            lines.append("Al momento non ci sono nuovi aggiornamenti verificati per questa rubrica.")
+        lines.append(closing)
+        return "\n\n".join(lines)
+
+    # Genera N parti separate da [MUSIC_BREAK] (una per notizia)
+    news_items = filtered_news[:4]
+    if not news_items:
+        # Nessuna notizia: genera un singolo intervento
+        return f"{opening}\n\nAl momento non ci sono nuovi aggiornamenti verificati.\n\n{closing}"
+
+    parts_text = []
+    
+    for index, item in enumerate(news_items):
         title = clean_text(item.get("title", ""))
         summary = clean_text(item.get("summary", ""))
         transition = transitions.get(character, transitions["news"])[index]
-        if title and summary:
-            lines.append(f"{transition} {title}. {summary}")
-        elif title:
-            lines.append(f"{transition} {title}.")
-
-    if len(lines) == 1:
-        lines.append("Al momento non ci sono nuovi aggiornamenti verificati per questa rubrica.")
-
-    lines.append(closing)
-    return "\n\n".join(lines)
+        
+        content = f"{transition} {title}. {summary}" if title and summary else f"{transition} {title}."
+        
+        if index == 0:
+            # Prima parte: apertura + notizia + lancio musicale
+            parts_text.append(f"{opening}\n\n{content}\n\n{music_launch}")
+        elif index == len(news_items) - 1:
+            # Ultima parte: rientro + notizia + chiusura
+            parts_text.append(f"{reentry}\n\n{content}\n\n{closing}")
+        else:
+            # Parti intermedie: rientro + notizia + lancio musicale
+            parts_text.append(f"{reentry}\n\n{content}\n\n{music_launch}")
+            
+    return "\n\n[MUSIC_BREAK]\n\n".join(parts_text)
 
 
 def generate_script():

@@ -1,24 +1,31 @@
 [
     {
+        "title": "Matrimoni di massa a Teheran per coppie pronte al 'sacrificio' in guerra",
+        "summary": "Centinaia in diverse piazze principali della capitale",
+        "link": "https://www.ansa.it/sito/notizie/mondo/mediooriente/2026/05/19/matrimoni-di-massa-a-teheran-per-coppie-pronte-al-sacrificio-in-guerra_12063a9b-31f2-4992-ad99-694e78cbafc1.html",
+        "published": "Tue, 19 May 2026 15:03:06 +0200",
+        "source": "ansa_mondo"
+    },
+    {
+        "title": "Botta e risposta Gualtieri-Casellati, resta impasse Roma Capitale",
+        "summary": "Sindaco, governo e opposizioni si parlino. La ministra, chiami lui. Rocca, occasione persa",
+        "link": "https://www.ansa.it/sito/notizie/cronaca/2026/05/19/botta-e-risposta-gualtieri-casellati-resta-impasse-roma-capitale_4031ae6a-c128-4045-844a-300ab9ff91cc.html",
+        "published": "Tue, 19 May 2026 14:08:42 +0200",
+        "source": "ansa_cronaca"
+    },
+    {
+        "title": "Refn piange in conferenza stampa a Cannes, 'ho rischiato di morire'",
+        "summary": "Ha avuto un grave problema cardiaco, 'salvato da un chirurgo, era come Tom Cruise'",
+        "link": "https://www.ansa.it/sito/notizie/cultura/cinema/2026/05/19/refn-piange-in-conferenza-stampa-a-cannes-ho-rischiato-di-morire_b54e27ea-b6f4-40ba-adb6-3b41c64053ea.html",
+        "published": "Tue, 19 May 2026 14:35:57 +0200",
+        "source": "ansa_cultura"
+    },
+    {
         "title": "Maldive, i sub 'stiamo facendo la nostra parte per riportarli a casa'",
         "summary": "Il team finlandese 'profonde condoglianze alle vittime, continueremo il lavoro'",
         "link": "https://www.ansa.it/sito/notizie/cronaca/2026/05/19/maldive-i-sub-stiamo-facendo-la-nostra-parte-per-riportarli-a-casa_6a298274-2f8c-4025-b9f9-7305dbed7a35.html",
         "published": "Tue, 19 May 2026 14:02:33 +0200",
         "source": "ansa_cronaca"
-    },
-    {
-        "title": "ANSA/ Reperti inediti in mostra e Ninfeo restaurato al Museo Etrusco di Villa Giulia",
-        "summary": "Nuova vita ai 'frammenti dimenticati' nei depositi museali negli scatti di Piero Gemelli",
-        "link": "https://www.ansa.it/sito/notizie/cultura/arte/2026/05/19/ansa-reperti-inediti-in-mostra-e-ninfeo-restaurato-al-museo-etrusco-di-villa-giulia_b79bd0e3-3604-48cd-be9b-d9882993c668.html",
-        "published": "Tue, 19 May 2026 14:16:16 +0200",
-        "source": "ansa_cultura"
-    },
-    {
-        "title": "Giove (Cgil), 'crescita occupazione? No, sostituzione con lavoro povero e precario'",
-        "summary": "\"Governo dei sovranisti faccia scelte strategiche per proteggere occupati e produzioni\"",
-        "link": "https://www.ansa.it/sito/notizie/economia/2026/05/19/giove-cgil-crescita-occupazione-no-sostituzione-con-lavoro-povero-e-precario_80df3919-4bfa-44fb-b04f-44b64666d837.html",
-        "published": "Tue, 19 May 2026 14:20:46 +0200",
-        "source": "ansa_economia"
     },
     {
         "title": "Fassbender star a Cannes: 'Gli alieni sono tra di noi'",
@@ -33,13 +40,6 @@
         "link": "https://www.ansa.it/sito/notizie/mondo/americalatina/2026/05/19/brasile-lo-scandalo-banco-master-travolge-flavio-bolsonaro-nei-sondaggi_abf0d428-4962-4e02-b193-f9c6a5ac7302.html",
         "published": "Tue, 19 May 2026 15:01:34 +0200",
         "source": "ansa_mondo"
-    },
-    {
-        "title": "Ucraina, Mosca annuncia 3 giorni di esercitazioni nucleari mentre Putin è in Cina. LIVE",
-        "summary": "<p>L'esercito russo inizia oggi tre giorni di esercitazioni che coinvolgeranno migliaia di soldati in tutto il Paese, mentre Kiev intensifica gli attacchi con i droni e il presidente russo si reca in Cina per incontrare il presidente Xi Jinping. Intanto, gli attacchi russi in Ucraina hanno causato almeno sei morti e 34 feriti nelle ultime 24 ore</p>",
-        "link": "https://tg24.sky.it/mondo/2026/05/19/guerra-ucraina-russia-ultime-notizie-diretta",
-        "published": "mar, 19 mag 2026 15:00:00 GMT",
-        "source": "sky_tg24"
     },
     {
         "title": "F1:Tatuus celebra la T-421 n.500, Formula 4 più diffusa con cui è cresciuto Antonelli",
@@ -84,7 +84,7 @@
     },
     {
         "title": "Meteo Italia",
-        "summary": "Nord Italia - Milano: prevalentemente sereno, temperatura 22.2°C. Centro Italia - Roma: coperto, cielo nuvoloso, temperatura 22.6°C. Sud e Isole - Napoli: prevalentemente sereno, temperatura 22.0°C.",
+        "summary": "Nord Italia - Milano: parzialmente nuvoloso, temperatura 22.5°C. Centro Italia - Roma: parzialmente nuvoloso, temperatura 22.3°C. Sud e Isole - Napoli: prevalentemente sereno, temperatura 21.8°C.",
         "link": "https://open-meteo.com",
         "source": "meteo"
     }

@@ -348,6 +348,50 @@ def queue_music_track(deadline):
     process.wait()
     current_generator_process = None
 
+def queue_single_music_track():
+    global current_generator_process, last_music_file
+    if schedule_interrupt_event.is_set() or breaking_news_active:
+        return
+
+    music_file = get_random_music(exclude=last_music_file)
+    if not music_file:
+        time.sleep(1)
+        return
+    last_music_file = music_file
+
+    print(f"🎵 Brano musicale intermedio (Full Track): {os.path.basename(music_file)}")
+    cmd = [
+        FFMPEG_CMD,
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", music_file,
+        "-vn",
+        "-filter:a", "volume=0.8",
+        "-f", "s16le",
+        "-ar", str(PCM_SAMPLE_RATE),
+        "-ac", str(PCM_CHANNELS),
+        "pipe:1"
+    ]
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    current_generator_process = process
+
+    while True:
+        if breaking_news_active or schedule_interrupt_event.is_set():
+            process.terminate()
+            break
+
+        data = process.stdout.read(PCM_CHUNK_BYTES)
+        if not data:
+            break
+        if not queue_item({"type": "audio", "data": data}):
+            process.terminate()
+            break
+
+    if process.poll() is None:
+        process.terminate()
+    process.wait()
+    current_generator_process = None
+
 def schedule_deadline(next_time_key):
     now = datetime.datetime.now()
     hour, minute = [int(part) for part in next_time_key.split(":")]
@@ -445,8 +489,8 @@ def generator_worker():
                 print("⏭️ Fascia cambiata durante la generazione: scarto il blocco appena preparato.")
                 continue
                 
+            multipart_indicator = os.path.join(TMP_DIR, "is_multipart.txt")
             voice_file = os.path.join(TMP_DIR, "audio.wav")
-            music_file = get_random_music()
             
             block_info = build_block_info(current_type, current_title, next_title, next_time)
             
@@ -456,22 +500,78 @@ def generator_worker():
                 queue_music_track(schedule_deadline(next_time))
                 continue
 
-            if not os.path.exists(voice_file):
+            # Controlliamo se è uno show radiofonico multi-part
+            is_multipart = False
+            num_parts = 0
+            if os.path.exists(multipart_indicator):
+                try:
+                    with open(multipart_indicator, "r") as f:
+                        num_parts = int(f.read().strip())
+                    if num_parts > 0:
+                        # Verifica che tutti i file audio part1..partN esistano
+                        all_exist = True
+                        for i in range(1, num_parts + 1):
+                            if not os.path.exists(os.path.join(TMP_DIR, f"audio_part{i}.wav")):
+                                all_exist = False
+                                break
+                        is_multipart = all_exist
+                except Exception as e:
+                    print(f"⚠️ Errore nel caricamento dei metadati multi-part: {e}")
+                    is_multipart = False
+
+            if not is_multipart and not os.path.exists(voice_file):
                 print("❌ Errore: file voce non generato. Riprovo tra 10 secondi...")
                 time.sleep(10)
                 continue
 
             if not queue_item({"type": "metadata", "state": block_info}):
                 continue
+            
             jingle_file, jingle_label = get_jingle_for_block(current_type)
-            if not queue_jingle(jingle_file, jingle_label):
-                continue
+            
+            if is_multipart:
+                print(f"📻 Avvio show radiofonico multi-part per {current_title} ({num_parts} parti)!")
                 
-            if not music_file:
-                print("⚠️ Nessuna musica trovata. Uso solo la voce.")
-                queue_pcm_from_file(voice_file)
+                # 1. Jingle di apertura rubrica
+                if not queue_jingle(jingle_file, jingle_label):
+                    continue
+                
+                # 2. Riproduzione sequenziale delle parti con intermezzi musicali di 3 brani completi
+                last_used_music = None
+                for i in range(1, num_parts + 1):
+                    if schedule_interrupt_event.is_set() or breaking_news_active:
+                        break
+                        
+                    part_file = os.path.join(TMP_DIR, f"audio_part{i}.wav")
+                    print(f"🎤 Messa in onda Parte {i}/{num_parts}...")
+                    
+                    # Riproduce la voce mixata col sottofondo
+                    music_file = get_random_music(exclude=last_used_music)
+                    if not music_file:
+                        queue_pcm_from_file(part_file)
+                    else:
+                        last_used_music = music_file
+                        mix_and_queue(music_file, part_file)
+                        
+                    # Se non è l'ultima parte, riproduce 3 brani musicali interi (stacco radiofonico)
+                    if i < num_parts:
+                        songs_between = 3 # Numero di canzoni intere tra un intervento e l'altro
+                        print(f"🎵 Stacco musicale radiofonico: riproduzione di {songs_between} brani completi...")
+                        for s in range(songs_between):
+                            if schedule_interrupt_event.is_set() or breaking_news_active:
+                                break
+                            queue_single_music_track()
             else:
-                mix_and_queue(music_file, voice_file)
+                # Flusso classico a parte singola
+                if not queue_jingle(jingle_file, jingle_label):
+                    continue
+                
+                music_file = get_random_music()
+                if not music_file:
+                    print("⚠️ Nessuna musica trovata. Uso solo la voce.")
+                    queue_pcm_from_file(voice_file)
+                else:
+                    mix_and_queue(music_file, voice_file)
 
             if not schedule_interrupt_event.is_set() and not breaking_news_active:
                 queue_music_track(schedule_deadline(next_time))

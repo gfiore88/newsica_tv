@@ -11,7 +11,7 @@ echo "Monitoraggio di director.py..."
 
 while true; do
   echo "🚀 Avvio director.py..."
-  "$BASE_DIR/venv/bin/python3" "$BASE_DIR/src/director.py"
+  "$BASE_DIR/venv/bin/python3" -u "$BASE_DIR/src/director.py"
   
   echo "⚠️ director.py si è fermato o ha crashato. Riavvio in 5 secondi..."
   sleep 5

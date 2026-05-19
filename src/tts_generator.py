@@ -50,18 +50,53 @@ def generate_audio():
         sys.exit(1)
         
     with open(SCRIPT_FILE, 'r', encoding='utf-8') as f:
-        text = prepare_text_for_tts(f.read().strip())
+        raw_text = f.read().strip()
         
-    if not text:
+    if not raw_text:
         print("Errore: Il copione è vuoto.")
         sys.exit(1)
         
+    multipart_file = os.path.join(TMP_DIR, "is_multipart.txt")
+    
     print("Inizializzazione di Kokoro ONNX...")
     try:
         kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
-        samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang="it")
-        sf.write(OUTPUT_AUDIO, samples, sample_rate)
-        print("✅ File audio generato con successo tramite Kokoro AI!")
+        
+        if "[MUSIC_BREAK]" in raw_text:
+            parts = [p.strip() for p in raw_text.split("[MUSIC_BREAK]") if p.strip()]
+            num_parts = len(parts)
+            print(f"Rilevato copione multi-part! Generazione di {num_parts} parti separate...")
+            
+            # Pulisci vecchi file audio di parti precedenti per evitare sovrapposizioni
+            for f_name in os.listdir(TMP_DIR):
+                if f_name.startswith("audio_part") and f_name.endswith(".wav"):
+                    try:
+                        os.remove(os.path.join(TMP_DIR, f_name))
+                    except Exception:
+                        pass
+
+            for idx, part in enumerate(parts):
+                part_text = prepare_text_for_tts(part)
+                part_num = idx + 1
+                print(f"Generazione Parte {part_num} di {num_parts}...")
+                samples, sample_rate = kokoro.create(part_text, voice=voice, speed=speed, lang="it")
+                sf.write(os.path.join(TMP_DIR, f"audio_part{part_num}.wav"), samples, sample_rate)
+                
+            # Scrive il numero totale di parti nel semaforo
+            with open(multipart_file, "w") as sf_file:
+                sf_file.write(str(num_parts))
+            print(f"✅ Generati con successo {num_parts} file audio per lo show multi-part!")
+        else:
+            print("Copione standard a parte singola.")
+            text = prepare_text_for_tts(raw_text)
+            samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang="it")
+            sf.write(OUTPUT_AUDIO, samples, sample_rate)
+            
+            # Rimuove semaforo se esistente
+            if os.path.exists(multipart_file):
+                os.remove(multipart_file)
+            print("✅ File audio generato con successo tramite Kokoro AI!")
+            
     except Exception as e:
         print(f"❌ Errore durante la generazione dell'audio con Kokoro: {e}")
         sys.exit(1)
