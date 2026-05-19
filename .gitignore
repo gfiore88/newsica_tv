@@ -30,3 +30,7 @@ logs/
 # IDE
 .idea/
 .vscode/
+
+# Big Files
+*.bin
+.onnx
