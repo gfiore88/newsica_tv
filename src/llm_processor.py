@@ -200,7 +200,7 @@ def generate_script():
             filtered_news.append(item)
         elif character == "sport" and "sport" in source:
             filtered_news.append(item)
-        elif character == "wellness" and ("salute_benessere" in source or "lifestyle" in source or "wellness_tip" in source):
+        elif character == "wellness" and ("salute_benessere" in source or "lifestyle" in source):
             filtered_news.append(item)
         elif character == "meteo" and "meteo" in source:
             filtered_news.append(item)

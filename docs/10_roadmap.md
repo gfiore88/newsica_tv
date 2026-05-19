@@ -21,6 +21,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] Rotazione agenti robusta: fallback locale per copioni news/sport/meteo quando Ollama non e' disponibile.
 - [x] Espressivita' speaker: prompt piu' parlati, punteggiatura naturale e velocita' TTS per personaggio.
 - [x] Agente Wellness: rubrica fitness, benessere e cura della persona con fonti dedicate e spunti sempre vari.
+- [x] Ingestion Cache & Decoupling: introdotta cache da 15 minuti su raw_news.json e disaccoppiate le responsabilità tra scraper e llm_processor.
 - [ ] **Lancio Ufficiale**: Diretta pubblica sul canale NewsicaTV.
 
 ## MVP 3 — La "Svolta": Regia AI e Identità Editoriale

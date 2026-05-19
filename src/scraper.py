@@ -45,38 +45,6 @@ WELLNESS_PENALTY_KEYWORDS = (
     "sciopero", "ebola", "vittime", "morto", "ricovero", "condanna",
     "emergenza", "tagliati", "diabete", "farmaci", "allergia", "epidemia"
 )
-WELLNESS_TIPS = (
-    {
-        "title": "La camminata breve che rimette in moto la giornata",
-        "summary": "Anche dieci minuti a passo tranquillo aiutano a staccare dagli schermi e a rientrare con piu' energia.",
-        "link": "local://wellness/camminata-breve",
-        "source": "wellness_tip"
-    },
-    {
-        "title": "Una routine serale semplice per dormire meglio",
-        "summary": "Luci piu' basse, telefono lontano e qualche minuto di lettura possono diventare un piccolo rito quotidiano.",
-        "link": "local://wellness/routine-serale",
-        "source": "wellness_tip"
-    },
-    {
-        "title": "Colazione senza fretta, il primo gesto di cura",
-        "summary": "Preparare qualcosa di semplice e sedersi davvero a mangiarlo cambia il ritmo con cui si entra nella giornata.",
-        "link": "local://wellness/colazione-lenta",
-        "source": "wellness_tip"
-    },
-    {
-        "title": "Stretching da scrivania, pochi movimenti fanno respirare il corpo",
-        "summary": "Spalle, collo e schiena ringraziano quando ogni tanto ci si alza e si sciolgono le tensioni accumulate.",
-        "link": "local://wellness/stretching-scrivania",
-        "source": "wellness_tip"
-    },
-    {
-        "title": "La borraccia sulla scrivania come promemoria gentile",
-        "summary": "Bere con regolarita' diventa piu' facile quando l'acqua e' visibile e a portata di mano.",
-        "link": "local://wellness/borraccia",
-        "source": "wellness_tip"
-    }
-)
 
 def fetch_latest_news(feed_url, max_items=3):
     """
@@ -226,7 +194,7 @@ def wellness_score(item):
     score -= 3 * sum(1 for keyword in WELLNESS_PENALTY_KEYWORDS if keyword in text)
     if item.get("source") == "ansa_lifestyle":
         score += 4
-    if item.get("source") == "wellness_tip":
+    if item.get("source") == "ansa_salute_benessere":
         score += 3
     return score
 
@@ -235,26 +203,37 @@ def select_fresh_wellness(items, limit=3):
     ranked = sorted(items, key=wellness_score, reverse=True)
     light_items = [
         item for item in ranked
-        if item.get("source") in {"wellness_tip", "ansa_lifestyle"} or wellness_score(item) >= 2
+        if item.get("source") in {"ansa_salute_benessere", "ansa_lifestyle"} or wellness_score(item) >= 2
     ]
     fresh = [item for item in light_items if item_key(item) not in recent]
-    candidates = fresh or light_items or ranked
+    
+    # Se non ci sono elementi freschi, usiamo tutti i candidati light per evitare di rimanere senza notizie
+    candidates = fresh if fresh else light_items if light_items else ranked
     selected = []
 
-    for preferred_source in ("wellness_tip", "ansa_lifestyle"):
+    # Cerchiamo prima tra i candidati freschi per le fonti preferite
+    for preferred_source in ("ansa_lifestyle", "ansa_salute_benessere"):
+        # Cerca prima tra i candidati attualmente considerati (fresh se disponibili, altrimenti tutto)
         preferred_candidates = [item for item in candidates if item.get("source") == preferred_source]
-        if not preferred_candidates:
-            preferred_candidates = [item for item in light_items if item.get("source") == preferred_source]
         for item in preferred_candidates:
-            if item.get("source") == preferred_source and item not in selected:
+            if item not in selected:
                 selected.append(item)
                 break
 
+    # Riempi il resto della selezione fino al limite
     for item in candidates:
         if item not in selected:
             selected.append(item)
         if len(selected) >= limit:
             break
+
+    # Se non abbiamo ancora raggiunto il limite, usa la lista intera comprensiva dei recenti
+    if len(selected) < limit:
+        for item in ranked:
+            if item not in selected:
+                selected.append(item)
+            if len(selected) >= limit:
+                break
 
     save_recent_wellness(recent + [item_key(item) for item in selected])
     return selected
@@ -315,6 +294,19 @@ def fetch_weather():
     }
 
 def main():
+    import sys
+    import time
+    
+    force_fetch = "--force" in sys.argv
+    output_file = os.path.join(TMP_DIR, "raw_news.json")
+    
+    # Cache di 15 minuti (900 secondi) per evitare chiamate di rete ridondanti
+    if not force_fetch and os.path.exists(output_file):
+        age = time.time() - os.path.getmtime(output_file)
+        if age < 900:
+            print(f"[{datetime.now()}] Cache valida ({int(age)}s di età). Salto lo scraping di rete.")
+            return
+
     print(f"[{datetime.now()}] Avvio scraping delle news...")
     
     # Assicuriamoci che la cartella tmp esista
@@ -353,7 +345,6 @@ def main():
         preferred_sources=["ansa_sport"]
     ))
 
-    wellness_pool.extend(WELLNESS_TIPS)
     if wellness_pool:
         all_news.extend(select_fresh_wellness(wellness_pool, limit=3))
         
@@ -363,8 +354,6 @@ def main():
     if weather:
         all_news.append(weather)
         
-    output_file = os.path.join(TMP_DIR, "raw_news.json")
-    
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(all_news, f, ensure_ascii=False, indent=4)
         
