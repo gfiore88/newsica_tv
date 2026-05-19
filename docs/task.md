@@ -10,3 +10,5 @@
 | 8 | /python_engineer | Done | Ripristino palinsesto robusto dopo Breaking News da UI |
 | 9 | /streaming_expert | Done | Accento colore dinamico per tipologia rubrica nell'overlay ON AIR |
 | 10 | /orchestrator | ✅ Done | Risoluzione architettura news, caching scraper e bug ripetizione wellness |
+| 11 | /python_engineer | ✅ Done | Risoluzione collisione segnale orario e pulizia import soundfile |
+

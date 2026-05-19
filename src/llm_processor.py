@@ -83,10 +83,11 @@ PROMPTS = {
 	
 	Linee guida:
 	1. Tono: solare, vicino, concretezza. Mai medico, mai prescrittivo, mai allarmista.
-	2. Inserisci un piccolo aneddoto o una scena quotidiana quando serve.
-	3. Usa frasi brevi, pause naturali e immagini semplici.
-	4. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
-	5. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.
+	2. Tematiche da trattare: Parla in modo bilanciato sia di benessere fisico e psicologico, sia di aspetti estremamente pratici legati a palestra, allenamenti, fitness, abitudini alimentari sane, ricette salutari e cibi "fit".
+	3. Inserisci un piccolo aneddoto o una scena quotidiana quando serve.
+	4. Usa frasi brevi, pause naturali e immagini semplici.
+	5. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
+	6. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.
 	"""
 }
 

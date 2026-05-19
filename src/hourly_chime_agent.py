@@ -8,7 +8,6 @@ import os
 import sys
 import time
 import datetime
-import soundfile as sf
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
@@ -72,6 +71,7 @@ def generate_chime_audio(text: str) -> bool:
     """Genera il file WAV del rintocco con Kokoro TTS. Ritorna True se ok."""
     try:
         from kokoro_onnx import Kokoro
+        import soundfile as sf
         print(f"🔔 Generazione rintocco orario: \"{text}\"")
         kokoro = Kokoro(KOKORO_ONNX, KOKORO_VOICES)
         samples, sample_rate = kokoro.create(
@@ -118,8 +118,10 @@ def run():
         time.sleep(wait)
 
         # Ora siamo ~8 secondi prima del rintocco: verifichiamo se deve essere saltato
-        target_hour = (datetime.datetime.now() + datetime.timedelta(seconds=10)).hour
-        target_hour_str = f"{target_hour:02d}:00"
+        now = datetime.datetime.now()
+        nearest_hour = (now + datetime.timedelta(minutes=30)).replace(minute=0, second=0, microsecond=0)
+        target_hour = nearest_hour.hour
+        target_hour_str = nearest_hour.strftime("%H:00")
         
         try:
             from schedule_generator import get_current_schedule

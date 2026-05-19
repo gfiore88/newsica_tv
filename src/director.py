@@ -683,7 +683,8 @@ def main():
                                 # Salta il rintocco se coincide con l'inizio di un blocco del palinsesto (es. 16:00)
                                 try:
                                     now = datetime.datetime.now()
-                                    current_hour_str = now.strftime("%H:00")
+                                    nearest_hour = (now + datetime.timedelta(minutes=30)).replace(minute=0, second=0, microsecond=0)
+                                    current_hour_str = nearest_hour.strftime("%H:00")
                                     schedule_data = get_current_schedule()
                                     if current_hour_str in schedule_data:
                                         block_title = schedule_data[current_hour_str]["title"]
