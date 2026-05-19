@@ -79,9 +79,12 @@ HTML_TEMPLATE = """
                         📅 Rigenera Palinsesto
                     </button>
                 </div>
-                <div class="mt-3">
-                    <button onclick="sendCommand('TRIGGER_BREAKING_NEWS')" class="w-full bg-red-600/80 hover:bg-red-500 transition border border-red-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
-                        🚨 FORZA BREAKING NEWS
+                <div class="mt-3 grid grid-cols-2 gap-3">
+                    <button onclick="sendCommand('TRIGGER_BREAKING_NEWS')" class="col-span-1 bg-red-600/80 hover:bg-red-500 transition border border-red-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                        🚨 BREAKING NEWS
+                    </button>
+                    <button id="chime-btn" onclick="triggerChime()" class="col-span-1 bg-amber-600/80 hover:bg-amber-500 transition border border-amber-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+                        🔔 Segnale Orario
                     </button>
                 </div>
                 <div class="mt-5 pt-4 border-t border-slate-700/60">
@@ -235,8 +238,46 @@ HTML_TEMPLATE = """
             }
         }
 
+        async function triggerChime() {
+            const btn = document.getElementById('chime-btn');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Generazione TTS...';
+            btn.classList.add('opacity-60');
+            logMsg('Generazione segnale orario via TTS...');
+
+            try {
+                const res = await fetch('/api/chime', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.status === 'OK') {
+                    logMsg(`🔔 Segnale orario inviato: "${data.text}"`);
+                    btn.innerHTML = '✅ Inviato!';
+                    btn.classList.remove('opacity-60');
+                    btn.classList.add('bg-green-600/80', 'border-green-500');
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        btn.classList.remove('bg-green-600/80', 'border-green-500');
+                    }, 3000);
+                } else {
+                    logMsg(`❌ Errore segnale orario: ${data.message}`);
+                    btn.innerHTML = '❌ Errore';
+                    setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; btn.classList.remove('opacity-60'); }, 3000);
+                }
+            } catch (err) {
+                logMsg(`❌ Errore fetch: ${err}`);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                btn.classList.remove('opacity-60');
+            }
+        }
+
         setInterval(fetchState, 2000);
         fetchState();
+
     </script>
 </body>
 </html>
@@ -282,6 +323,36 @@ def send_command():
             f.write(cmd)
         return jsonify({"status": "OK", "command": cmd})
     return jsonify({"status": "INVALID"})
+
+
+@app.route('/api/chime', methods=['POST'])
+def trigger_chime():
+    """Genera immediatamente un rintocco orario TTS e lo invia al director."""
+    import datetime
+    import random
+    import sys
+
+    sys.path.insert(0, os.path.join(BASE_DIR, "src"))
+    try:
+        from hourly_chime_agent import build_chime_text, generate_chime_audio, CHIME_AUDIO_FILE
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": f"Import agente fallito: {e}"}), 500
+
+    hour = datetime.datetime.now().hour
+    text = build_chime_text(hour)
+
+    ok = generate_chime_audio(text)
+    if not ok:
+        return jsonify({"status": "ERROR", "message": "Generazione TTS fallita."}), 500
+
+    cmd = f"HOURLY_CHIME_READY|{CHIME_AUDIO_FILE}"
+    try:
+        with open(CONTROL_FILE, "w") as f:
+            f.write(cmd)
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": f"Scrittura controllo fallita: {e}"}), 500
+
+    return jsonify({"status": "OK", "text": text})
 
 def find_pids(patterns):
     pids = set()
