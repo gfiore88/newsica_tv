@@ -580,6 +580,18 @@ def main():
                                 chime_file = parts[1] if len(parts) > 1 else CHIME_AUDIO_FILE
                                 print(f"🔔 Comando ricevuto: HOURLY_CHIME_READY. Riproduco rintocco orario!")
 
+                                # Salta il rintocco se coincide con l'inizio di un blocco del palinsesto (es. 16:00)
+                                try:
+                                    now = datetime.datetime.now()
+                                    current_hour_str = now.strftime("%H:00")
+                                    schedule_data = get_current_schedule()
+                                    if current_hour_str in schedule_data:
+                                        block_title = schedule_data[current_hour_str]["title"]
+                                        print(f"🔔 Segnale orario delle {current_hour_str} annullato: coincide con l'inizio del blocco '{block_title}'.")
+                                        continue
+                                except Exception as e:
+                                    print(f"⚠️ Errore durante il controllo del palinsesto per chime: {e}")
+
                                 if os.path.exists(chime_file):
                                     # Interrompe il flusso corrente senza toccare breaking_news_active
                                     schedule_interrupt_event.set()

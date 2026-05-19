@@ -117,8 +117,21 @@ def run():
         print(f"🔔 Prossimo rintocco tra {wait:.0f} secondi.")
         time.sleep(wait)
 
-        # Ora siamo ~8 secondi prima del rintocco: generiamo l'audio
+        # Ora siamo ~8 secondi prima del rintocco: verifichiamo se deve essere saltato
         target_hour = (datetime.datetime.now() + datetime.timedelta(seconds=10)).hour
+        target_hour_str = f"{target_hour:02d}:00"
+        
+        try:
+            from schedule_generator import get_current_schedule
+            schedule_data = get_current_schedule()
+            if target_hour_str in schedule_data:
+                print(f"🔔 Rintocco delle {target_hour_str} annullato: coincide con l'inizio del blocco '{schedule_data[target_hour_str]['title']}'.")
+                # Attende 90 secondi per superare l'inizio dell'ora e passa al ciclo successivo
+                time.sleep(90)
+                continue
+        except Exception as e:
+            print(f"⚠️ Errore controllo palinsesto nel chime agent: {e}")
+
         text = build_chime_text(target_hour)
 
         ok = generate_chime_audio(text)
