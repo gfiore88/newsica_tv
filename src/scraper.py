@@ -9,14 +9,32 @@ import hashlib
 RSS_FEEDS = {
     "ansa_ultimora": "https://www.ansa.it/sito/ansait_rss.xml",
     "ansa_mondo": "https://www.ansa.it/sito/notizie/mondo/mondo_rss.xml",
+    "ansa_cronaca": "https://www.ansa.it/sito/notizie/cronaca/cronaca_rss.xml",
+    "ansa_politica": "https://www.ansa.it/sito/notizie/politica/politica_rss.xml",
+    "ansa_economia": "https://www.ansa.it/sito/notizie/economia/economia_rss.xml",
+    "ansa_cultura": "https://www.ansa.it/sito/notizie/cultura/cultura_rss.xml",
+    "ansa_tecnologia": "https://www.ansa.it/sito/notizie/tecnologia/tecnologia_rss.xml",
     "ansa_sport": "https://www.ansa.it/sito/notizie/sport/sport_rss.xml",
     "ansa_salute_benessere": "https://www.ansa.it/canale_saluteebenessere/notizie/saluteebenessere_rss.xml",
-    "ansa_lifestyle": "https://www.ansa.it/canale_lifestyle/notizie/lifestyle_rss.xml"
+    "ansa_lifestyle": "https://www.ansa.it/canale_lifestyle/notizie/lifestyle_rss.xml",
+    "sky_tg24": "https://tg24.sky.it/rss/tg24.xml",
 }
 
 TMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp")
+RECENT_NEWS_FILE = os.path.join(TMP_DIR, "recent_news.json")
 RECENT_WELLNESS_FILE = os.path.join(TMP_DIR, "recent_wellness.json")
 WELLNESS_SOURCES = {"ansa_salute_benessere", "ansa_lifestyle"}
+NEWS_SOURCES = {
+    "ansa_ultimora",
+    "ansa_mondo",
+    "ansa_cronaca",
+    "ansa_politica",
+    "ansa_economia",
+    "ansa_cultura",
+    "ansa_tecnologia",
+    "sky_tg24",
+}
+SPORT_SOURCES = {"ansa_sport"}
 WELLNESS_KEYWORDS = (
     "fitness", "allenamento", "sport", "cammin", "corsa", "palestra",
     "benessere", "salute", "sonno", "stress", "aliment", "nutriz",
@@ -79,7 +97,8 @@ def fetch_latest_news(feed_url, max_items=3):
         news_items.append({
             "title": entry.title,
             "summary": entry.get('description', ''),
-            "link": entry.link
+            "link": entry.link,
+            "published": entry.get("published", "")
         })
         
     return news_items
@@ -87,6 +106,108 @@ def fetch_latest_news(feed_url, max_items=3):
 def item_key(item):
     value = item.get("link") or item.get("title", "")
     return hashlib.sha1(value.encode("utf-8", errors="ignore")).hexdigest()
+
+def load_recent_news():
+    try:
+        with open(RECENT_NEWS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_recent_news(recent):
+    compact = {group: keys[-160:] for group, keys in recent.items()}
+    with open(RECENT_NEWS_FILE, "w", encoding="utf-8") as f:
+        json.dump(compact, f, ensure_ascii=False, indent=2)
+
+def normalized_title_key(item):
+    title = item.get("title", "").lower()
+    letters = [char if char.isalnum() else " " for char in title]
+    words = [word for word in "".join(letters).split() if len(word) > 3]
+    return " ".join(words[:8])
+
+def title_tokens(item):
+    title = item.get("title", "").lower()
+    letters = [char if char.isalnum() else " " for char in title]
+    stopwords = {
+        "della", "delle", "degli", "dalla", "dalle", "alla", "alle",
+        "sono", "come", "anche", "dopo", "prima", "oggi", "live",
+        "diretta", "agli", "allo", "nella", "nelle", "sulla", "sulle",
+    }
+    return {
+        word for word in "".join(letters).split()
+        if len(word) > 3 and word not in stopwords
+    }
+
+def is_similar_story(item, selected):
+    current_tokens = title_tokens(item)
+    if not current_tokens:
+        return False
+
+    for existing in selected:
+        existing_tokens = title_tokens(existing)
+        if not existing_tokens:
+            continue
+        common = current_tokens & existing_tokens
+        union = current_tokens | existing_tokens
+        if len(common) >= 2 and len(common) / len(union) >= 0.25:
+            return True
+    return False
+
+def select_rotating_items(items, group, limit, preferred_sources=None):
+    recent = load_recent_news()
+    recent_keys = set(recent.get(group, []))
+    preferred_sources = preferred_sources or []
+    selected = []
+    selected_title_keys = set()
+
+    def add_item(item):
+        key = item_key(item)
+        title_key = normalized_title_key(item)
+        if key in {item_key(existing) for existing in selected}:
+            return False
+        if title_key and title_key in selected_title_keys:
+            return False
+        if is_similar_story(item, selected):
+            return False
+        selected.append(item)
+        if title_key:
+            selected_title_keys.add(title_key)
+        return True
+
+    def candidates_for(source=None, fresh_only=True):
+        candidates = items
+        if source:
+            candidates = [item for item in candidates if item.get("source") == source]
+        if fresh_only:
+            candidates = [item for item in candidates if item_key(item) not in recent_keys]
+        return candidates
+
+    for source in preferred_sources:
+        for item in candidates_for(source, fresh_only=True):
+            if add_item(item):
+                break
+
+    source_order = preferred_sources + [
+        source for source in sorted({item.get("source") for item in items})
+        if source not in preferred_sources
+    ]
+    for fresh_only in (True, False):
+        made_progress = True
+        while len(selected) < limit and made_progress:
+            made_progress = False
+            for source in source_order:
+                for item in candidates_for(source, fresh_only=fresh_only):
+                    if add_item(item):
+                        made_progress = True
+                        break
+                if len(selected) >= limit:
+                    break
+        if len(selected) >= limit:
+            break
+
+    recent[group] = recent.get(group, []) + [item_key(item) for item in selected]
+    save_recent_news(recent)
+    return selected[:limit]
 
 def load_recent_wellness():
     try:
@@ -200,18 +321,37 @@ def main():
     os.makedirs(TMP_DIR, exist_ok=True)
     
     all_news = []
+    news_pool = []
+    sport_pool = []
     
     # 1. Preleva le ultime notizie dai feed RSS
     wellness_pool = []
     for category, url in RSS_FEEDS.items():
         print(f"Recupero {category}...")
-        news = fetch_latest_news(url, max_items=8 if category in WELLNESS_SOURCES else 2)
+        news = fetch_latest_news(url, max_items=12 if category in NEWS_SOURCES else 8)
         for item in news:
             item['source'] = category
         if category in WELLNESS_SOURCES:
             wellness_pool.extend(news)
+        elif category in SPORT_SOURCES:
+            sport_pool.extend(news)
+        elif category in NEWS_SOURCES:
+            news_pool.extend(news)
         else:
             all_news.extend(news)
+
+    all_news.extend(select_rotating_items(
+        news_pool,
+        "news",
+        limit=6,
+        preferred_sources=["ansa_ultimora", "ansa_mondo", "sky_tg24"]
+    ))
+    all_news.extend(select_rotating_items(
+        sport_pool,
+        "sport",
+        limit=3,
+        preferred_sources=["ansa_sport"]
+    ))
 
     wellness_pool.extend(WELLNESS_TIPS)
     if wellness_pool:

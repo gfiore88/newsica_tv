@@ -23,7 +23,7 @@ SERVICES = {
     "director": {
         "label": "Regia",
         "patterns": [r"src/watchdog\.sh", r"src/director\.py"],
-        "command": ["bash", os.path.join(BASE_DIR, "src", "watchdog.sh")],
+        "command": [PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "director.py")],
         "log": os.path.join(TMP_DIR, "director.log"),
     },
     "stream": {

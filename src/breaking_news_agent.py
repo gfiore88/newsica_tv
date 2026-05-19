@@ -11,6 +11,8 @@ import soundfile as sf
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
+JINGLES_DIR = os.path.join(BASE_DIR, "assets", "jingles")
+BREAKING_JINGLE_FILE = os.path.join(JINGLES_DIR, "jingle_breaking_news.mp3")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
 FFMPEG_CMD = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg" if os.path.exists("/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg") else "ffmpeg"
 
@@ -107,19 +109,28 @@ def generate_breaking_news():
         # Fallback a None
         voice_audio = None
         
-    # 5. Generazione dell'allarme sonoro (triplo impulso elettronico)
-    print("🔔 Generazione jingle allarme...")
+    # 5. Preparazione jingle di apertura breaking news
+    print("🔔 Preparazione jingle breaking news...")
     alarm_audio = os.path.join(TMP_DIR, "alarm_jingle.wav")
-    subprocess.run([
-        FFMPEG_CMD, "-y", "-hide_banner", "-loglevel", "error",
-        "-f", "lavfi", "-i", "sine=frequency=850:duration=0.5",
-        "-f", "lavfi", "-i", "sine=frequency=0:duration=0.2",
-        "-f", "lavfi", "-i", "sine=frequency=850:duration=0.5",
-        "-f", "lavfi", "-i", "sine=frequency=0:duration=0.2",
-        "-f", "lavfi", "-i", "sine=frequency=850:duration=0.8",
-        "-filter_complex", "[0:a][1:a][2:a][3:a][4:a]concat=n=5:v=0:a=1",
-        "-ar", "24000", "-ac", "1", alarm_audio
-    ])
+    if os.path.exists(BREAKING_JINGLE_FILE):
+        print(f"🎶 Uso jingle breaking news: {os.path.basename(BREAKING_JINGLE_FILE)}")
+        subprocess.run([
+            FFMPEG_CMD, "-y", "-hide_banner", "-loglevel", "error",
+            "-i", BREAKING_JINGLE_FILE,
+            "-ar", "24000", "-ac", "1", alarm_audio
+        ], check=True)
+    else:
+        print("⚠️ Jingle breaking news non trovato, genero allarme fallback.")
+        subprocess.run([
+            FFMPEG_CMD, "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "sine=frequency=850:duration=0.5",
+            "-f", "lavfi", "-i", "sine=frequency=0:duration=0.2",
+            "-f", "lavfi", "-i", "sine=frequency=850:duration=0.5",
+            "-f", "lavfi", "-i", "sine=frequency=0:duration=0.2",
+            "-f", "lavfi", "-i", "sine=frequency=850:duration=0.8",
+            "-filter_complex", "[0:a][1:a][2:a][3:a][4:a]concat=n=5:v=0:a=1",
+            "-ar", "24000", "-ac", "1", alarm_audio
+        ], check=True)
     
     # 6. Concatenazione di Allarme + Voce
     bn_audio = os.path.join(TMP_DIR, "breaking_news.wav")

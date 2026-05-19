@@ -15,6 +15,17 @@ TMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp")
 INPUT_FILE = os.path.join(TMP_DIR, "raw_news.json")
 OUTPUT_FILE = os.path.join(TMP_DIR, "script.txt")
 
+NEWS_SOURCES = {
+    "ansa_ultimora",
+    "ansa_mondo",
+    "ansa_cronaca",
+    "ansa_politica",
+    "ansa_economia",
+    "ansa_cultura",
+    "ansa_tecnologia",
+    "sky_tg24",
+}
+
 PROMPTS = {
     "news": """Sei Chiara, la conduttrice principale di NewsicaTV, una Web TV H24 in diretta.
 	Il tuo compito è prendere una serie di notizie grezze (in formato JSON) e trasformarle in un copione fluido, professionale e naturale, pronto per essere letto ad alta voce.
@@ -137,7 +148,7 @@ def generate_script():
     filtered_news = []
     for item in news_items:
         source = item.get('source', '')
-        if character == "news" and ("ansa_ultimora" in source or "ansa_mondo" in source):
+        if character == "news" and source in NEWS_SOURCES:
             filtered_news.append(item)
         elif character == "sport" and "sport" in source:
             filtered_news.append(item)
