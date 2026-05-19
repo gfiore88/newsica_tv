@@ -60,7 +60,7 @@ fi
 
 AUDIO_FILE="tmp/audio_pipe"
 TICKER_FILE="tmp/ticker.txt"
-LOGO_FILE="assets/splashscreen.jpeg"
+LOGO_FILE="assets/splashscreen.png"
 PROGRESS_FILE="tmp/ffmpeg_progress.txt"
 PROGRAM_FILE="tmp/current_program.txt"
 NEXT_PROGRAM_FILE="tmp/next_program.txt"

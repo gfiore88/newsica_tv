@@ -37,3 +37,5 @@ logs/
 # Big Files
 *.bin
 *.onnx
+tmp/ffmpeg_progress.txt
+tmp/ffmpeg_progress.txt
