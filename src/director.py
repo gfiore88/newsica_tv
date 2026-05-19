@@ -504,6 +504,7 @@ def main():
         try:
             with open(AUDIO_PIPE, 'wb') as fifo:
                 print("✅ FFmpeg collegato! Trasmissione in corso...")
+                enqueue_current_schedule_metadata()
                 while True:
                     if manual_block_override_index is None:
                         current_schedule_key = get_wallclock_schedule_key()

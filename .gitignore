@@ -36,8 +36,4 @@ logs/
 # Big Files
 *.bin
 *.onnx
-tmp/ffmpeg_progress.txt
-tmp/script.txt
-tmp/ticker.txt
-tmp/raw_news.json
-tmp/recent_wellness.json
+tmp/*
