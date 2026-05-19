@@ -24,6 +24,10 @@ selected character when Ollama is unavailable or returns an empty response.
 after a failed step. `scraper.py` fetches RSS feeds through `requests` with an
 explicit timeout before parsing.
 
+The default Ollama model is `gemma3:12b`, configurable through `OLLAMA_MODEL`.
+`qwen3` models were avoided for this pipeline because they can emit internal
+thinking before a useful final response, causing empty or delayed scripts.
+
 ## Consequences
 
 The stream keeps rotating coherent `news`, `sport`, and `meteo` blocks even when

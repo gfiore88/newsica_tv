@@ -12,32 +12,50 @@
         "source": "ansa_ultimora"
     },
     {
-        "title": "Spari al centro islamico di San Diego, 'almeno due morti e diversi feriti'",
-        "summary": "Secondo Abc. La polizia avrebbe gia' neutralizzato l'assalitore",
-        "link": "https://www.ansa.it/sito/notizie/mondo/nordamerica/2026/05/18/spari-al-centro-islamico-di-san-diego-almeno-due-morti-e-diversi-feriti_cc834e9c-b3f6-4497-a313-5e7ff1fe55b1.html",
+        "title": "Mosca annuncia 3 giorni di esercitazioni nucleari mentre Putin visita la Cina",
+        "summary": "Coinvolti migliaia di soldati in tutto il Paese",
+        "link": "https://www.ansa.it/sito/notizie/mondo/europa/2026/05/19/mosca-annuncia-3-giorni-di-esercitazioni-nucleari-mentre-putin-visita-la-cina_1de5f260-c2b8-447a-bb4b-78561e8897d2.html",
         "source": "ansa_mondo"
     },
     {
-        "title": "Usa, media: spari in un centro islamico a San Diego, 2 morti e diversi feriti",
-        "summary": "La polizia: la minaccia è stata neutralizzata. Il sindaco Gloria: evitare l'area",
-        "link": "https://www.ansa.it/sito/notizie/mondo/nordamerica/2026/05/18/usa-media-spari-in-un-centro-islamico-a-san-diego-due-morti-e-diversi_71af7bb4-6f05-4d20-a096-86f63c4b74bc.html",
+        "title": "Caracas ordina un'indagine sulla morte del prigioniero politico Navas",
+        "summary": "Dopo il pressing di ong e società civile sulla presidente ad interim",
+        "link": "https://www.ansa.it/sito/notizie/mondo/americalatina/2026/05/19/caracas-ordina-unindagine-sulla-morte-del-prigioniero-politico-navas_594f014d-0214-486b-8333-579d7b3e5d05.html",
         "source": "ansa_mondo"
     },
     {
-        "title": "Mondiali: Curacao \"canta\" la lista dei 26 convocati",
-        "summary": "Originale iniziativa della isola caraibica. Un video musicale presenta i calciatori",
-        "link": "https://www.ansa.it/sito/notizie/sport/calcio/2026/05/18/mondiali-curacao-canta-la-lista-dei-26-convocati_1c977a18-b1db-4193-9ad9-e4dcf105a6db.html",
+        "title": "Nba: appena licenziato da Orlando, coach Jamahl Mosley va a New Orleans",
+        "summary": "Il tecnico di 47 anni cacciato dai Magic dopo aver perso gara 7 al primo turno dei playoff",
+        "link": "https://www.ansa.it/sito/notizie/sport/basket/2026/05/18/nba-appena-licenziato-da-orlando-coach-jamahl-mosley-va-a-new-orleans_0b1a0552-7843-4312-b39f-c9c3922213b0.html",
         "source": "ansa_sport"
     },
     {
-        "title": "Fiorentina: Parisi operato per una lesione al crociato",
-        "summary": "L'esterno viola si è infortunato ieri durante la gara contro la Juventus",
-        "link": "https://www.ansa.it/sito/notizie/sport/calcio/2026/05/18/fiorentina-parisi-operato-per-una-lesione-al-crociato_fa57f898-f23c-498d-86a1-57902bfe3994.html",
+        "title": "Mondiali: Brasile, Ancelotti convoca Neymar",
+        "summary": "Il ct del Brasile seleziona anche gli 'italiani' Wesley e Bremer",
+        "link": "https://www.ansa.it/sito/notizie/sport/calcio/2026/05/18/mondiali-brasile-ancelotti-convoca-neymar_d1c0d737-cb92-47b0-b64d-5c036624a373.html",
         "source": "ansa_sport"
+    },
+    {
+        "title": "La camminata breve che rimette in moto la giornata",
+        "summary": "Anche dieci minuti a passo tranquillo aiutano a staccare dagli schermi e a rientrare con piu' energia.",
+        "link": "local://wellness/camminata-breve",
+        "source": "wellness_tip"
+    },
+    {
+        "title": "Un'estate di fiori e stelle in Australia, stargazing con leggenda anche in Giappone",
+        "summary": "Da Alice Springs parte il tour astronomico, il Tanabata vicino Tokyo si celebre a luglio",
+        "link": "https://www.ansa.it/canale_lifestyle/notizie/tempo_libero/2026/05/17/unestate-di-fiori-e-stelle-in-australia-stargazing-con-leggenda-anche-in-giappone_fa67707b-076d-4850-942a-b0649ba9653c.html",
+        "source": "ansa_lifestyle"
+    },
+    {
+        "title": "Educazione emotiva questa sconosciuta,  solo 1 italiano su 4 alfabetizzato alle emozioni",
+        "summary": "MINDex 2026, tra la Gen Z prevale l'impulsività. L’affetto il sentimento più difficile da articolare",
+        "link": "https://www.ansa.it/canale_lifestyle/notizie/societa_diritti/2026/05/18/educazione-emotiva-questa-sconosciuta-solo-1-italiano-su-4-alfabetizzato-alle-emozioni_a948281d-a2a6-48f7-89c6-e30c9e217b8d.html",
+        "source": "ansa_lifestyle"
     },
     {
         "title": "Meteo Roma",
-        "summary": "Temperatura: 15.6°C, Vento: 2.3 km/h, Codice: 3",
+        "summary": "Temperatura: 15.5°C, Vento: 3.8 km/h, Codice: 0",
         "link": "https://open-meteo.com",
         "source": "meteo"
     }

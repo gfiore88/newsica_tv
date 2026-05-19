@@ -109,7 +109,7 @@ def mix_and_queue(music_file, voice_file):
     process.wait()
     print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
 
-CHARACTERS = ["news", "sport", "meteo"]
+CHARACTERS = ["wellness", "news", "sport", "meteo"]
 char_idx = 0
 
 def generator_worker():

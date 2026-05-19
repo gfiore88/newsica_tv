@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import soundfile as sf
 from kokoro_onnx import Kokoro
 
@@ -10,8 +11,26 @@ OUTPUT_AUDIO = os.path.join(TMP_DIR, "audio.wav")
 VOICES = {
     "news": "if_sara",
     "sport": "im_nicola",
-    "meteo": "im_nicola"
+    "meteo": "im_nicola",
+    "wellness": "if_sara"
 }
+
+VOICE_SPEEDS = {
+    "news": 0.92,
+    "sport": 0.98,
+    "meteo": 0.9,
+    "wellness": 0.9
+}
+
+def prepare_text_for_tts(text):
+    text = re.sub(r"\*+", "", text)
+    text = re.sub(r"\s+", " ", text)
+    text = text.replace("...", ". ")
+    text = text.replace(" km/h", " chilometri orari")
+    text = text.replace("°C", " gradi")
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    text = re.sub(r"([.!?])\s+", r"\1\n\n", text)
+    return text.strip()
 
 def generate_audio():
     print("Avvio modulo TTS (Kokoro AI locale)...")
@@ -21,14 +40,15 @@ def generate_audio():
         character = sys.argv[1]
         
     voice = VOICES.get(character, "if_sara")
-    print(f"Uso il personaggio: {character} (Voce: {voice})")
+    speed = float(os.getenv("TTS_SPEED", VOICE_SPEEDS.get(character, 0.95)))
+    print(f"Uso il personaggio: {character} (Voce: {voice}, velocità: {speed})")
     
     if not os.path.exists(SCRIPT_FILE):
         print(f"Errore: File {SCRIPT_FILE} non trovato. Esegui prima llm_processor.py.")
         sys.exit(1)
         
     with open(SCRIPT_FILE, 'r', encoding='utf-8') as f:
-        text = f.read().strip()
+        text = prepare_text_for_tts(f.read().strip())
         
     if not text:
         print("Errore: Il copione è vuoto.")
@@ -37,7 +57,7 @@ def generate_audio():
     print("Inizializzazione di Kokoro ONNX...")
     try:
         kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
-        samples, sample_rate = kokoro.create(text, voice=voice, speed=1.0, lang="it")
+        samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang="it")
         sf.write(OUTPUT_AUDIO, samples, sample_rate)
         print("✅ File audio generato con successo tramite Kokoro AI!")
     except Exception as e:
@@ -46,4 +66,3 @@ def generate_audio():
 
 if __name__ == "__main__":
     generate_audio()
-

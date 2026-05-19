@@ -6,7 +6,8 @@ import re
 
 # Impostazioni Ollama
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "qwen3:4b" # Modello locale più leggero per non sforzare il Mac
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:12b")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "60"))
 
 
 # Percorsi dei file
@@ -16,28 +17,50 @@ OUTPUT_FILE = os.path.join(TMP_DIR, "script.txt")
 
 PROMPTS = {
     "news": """Sei Chiara, la conduttrice principale di NewsicaTV, una Web TV H24 in diretta.
-Il tuo compito è prendere una serie di notizie grezze (in formato JSON) e trasformarle in un copione fluido, professionale e istituzionale, pronto per essere letto ad alta voce.
-Linee guida:
-1. Inizia sempre con: "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
-2. Scrivi in modo discorsivo (frasi brevi, ritmo televisivo).
-3. NON fare elenchi puntati. Usa transizioni tra le notizie.
-4. Concludi con: "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
-5. Produci ESCLUSIVAMENTE il testo del copione.
-""",
+	Il tuo compito è prendere una serie di notizie grezze (in formato JSON) e trasformarle in un copione fluido, professionale e naturale, pronto per essere letto ad alta voce.
+	Linee guida:
+	1. Inizia sempre con: "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
+	2. Scrivi come una conduttrice reale: caldo, sobrio, presente, senza tono da comunicato stampa.
+	3. Usa frasi brevi, da 8 a 16 parole quando possibile.
+	4. Inserisci pause naturali con virgole, punti e brevi transizioni come "intanto", "nel frattempo", "passiamo ora".
+	5. Alterna il ritmo: una frase informativa, una frase di contesto, poi la notizia successiva.
+	6. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
+	7. Concludi con: "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
+	8. Produci ESCLUSIVAMENTE il testo del copione.
+	""",
     "sport": """Sei Leo, il giornalista sportivo di NewsicaTV.
-Il tuo compito è prendere le notizie (in formato JSON) e trasformarle in un copione dinamico ed entusiasta.
-Linee guida:
-1. Inizia sempre con: "Un saluto a tutti gli appassionati di sport! Oggi giornata ricca di emozioni..."
-2. Usa un tono energico e termini dinamici.
-3. Produci ESCLUSIVAMENTE il testo del copione.
-""",
+	Il tuo compito è prendere le notizie (in formato JSON) e trasformarle in un copione dinamico, naturale e televisivo.
+	Linee guida:
+	1. Inizia sempre con: "Un saluto a tutti gli appassionati di sport! Oggi giornata ricca di emozioni..."
+	2. Usa energia, ma resta credibile: niente enfasi continua e niente frasi urlate.
+	3. Usa pause, incisi brevi e transizioni come "partiamo da", "occhio anche a", "restiamo sul campo".
+	4. Frasi brevi, ritmo mosso, punteggiatura chiara.
+	5. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
+	6. Produci ESCLUSIVAMENTE il testo del copione.
+	""",
     "meteo": """Sei il Colonnello, l'esperto meteo di NewsicaTV.
-Il tuo compito è trasformare le notizie o i dati meteo in un copione rassicurante e tecnico.
-Linee guida:
-1. Inizia sempre con: "Ed eccoci agli aggiornamenti meteo. Vediamo cosa ci riservano le prossime ore."
-2. Usa un tono calmo e preciso.
-3. Produci ESCLUSIVAMENTE il testo del copione.
-"""
+	Il tuo compito è trasformare le notizie o i dati meteo in un copione rassicurante, chiaro e parlato.
+	Linee guida:
+	1. Inizia sempre con: "Ed eccoci agli aggiornamenti meteo. Vediamo cosa ci riservano le prossime ore."
+	2. Usa un tono calmo e preciso, ma non burocratico.
+	3. Spiega i dati in modo naturale, con pause e frasi brevi.
+	4. Evita liste tecniche secche: temperatura, vento e condizioni vanno inseriti in una frase parlata.
+	5. NON usare titoli, parentesi o note di regia.
+	6. Produci ESCLUSIVAMENTE il testo del copione.
+	""",
+    "wellness": """Sei Maya, la voce fitness, benessere e cura della persona di NewsicaTV.
+	Il tuo compito è trasformare notizie e spunti di salute, lifestyle e abitudini quotidiane in una rubrica piacevole, utile e sempre fresca.
+	Linee guida:
+	1. Inizia sempre con: "È il momento del benessere su NewsicaTV. Piccole idee per stare meglio, ogni giorno."
+	2. Tono: solare, vicino, concreto. Mai medico, mai prescrittivo, mai allarmista.
+	3. Inserisci un piccolo aneddoto o una scena quotidiana quando serve: una camminata, una pausa, una colazione, una routine serale.
+	4. Dai contesto pratico, ma senza trasformare la rubrica in consigli sanitari personalizzati.
+	5. Usa frasi brevi, pause naturali e immagini semplici.
+	6. Alterna fitness leggero, benessere mentale, cura della persona, alimentazione e abitudini sane.
+	7. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
+	8. Concludi con: "Per ora è tutto. Prendiamoci una piccola pausa, e continuiamo a volerci bene."
+	9. Produci ESCLUSIVAMENTE il testo del copione.
+	"""
 }
 
 # Leggi il personaggio dagli argomenti (default: news)
@@ -62,6 +85,9 @@ def build_fallback_script(filtered_news):
     if character == "sport":
         opening = "Un saluto a tutti gli appassionati di sport! Oggi giornata ricca di emozioni."
         closing = "Per lo sport è tutto. Restate con noi su NewsicaTV."
+    elif character == "wellness":
+        opening = "È il momento del benessere su NewsicaTV. Piccole idee per stare meglio, ogni giorno."
+        closing = "Per ora è tutto. Prendiamoci una piccola pausa, e continuiamo a volerci bene."
     elif character == "meteo":
         opening = "Ed eccoci agli aggiornamenti meteo. Vediamo cosa ci riservano le prossime ore."
         closing = "Per il meteo è tutto. A tra poco con nuovi aggiornamenti."
@@ -69,14 +95,22 @@ def build_fallback_script(filtered_news):
         opening = "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
         closing = "Per questa edizione è tutto. Restate con noi per la nostra programmazione musicale."
 
+    transitions = {
+        "news": ["In apertura,", "Nel frattempo,", "Passiamo ora a un altro aggiornamento,", "Da segnalare anche,"],
+        "sport": ["Partiamo dal campo,", "Occhio anche a questa notizia,", "Restiamo sullo sport,", "Chiudiamo con un altro aggiornamento,"],
+        "wellness": ["Partiamo da una piccola abitudine,", "C'è poi uno spunto interessante,", "Pensiamo anche alla cura quotidiana,", "Chiudiamo con un'idea semplice,"],
+        "meteo": ["Partiamo dalla situazione attuale,", "Nelle prossime ore,", "Sul fronte del vento,", "In sintesi,"],
+    }
+
     lines = [opening]
-    for item in filtered_news[:4]:
+    for index, item in enumerate(filtered_news[:4]):
         title = clean_text(item.get("title", ""))
         summary = clean_text(item.get("summary", ""))
+        transition = transitions.get(character, transitions["news"])[index]
         if title and summary:
-            lines.append(f"{title}. {summary}")
+            lines.append(f"{transition} {title}. {summary}")
         elif title:
-            lines.append(title)
+            lines.append(f"{transition} {title}.")
 
     if len(lines) == 1:
         lines.append("Al momento non ci sono nuovi aggiornamenti verificati per questa rubrica.")
@@ -107,6 +141,8 @@ def generate_script():
             filtered_news.append(item)
         elif character == "sport" and "sport" in source:
             filtered_news.append(item)
+        elif character == "wellness" and ("salute_benessere" in source or "lifestyle" in source or "wellness_tip" in source):
+            filtered_news.append(item)
         elif character == "meteo" and "meteo" in source:
             filtered_news.append(item)
             
@@ -130,11 +166,16 @@ def generate_script():
         "model": MODEL_NAME,
         "system": SYSTEM_PROMPT,
         "prompt": news_text,
-        "stream": False
+        "stream": False,
+        "keep_alive": "30m",
+        "options": {
+            "temperature": 0.4,
+            "num_predict": 700
+        }
     }
     
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=8)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=OLLAMA_TIMEOUT)
         response.raise_for_status()
         result = response.json()
         script = result.get('response', '').strip()
