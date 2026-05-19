@@ -9,6 +9,7 @@ __pycache__/
 venv/
 env/
 .env
+.venv/
 
 # Media Files (Audio / Video generati localmente)
 *.mp4
@@ -36,4 +37,3 @@ logs/
 # Big Files
 *.bin
 *.onnx
-tmp/*
