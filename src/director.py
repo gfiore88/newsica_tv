@@ -18,6 +18,12 @@ MUSIC_DIR = os.path.join(BASE_DIR, "assets", "music")
 AUDIO_PIPE = os.path.join(TMP_DIR, "audio_pipe")
 STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
+
+PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python3")
+if not os.path.exists(PYTHON_EXEC):
+    PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python")
+if not os.path.exists(PYTHON_EXEC):
+    PYTHON_EXEC = sys.executable
 PCM_SAMPLE_RATE = 24000
 PCM_CHANNELS = 1
 PCM_CHUNK_BYTES = 4096
@@ -29,6 +35,9 @@ if not os.path.exists(FFMPEG_CMD):
 
 # Coda per l'audio (5000 chunks = circa 7 minuti di audio)
 audio_queue = queue.Queue(maxsize=5000)
+
+manual_block_override_index = None
+current_active_index = 0
 
 def ensure_folders():
     os.makedirs(TMP_DIR, exist_ok=True)
@@ -98,15 +107,15 @@ def run_pipeline(character="news"):
     
     # 1. Scraper
     print("Scraping news...")
-    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "scraper.py")], check=True)
+    subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "scraper.py")], check=True)
     
     # 2. LLM Processor
     print("Elaborazione testo (LLM)...")
-    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "llm_processor.py"), character], check=True)
+    subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "llm_processor.py"), character], check=True)
     
     # 3. TTS Generator
     print("Sintesi vocale (TTS)...")
-    subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "tts_generator.py"), character], check=True)
+    subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "tts_generator.py"), character], check=True)
 
 def mix_and_queue(music_file, voice_file, block_info=None):
     global current_generator_process
@@ -120,7 +129,7 @@ def mix_and_queue(music_file, voice_file, block_info=None):
         "-y",
         "-i", voice_file,
         "-i", music_file,
-        "-filter_complex", "[0:a]volume=1.5[v_boost]; [v_boost]apad[voice_padded]; [1:a]volume=0.25[m]; [m][voice_padded]sidechaincompress=threshold=0.03:ratio=20:attack=50:release=1000[music]; [v_boost][music]amix=inputs=2:duration=longest:dropout_transition=0",
+        "-filter_complex", "[0:a]volume=1.5[v_boost]; [v_boost]apad[voice_padded]; [1:a]volume=0.25[m]; [m][voice_padded]sidechaincompress=threshold=0.03:ratio=20:attack=50:release=1000[music]; [voice_padded][music]amix=inputs=2:duration=longest:dropout_transition=0",
         "-f", "s16le",
         "-ar", str(PCM_SAMPLE_RATE),
         "-ac", str(PCM_CHANNELS),
@@ -149,22 +158,29 @@ def mix_and_queue(music_file, voice_file, block_info=None):
     print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
 
 def get_current_block_info():
+    global manual_block_override_index, current_active_index
     schedule_data = get_current_schedule()
-    now = datetime.datetime.now()
-    current_time_str = now.strftime("%H:%M")
-    
     times = sorted(schedule_data.keys())
-    current_time_key = times[0]
-    for t in times:
-        if t <= current_time_str:
-            current_time_key = t
-        else:
-            break
-            
+    
+    if manual_block_override_index is None:
+        now = datetime.datetime.now()
+        current_time_str = now.strftime("%H:%M")
+        
+        current_time_key = times[0]
+        for t in times:
+            if t <= current_time_str:
+                current_time_key = t
+            else:
+                break
+        current_active_index = times.index(current_time_key)
+    else:
+        current_active_index = manual_block_override_index
+        
+    current_time_key = times[current_active_index]
     block = schedule_data[current_time_key]
     
-    next_index = times.index(current_time_key) + 1
-    next_time_key = times[next_index] if next_index < len(times) else times[0]
+    next_index = (current_active_index + 1) % len(times)
+    next_time_key = times[next_index]
     next_block = schedule_data[next_time_key]
     
     return block["type"], block["title"], next_block["title"]
@@ -248,7 +264,7 @@ def main():
     t.start()
     
     # Avvia ticker agent in background
-    ticker_thread = threading.Thread(target=lambda: subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "ticker_agent.py")]), daemon=True)
+    ticker_thread = threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "ticker_agent.py")]), daemon=True)
     ticker_thread.start()
     
     silence = b'\x00' * PCM_CHUNK_BYTES
@@ -267,6 +283,19 @@ def main():
                             
                             if cmd == "FORCE_NEXT":
                                 print("⏭️ Comando ricevuto: FORCE_NEXT. Svuoto la coda audio!")
+                                global manual_block_override_index, current_active_index
+                                schedule_data = get_current_schedule()
+                                times = sorted(schedule_data.keys())
+                                manual_block_override_index = (current_active_index + 1) % len(times)
+                                print(f"⏭️ Salto al blocco successivo con indice manuale: {manual_block_override_index}")
+                                
+                                # Terminiamo il processo regolare corrente per sbloccare la coda subito
+                                if current_generator_process:
+                                    try:
+                                        current_generator_process.terminate()
+                                    except Exception as e:
+                                        print(f"⚠️ Errore terminazione processo regolare per skip: {e}")
+                                        
                                 while not audio_queue.empty():
                                     try:
                                         audio_queue.get_nowait()
@@ -275,10 +304,11 @@ def main():
                                         break
                             elif cmd == "REGEN_SCHEDULE":
                                 print("📅 Comando ricevuto: REGEN_SCHEDULE.")
+                                manual_block_override_index = None
                                 generate_schedule()
                             elif cmd == "TRIGGER_BREAKING_NEWS":
                                 print("🚨 Comando ricevuto: TRIGGER_BREAKING_NEWS. Avvio agente in background...")
-                                threading.Thread(target=lambda: subprocess.run([sys.executable, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")])).start()
+                                threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")])).start()
                             elif cmd.startswith("BREAKING_NEWS_READY"):
                                 parts = cmd.split("|")
                                 bn_file = parts[1] if len(parts) > 1 else ""
