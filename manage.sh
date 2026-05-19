@@ -141,13 +141,13 @@ function do_start() {
     echo "  [i] Dashboard già attiva."
   fi
 
-  # 4. Avvia la Regia (Director)
-  if [ -z "$(get_pid "src/director.py")" ]; then
-    echo "  -> Avvio Regia..."
-    "$VENV_PYTHON" -u "$BASE_DIR/src/director.py" > "$TMP_DIR/director.log" 2>&1 &
+  # 4. Avvia il Watchdog della Regia (che avvia e monitora director.py)
+  if [ -z "$(get_pid "src/watchdog.sh")" ]; then
+    echo "  -> Avvio Watchdog Regia..."
+    bash "$BASE_DIR/src/watchdog.sh" > "$TMP_DIR/director.log" 2>&1 &
     sleep 2
   else
-    echo "  [i] Regia già attiva."
+    echo "  [i] Watchdog Regia già attivo."
   fi
 
   # 5. Avvia lo Streamer (FFmpeg/YouTube)
