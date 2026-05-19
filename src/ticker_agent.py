@@ -24,6 +24,8 @@ FLASH_NEWS = [
 def update_ticker():
     print("📡 Ticker Agent avviato. Generazione testo scorrevole in background...")
     
+    last_ticker_content = ""
+    
     while True:
         try:
             status_text = "Benvenuti su Newsica TV"
@@ -33,7 +35,7 @@ def update_ticker():
                     state = json.load(f)
                 
                 if state.get("current_block") == "breaking_news":
-                    status_text = "🚨 EDIZIONE STRAORDINARIA IN CORSO"
+                    status_text = "🚨 EDIZIONE STRAORDINARIA"
                 elif state.get("current_title"):
                     status_text = f"In onda: {state.get('current_title').upper()}"
                 
@@ -44,17 +46,29 @@ def update_ticker():
             time_str = now.strftime("%H:%M")
             date_str = now.strftime("%d/%m/%Y")
             
-            # Tenta di caricare le notizie reali scrapate di recente
+            # Salva i file dell'orologio statico per la grafica FFmpeg
+            clock_file = os.path.join(TMP_DIR, "clock.txt")
+            date_file = os.path.join(TMP_DIR, "date.txt")
+            
+            with open(clock_file + ".tmp", "w") as f:
+                f.write(time_str)
+            os.replace(clock_file + ".tmp", clock_file)
+            
+            with open(date_file + ".tmp", "w") as f:
+                f.write(date_str)
+            os.replace(date_file + ".tmp", date_file)
+            
+            # Tenta di caricare le notizie reali scrapate di recente in ordine stabile (non casuale)
             flash_text = ""
             if os.path.exists(RAW_NEWS_FILE):
                 try:
                     with open(RAW_NEWS_FILE, "r", encoding="utf-8") as f:
                         all_news = json.load(f)
                     if all_news:
-                        # Seleziona fino a 4 notizie reali a caso
-                        sampled_news = random.sample(all_news, min(4, len(all_news)))
+                        # Seleziona le prime 6 notizie reali (ordinamento stabile)
+                        stable_news = all_news[:6]
                         items = []
-                        for news in sampled_news:
+                        for news in stable_news:
                             source = news.get("source", "NEWS").upper()
                             title = news.get("title", "").replace("%", " percento")
                             if title:
@@ -63,22 +77,25 @@ def update_ticker():
                 except Exception as e:
                     print(f"⚠️ Errore caricamento notizie per ticker: {e}")
             
-            # Fallback se le notizie reali non sono ancora disponibili o c'è un errore
+            # Fallback stabile
             if not flash_text:
-                flashes = random.sample(FLASH_NEWS, 3)
-                flash_text = "   •   ".join(flashes)
+                stable_flashes = FLASH_NEWS[:4]
+                flash_text = "   •   ".join(stable_flashes)
             
-            # Stringa ticker con spazi alla fine per un loop fluido
-            ticker_content = f"        NEWSICATV - WEB TV H24   •   {date_str} {time_str}   •   {status_text}   •   FLASH: {flash_text}   •   {next_block}                                                 "
+            # Stringa ticker pulita e priva di data/ora per scorrere in modo stabile e continuo
+            ticker_content = f"        NEWSICATV   •   {status_text}   •   FLASH: {flash_text}   •   {next_block}                             "
             
-            with open(TICKER_FILE + ".tmp", "w") as f:
-                f.write(ticker_content)
-            os.replace(TICKER_FILE + ".tmp", TICKER_FILE)
+            # Scrive il file ticker.txt solo se il contenuto è effettivamente cambiato
+            if ticker_content != last_ticker_content:
+                with open(TICKER_FILE + ".tmp", "w") as f:
+                    f.write(ticker_content)
+                os.replace(TICKER_FILE + ".tmp", TICKER_FILE)
+                last_ticker_content = ticker_content
             
         except Exception as e:
             print(f"⚠️ Errore Ticker Agent: {e}")
             
-        time.sleep(15)
+        time.sleep(2)
 
 def check_singleton(name):
     import fcntl
