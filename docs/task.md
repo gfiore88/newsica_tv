@@ -8,3 +8,4 @@
 | 6 | /python_engineer | Done | Integrati jingle classico e breaking news nella regia locale |
 | 7 | /python_engineer | Done | Collegato `jingle_sport.mp3` alle rubriche sportive |
 | 8 | /python_engineer | Done | Ripristino palinsesto robusto dopo Breaking News da UI |
+| 9 | /streaming_expert | Done | Accento colore dinamico per tipologia rubrica nell'overlay ON AIR |

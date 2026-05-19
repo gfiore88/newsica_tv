@@ -23,6 +23,14 @@ STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
 PROGRAM_FILE = os.path.join(TMP_DIR, "current_program.txt")
 NEXT_PROGRAM_FILE = os.path.join(TMP_DIR, "next_program.txt")
+ACCENT_FILES = {
+    "news": os.path.join(TMP_DIR, "accent_news.txt"),
+    "sport": os.path.join(TMP_DIR, "accent_sport.txt"),
+    "meteo": os.path.join(TMP_DIR, "accent_meteo.txt"),
+    "wellness": os.path.join(TMP_DIR, "accent_wellness.txt"),
+    "music_only": os.path.join(TMP_DIR, "accent_music.txt"),
+    "breaking_news": os.path.join(TMP_DIR, "accent_breaking.txt"),
+}
 
 PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python3")
 if not os.path.exists(PYTHON_EXEC):
@@ -59,6 +67,10 @@ def ensure_folders():
     if not os.path.exists(NEXT_PROGRAM_FILE):
         with open(NEXT_PROGRAM_FILE, "w") as f:
             f.write("A seguire: --")
+    for accent_file in ACCENT_FILES.values():
+        if not os.path.exists(accent_file):
+            with open(accent_file, "w") as f:
+                f.write("")
 
     if not os.path.exists(AUDIO_PIPE):
         try:
@@ -394,6 +406,12 @@ def build_block_info(block_type, title, next_title, next_time):
         "last_update": ""
     }
 
+def write_accent_files(block_type):
+    active_key = block_type if block_type in ACCENT_FILES else "news"
+    for key, accent_file in ACCENT_FILES.items():
+        with open(accent_file, "w") as f:
+            f.write(" " if key == active_key else "")
+
 def enqueue_current_schedule_metadata():
     current_type, current_title, next_title, next_time, _ = get_current_block_info()
     audio_queue.put({"type": "metadata", "state": build_block_info(current_type, current_title, next_title, next_time)})
@@ -599,6 +617,7 @@ def main():
                                     next_label = f"{next_label} - {next_start}"
                                 with open(NEXT_PROGRAM_FILE, "w") as nf:
                                     nf.write(next_label)
+                                write_accent_files(item["state"].get("current_block", "news"))
                             except Exception as e:
                                 print(f"⚠️ Errore scrittura stato: {e}")
                             audio_queue.task_done()
