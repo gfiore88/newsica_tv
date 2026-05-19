@@ -368,14 +368,7 @@ def main():
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(all_news, f, ensure_ascii=False, indent=4)
         
-    # Salva il file per il ticker scorrevole (solo i titoli)
-    ticker_file = os.path.join(TMP_DIR, "ticker.txt")
-    ticker_testo = "   |   ".join([f"[{news['source'].upper()}] {news['title'].replace('%', ' percento')}" for news in all_news]) + "   |   "
-    with open(ticker_file, 'w', encoding='utf-8') as f:
-        f.write(ticker_testo)
-        
     print(f"[{datetime.now()}] Scraping completato. Salvate {len(all_news)} notizie in {output_file}")
-    print(f"[{datetime.now()}] Ticker generato in {ticker_file}")
 
 if __name__ == "__main__":
     main()

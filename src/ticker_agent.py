@@ -9,6 +9,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 TICKER_FILE = os.path.join(TMP_DIR, "ticker.txt")
+RAW_NEWS_FILE = os.path.join(TMP_DIR, "raw_news.json")
 STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 
 FLASH_NEWS = [
@@ -43,10 +44,32 @@ def update_ticker():
             time_str = now.strftime("%H:%M")
             date_str = now.strftime("%d/%m/%Y")
             
-            flash = random.choice(FLASH_NEWS)
+            # Tenta di caricare le notizie reali scrapate di recente
+            flash_text = ""
+            if os.path.exists(RAW_NEWS_FILE):
+                try:
+                    with open(RAW_NEWS_FILE, "r", encoding="utf-8") as f:
+                        all_news = json.load(f)
+                    if all_news:
+                        # Seleziona fino a 4 notizie reali a caso
+                        sampled_news = random.sample(all_news, min(4, len(all_news)))
+                        items = []
+                        for news in sampled_news:
+                            source = news.get("source", "NEWS").upper()
+                            title = news.get("title", "").replace("%", " percento")
+                            if title:
+                                items.append(f"[{source}] {title}")
+                        flash_text = "   •   ".join(items)
+                except Exception as e:
+                    print(f"⚠️ Errore caricamento notizie per ticker: {e}")
             
-            # Stringa ticker. Tanti spazi per far staccare bene il loop
-            ticker_content = f"        NEWSICATV - WEB TV H24   •   {date_str} {time_str}   •   {status_text}   •   FLASH: {flash}   •   {next_block}        "
+            # Fallback se le notizie reali non sono ancora disponibili o c'è un errore
+            if not flash_text:
+                flashes = random.sample(FLASH_NEWS, 3)
+                flash_text = "   •   ".join(flashes)
+            
+            # Stringa ticker con spazi alla fine per un loop fluido
+            ticker_content = f"        NEWSICATV - WEB TV H24   •   {date_str} {time_str}   •   {status_text}   •   FLASH: {flash_text}   •   {next_block}                                                 "
             
             with open(TICKER_FILE + ".tmp", "w") as f:
                 f.write(ticker_content)
@@ -55,7 +78,7 @@ def update_ticker():
         except Exception as e:
             print(f"⚠️ Errore Ticker Agent: {e}")
             
-        time.sleep(5)
+        time.sleep(15)
 
 def check_singleton(name):
     import fcntl
