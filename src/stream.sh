@@ -15,7 +15,7 @@ fi
 
 AUDIO_FILE="tmp/audio_pipe"
 TICKER_FILE="tmp/ticker.txt"
-LOGO_FILE="assets/logo.png"
+LOGO_FILE="assets/splashscreen.jpeg"
 PROGRESS_FILE="tmp/ffmpeg_progress.txt"
 STREAM_TEST_CARD="${STREAM_TEST_CARD:-0}"
 
