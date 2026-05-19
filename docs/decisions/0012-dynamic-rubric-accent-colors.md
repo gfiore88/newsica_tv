@@ -2,7 +2,7 @@
 
 ## Stato
 
-Accettata
+Sospesa
 
 ## Contesto
 
@@ -10,9 +10,10 @@ L'overlay ON AIR aveva un accento viola fisso. Per rendere piu' riconoscibili le
 
 ## Decisione
 
-- La regia scrive file `tmp/accent_*.txt`, uno per ogni tipologia di rubrica.
-- Solo il file della rubrica corrente contiene uno spazio; gli altri restano vuoti.
-- `stream.sh` disegna piu' box testuali colorati, ciascuno con `reload=1`, e quindi mostra solo l'accento attivo.
+- Il tentativo basato su piu' layer `drawtext` ricaricati da `tmp/accent_*.txt` e' sospeso.
+- In FFmpeg quei layer hanno introdotto artefatti visivi e un effetto di overlay sovrapposto.
+- `stream.sh` mantiene per ora un pannello ON AIR pulito senza accento dinamico.
+- Il colore per rubrica verra' reintrodotto nel refactor overlay dedicato, non come patch nel filtro live monolitico.
 - Palette iniziale:
   - news: rosso
   - sport: verde
@@ -23,4 +24,4 @@ L'overlay ON AIR aveva un accento viola fisso. Per rendere piu' riconoscibili le
 
 ## Conseguenze
 
-Il colore dell'accento cambia seguendo i metadata della regia e resta compatibile con il flusso overlay basato su file gia' usato per titolo e prossima rubrica. Il filtro FFmpeg deve essere riavviato una volta per passare dalla vecchia barra statica al nuovo sistema dinamico.
+La priorita' e' stabilizzare la leggibilita' dell'overlay. Il colore dinamico resta una feature desiderata, ma va implementato con un componente overlay piu' robusto durante il refactor modulare.
