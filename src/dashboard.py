@@ -1,14 +1,38 @@
 from flask import Flask, jsonify, render_template_string, request
 import os
 import json
+import signal
+import subprocess
+import time
 from schedule_generator import get_current_schedule, generate_schedule
 
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
+TMP_DIR = os.path.join(BASE_DIR, "tmp")
 STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
+PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python3")
+if not os.path.exists(PYTHON_EXEC):
+    PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python")
+if not os.path.exists(PYTHON_EXEC):
+    PYTHON_EXEC = "python3"
+
+SERVICES = {
+    "director": {
+        "label": "Regia",
+        "patterns": [r"src/watchdog\.sh", r"src/director\.py"],
+        "command": ["bash", os.path.join(BASE_DIR, "src", "watchdog.sh")],
+        "log": os.path.join(TMP_DIR, "director.log"),
+    },
+    "stream": {
+        "label": "Stream",
+        "patterns": [r"src/stream\.sh"],
+        "command": ["bash", os.path.join(BASE_DIR, "src", "stream.sh")],
+        "log": os.path.join(TMP_DIR, "stream.log"),
+    },
+}
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -59,6 +83,20 @@ HTML_TEMPLATE = """
                     <button onclick="sendCommand('TRIGGER_BREAKING_NEWS')" class="w-full bg-red-600/80 hover:bg-red-500 transition border border-red-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
                         🚨 FORZA BREAKING NEWS
                     </button>
+                </div>
+                <div class="mt-5 pt-4 border-t border-slate-700/60">
+                    <h3 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-3">Servizi</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <button onclick="restartService('director')" class="bg-amber-700/80 hover:bg-amber-600 transition border border-amber-600 p-3 rounded-lg font-semibold text-sm">
+                            ↻ Restart Regia
+                        </button>
+                        <button onclick="restartService('stream')" class="bg-cyan-700/80 hover:bg-cyan-600 transition border border-cyan-600 p-3 rounded-lg font-semibold text-sm">
+                            ↻ Restart Stream
+                        </button>
+                        <button onclick="restartService('all')" class="bg-purple-700/80 hover:bg-purple-600 transition border border-purple-600 p-3 rounded-lg font-semibold text-sm">
+                            ↻ Restart Tutto
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -177,6 +215,26 @@ HTML_TEMPLATE = """
             }
         }
 
+        async function restartService(service) {
+            const labels = { director: 'regia', stream: 'stream', all: 'regia e stream' };
+            if (!confirm(`Riavviare ${labels[service] || service}?`)) {
+                return;
+            }
+
+            logMsg(`Restart servizio: ${service}`);
+            try {
+                const res = await fetch('/api/service/restart', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ service })
+                });
+                const data = await res.json();
+                logMsg(`Restart: ${data.status} ${data.message || ''}`);
+            } catch (err) {
+                logMsg(`Errore restart: ${err}`);
+            }
+        }
+
         setInterval(fetchState, 2000);
         fetchState();
     </script>
@@ -224,6 +282,98 @@ def send_command():
             f.write(cmd)
         return jsonify({"status": "OK", "command": cmd})
     return jsonify({"status": "INVALID"})
+
+def find_pids(patterns):
+    pids = set()
+    for pattern in patterns:
+        result = subprocess.run(
+            ["pgrep", "-f", pattern],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        for line in result.stdout.splitlines():
+            try:
+                pid = int(line.strip())
+            except ValueError:
+                continue
+            if pid != os.getpid():
+                pids.add(pid)
+    return sorted(pids)
+
+def terminate_pids(pids):
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if not any(process_exists(pid) for pid in pids):
+            return
+        time.sleep(0.2)
+
+    for pid in pids:
+        if process_exists(pid):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+def process_exists(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+def start_service(service):
+    os.makedirs(TMP_DIR, exist_ok=True)
+    log_file = open(service["log"], "a")
+    subprocess.Popen(
+        service["command"],
+        cwd=BASE_DIR,
+        stdout=log_file,
+        stderr=log_file,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+    )
+
+def restart_service(name):
+    service = SERVICES[name]
+    pids = find_pids(service["patterns"])
+    terminate_pids(pids)
+    start_service(service)
+    return pids
+
+@app.route('/api/service/restart', methods=['POST'])
+def restart_service_route():
+    data = request.json or {}
+    requested_service = data.get("service")
+
+    if requested_service == "all":
+        restarted = {}
+        for service_name in ("stream", "director"):
+            restarted[service_name] = restart_service(service_name)
+        return jsonify({
+            "status": "OK",
+            "message": "servizi riavviati",
+            "restarted": restarted,
+        })
+
+    if requested_service not in SERVICES:
+        return jsonify({"status": "INVALID", "message": "servizio non valido"}), 400
+
+    pids = restart_service(requested_service)
+    return jsonify({
+        "status": "OK",
+        "message": f"{SERVICES[requested_service]['label']} riavviato",
+        "restarted_pids": pids,
+    })
 
 def check_singleton(name):
     import fcntl

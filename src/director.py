@@ -18,6 +18,8 @@ MUSIC_DIR = os.path.join(BASE_DIR, "assets", "music")
 AUDIO_PIPE = os.path.join(TMP_DIR, "audio_pipe")
 STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
+PROGRAM_FILE = os.path.join(TMP_DIR, "current_program.txt")
+NEXT_PROGRAM_FILE = os.path.join(TMP_DIR, "next_program.txt")
 
 PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python3")
 if not os.path.exists(PYTHON_EXEC):
@@ -45,6 +47,15 @@ def ensure_folders():
     if not os.path.exists(STATE_FILE):
         with open(STATE_FILE, "w") as f:
             json.dump({"status": "OFFLINE"}, f)
+
+    # Pre-popola i file letti dall'overlay FFmpeg se non esistono.
+    if not os.path.exists(PROGRAM_FILE):
+        with open(PROGRAM_FILE, "w") as f:
+            f.write("NEWSICA TV")
+    if not os.path.exists(NEXT_PROGRAM_FILE):
+        with open(NEXT_PROGRAM_FILE, "w") as f:
+            f.write("A seguire: --")
+
     if not os.path.exists(AUDIO_PIPE):
         try:
             os.mkfifo(AUDIO_PIPE)
@@ -183,7 +194,7 @@ def get_current_block_info():
     next_time_key = times[next_index]
     next_block = schedule_data[next_time_key]
     
-    return block["type"], block["title"], next_block["title"]
+    return block["type"], block["title"], next_block["title"], next_time_key
 
 def generator_worker():
     global breaking_news_active
@@ -196,7 +207,7 @@ def generator_worker():
                 print("⏳ Generatore in attesa: Breaking News in corso...")
                 time.sleep(1)
                 
-            current_type, current_title, next_title = get_current_block_info()
+            current_type, current_title, next_title, next_time = get_current_block_info()
             
             print(f"🚀 Genero blocco in background: {current_title} ({current_type})")
             run_pipeline(current_type)
@@ -214,6 +225,7 @@ def generator_worker():
                 "current_block": current_type,
                 "current_title": current_title,
                 "next_block": next_title,
+                "next_start": next_time,
                 "breaking_news_available": False,
                 "last_update": "" # sara' popolato al momento della messa in onda
             }
@@ -251,6 +263,7 @@ def check_singleton(name):
 
 
 def main():
+    global manual_block_override_index, current_active_index, breaking_news_active
     ensure_folders()
     if not check_singleton("director"):
         print("❌ Uscita immediata per prevenire conflitti.")
@@ -283,12 +296,11 @@ def main():
                             
                             if cmd == "FORCE_NEXT":
                                 print("⏭️ Comando ricevuto: FORCE_NEXT. Svuoto la coda audio!")
-                                global manual_block_override_index, current_active_index
                                 schedule_data = get_current_schedule()
                                 times = sorted(schedule_data.keys())
                                 manual_block_override_index = (current_active_index + 1) % len(times)
                                 print(f"⏭️ Salto al blocco successivo con indice manuale: {manual_block_override_index}")
-                                
+
                                 # Terminiamo il processo regolare corrente per sbloccare la coda subito
                                 if current_generator_process:
                                     try:
@@ -306,7 +318,6 @@ def main():
                                 try:
                                     target_idx = int(cmd.split("_")[2])
                                     print(f"⏭️ Comando ricevuto: FORCE_INDEX_{target_idx}. Imposto indice manuale!")
-                                    global manual_block_override_index
                                     manual_block_override_index = target_idx
                                     
                                     # Terminiamo il processo regolare corrente per sbloccare la coda subito
@@ -335,8 +346,7 @@ def main():
                                 parts = cmd.split("|")
                                 bn_file = parts[1] if len(parts) > 1 else ""
                                 print("🚨 Comando ricevuto: BREAKING_NEWS_READY. Svuoto la coda per ultim'ora!")
-                                
-                                global breaking_news_active
+
                                 # Impostiamo subito il flag
                                 breaking_news_active = True
                                 
@@ -361,6 +371,7 @@ def main():
                                         "current_block": "breaking_news",
                                         "current_title": "🚨 ULTIM'ORA",
                                         "next_block": "Ripresa Palinsesto",
+                                        "next_start": "",
                                         "breaking_news_available": False,
                                         "last_update": ""
                                     }
@@ -377,6 +388,17 @@ def main():
                             try:
                                 with open(STATE_FILE, "w") as sf:
                                     json.dump(item["state"], sf, indent=2)
+
+                                # Scrive i testi letti dall'overlay di FFmpeg.
+                                with open(PROGRAM_FILE, "w") as pf:
+                                    pf.write(item["state"]["current_title"].upper())
+                                next_title = item["state"].get("next_block", "--")
+                                next_start = item["state"].get("next_start")
+                                next_label = f"A seguire: {next_title}"
+                                if next_start:
+                                    next_label = f"{next_label} - {next_start}"
+                                with open(NEXT_PROGRAM_FILE, "w") as nf:
+                                    nf.write(next_label)
                             except Exception as e:
                                 print(f"⚠️ Errore scrittura stato: {e}")
                             audio_queue.task_done()
