@@ -302,6 +302,28 @@ def main():
                                         audio_queue.task_done()
                                     except queue.Empty:
                                         break
+                            elif cmd.startswith("FORCE_INDEX_"):
+                                try:
+                                    target_idx = int(cmd.split("_")[2])
+                                    print(f"⏭️ Comando ricevuto: FORCE_INDEX_{target_idx}. Imposto indice manuale!")
+                                    global manual_block_override_index
+                                    manual_block_override_index = target_idx
+                                    
+                                    # Terminiamo il processo regolare corrente per sbloccare la coda subito
+                                    if current_generator_process:
+                                        try:
+                                            current_generator_process.terminate()
+                                        except Exception as e:
+                                            print(f"⚠️ Errore terminazione processo regolare per skip: {e}")
+                                            
+                                    while not audio_queue.empty():
+                                        try:
+                                            audio_queue.get_nowait()
+                                            audio_queue.task_done()
+                                        except queue.Empty:
+                                            break
+                                except Exception as e:
+                                    print(f"⚠️ Errore nell'elaborazione di FORCE_INDEX: {e}")
                             elif cmd == "REGEN_SCHEDULE":
                                 print("📅 Comando ricevuto: REGEN_SCHEDULE.")
                                 manual_block_override_index = None

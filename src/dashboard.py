@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, render_template_string, request
 import os
 import json
+from schedule_generator import get_current_schedule, generate_schedule
 
 app = Flask(__name__)
 
@@ -26,17 +27,19 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body class="p-4 md:p-8">
-    <div class="max-w-4xl mx-auto">
+    <div class="max-w-6xl mx-auto">
         <header class="flex items-center justify-between mb-8 pb-4 border-b border-slate-700">
             <h1 class="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">NewsicaTV Dashboard</h1>
             <div id="status-badge" class="px-3 py-1 rounded-full text-sm font-bold bg-slate-700 text-slate-300">OFFLINE</div>
         </header>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div class="glass rounded-xl p-6 shadow-xl">
-                <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">In Onda Ora</h2>
-                <div id="current-title" class="text-2xl font-bold text-white mb-2 truncate">Caricamento...</div>
-                <div class="flex items-center text-sm text-slate-400 mb-4">
+            <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                    <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">In Onda Ora</h2>
+                    <div id="current-title" class="text-2xl font-bold text-white mb-2 truncate">Caricamento...</div>
+                </div>
+                <div class="flex items-center text-sm text-slate-400 mt-4">
                     <span id="current-block" class="px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 mr-2 border border-blue-800">--</span>
                     Aggiornato: <span id="last-update" class="ml-1">--</span>
                 </div>
@@ -57,6 +60,17 @@ HTML_TEMPLATE = """
                         🚨 FORZA BREAKING NEWS
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Sezione Palinsesto di Oggi -->
+        <div class="glass rounded-xl p-6 shadow-xl mb-8">
+            <div class="flex items-center justify-between mb-6 pb-2 border-b border-slate-700/50">
+                <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold">📅 Palinsesto di Oggi</h2>
+                <span class="text-xs text-slate-500 font-medium hidden sm:inline">Clicca su un blocco per forzarne la messa in onda</span>
+            </div>
+            <div id="schedule-timeline" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                <!-- I blocchi verranno inseriti dinamicamente via JS -->
             </div>
         </div>
         
@@ -92,9 +106,59 @@ HTML_TEMPLATE = """
 
                 document.getElementById('current-title').innerText = data.current_title || '--';
                 document.getElementById('current-block').innerText = data.current_block || '--';
-                document.getElementById('last-update').innerText = data.last_update || '--';
+                document.getElementById('last-update').innerText = data.last_update ? new Date(data.last_update).toLocaleTimeString() : '--';
+
+                renderSchedule(data.schedule, data.current_title);
             } catch (err) {
                 console.error(err);
+            }
+        }
+
+        function renderSchedule(schedule, currentTitle) {
+            const container = document.getElementById('schedule-timeline');
+            if (!schedule || schedule.length === 0) {
+                container.innerHTML = '<div class="text-slate-500 col-span-full py-4 text-center text-sm">Nessun palinsesto disponibile</div>';
+                return;
+            }
+
+            const badges = {
+                'music_only': { label: '🎵 Musica', color: 'bg-indigo-950/50 text-indigo-300 border-indigo-800/50' },
+                'news': { label: '📰 News', color: 'bg-emerald-950/50 text-emerald-300 border-emerald-800/50' },
+                'sport': { label: '⚽ Sport', color: 'bg-amber-950/50 text-amber-300 border-amber-800/50' },
+                'wellness': { label: '🧘 Benessere', color: 'bg-rose-950/50 text-rose-300 border-rose-800/50' },
+                'meteo': { label: '☀️ Meteo', color: 'bg-sky-950/50 text-sky-300 border-sky-800/50' }
+            };
+
+            let html = '';
+            schedule.forEach(item => {
+                const isActive = item.title === currentTitle;
+                const activeClasses = isActive 
+                    ? 'ring-2 ring-purple-500 bg-gradient-to-br from-slate-800/80 to-indigo-950/80 border-purple-500/50 shadow-[0_0_20px_rgba(147,51,234,0.15)] transform scale-[1.02]' 
+                    : 'bg-slate-800/40 hover:bg-slate-800/70 border-slate-700 hover:border-slate-500 transition-all duration-200 cursor-pointer';
+
+                const badge = badges[item.type] || { label: '📦 Altro', color: 'bg-slate-900 text-slate-300' };
+
+                html += `
+                    <div onclick="${isActive} ? null : selectBlock(${item.index}, '${item.title}')" class="relative group p-4 rounded-xl border flex flex-col justify-between h-32 ${activeClasses}">
+                        ${isActive ? '<span class="absolute -top-1.5 -right-1.5 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>' : ''}
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-extrabold tracking-wider ${isActive ? 'text-purple-400' : 'text-slate-400'}">${item.time}</span>
+                            ${isActive ? '<span class="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">IN ONDA</span>' : ''}
+                        </div>
+                        <div class="text-sm font-semibold truncate ${isActive ? 'text-white' : 'text-slate-200 group-hover:text-white'}">${item.title}</div>
+                        <div class="mt-2 flex items-center justify-between">
+                            <span class="text-[10px] px-2 py-0.5 rounded-full border ${badge.color}">${badge.label}</span>
+                            ${!isActive ? '<span class="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 font-semibold flex items-center">Attiva 🚀</span>' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        async function selectBlock(index, title) {
+            if (confirm(`Vuoi forzare la messa in onda immediata del blocco "${title}"?`)) {
+                await sendCommand(`FORCE_INDEX_${index}`);
             }
         }
 
@@ -126,13 +190,30 @@ def index():
 
 @app.route('/api/state')
 def get_state():
+    try:
+        schedule_data = get_current_schedule()
+        sorted_times = sorted(schedule_data.keys())
+        schedule_list = []
+        for idx, t in enumerate(sorted_times):
+            schedule_list.append({
+                "time": t,
+                "title": schedule_data[t]["title"],
+                "type": schedule_data[t]["type"],
+                "index": idx
+            })
+    except Exception as e:
+        print(f"⚠️ Errore caricamento palinsesto: {e}")
+        schedule_list = []
+
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
             try:
-                return jsonify(json.load(f))
+                state = json.load(f)
+                state["schedule"] = schedule_list
+                return jsonify(state)
             except:
-                return jsonify({"status": "ERROR"})
-    return jsonify({"status": "OFFLINE"})
+                return jsonify({"status": "ERROR", "schedule": schedule_list})
+    return jsonify({"status": "OFFLINE", "schedule": schedule_list})
 
 @app.route('/api/command', methods=['POST'])
 def send_command():
