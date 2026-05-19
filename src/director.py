@@ -595,12 +595,14 @@ def main():
                                         "breaking_news_available": False,
                                         "last_update": ""
                                     }
-                                    # Riproduce il rintocco come audio prioritario
-                                    queue_pcm_from_file(chime_file, chime_info, is_breaking_news=True)
-                                    print("🔔 Rintocco orario accodato. Ripristino palinsesto a breve.")
-                                    # Dopo la fine del rintocco il loop normale riprenderà
-                                    # (schedule_interrupt_event è già settato, il generator_worker
-                                    #  avvierà un nuovo ciclo al termine del blocco corrente)
+                                    # Riproduce il rintocco in un thread separato per non bloccare
+                                    # il main loop che deve continuare a drenare la coda verso la FIFO
+                                    def _play_chime(f=chime_file, info=chime_info):
+                                        queue_pcm_from_file(f, info, is_breaking_news=True)
+                                        print("🔔 Rintocco orario completato. Il palinsesto riprenderà a breve.")
+
+                                    threading.Thread(target=_play_chime, daemon=True).start()
+                                    print("🔔 Thread rintocco avviato.")
                                 else:
                                     print(f"⚠️ File rintocco non trovato: {chime_file}")
                             elif cmd == "TRIGGER_BREAKING_NEWS":
@@ -629,8 +631,10 @@ def main():
                                         "breaking_news_available": False,
                                         "last_update": ""
                                     }
-                                    # Carichiamo come Breaking News in modo che non venga abortito da se stesso
-                                    queue_pcm_from_file(bn_file, bn_info, is_breaking_news=True)
+                                    # Carichiamo in un thread separato per non bloccare il main loop
+                                    def _play_bn(f=bn_file, info=bn_info):
+                                        queue_pcm_from_file(f, info, is_breaking_news=True)
+                                    threading.Thread(target=_play_bn, daemon=True).start()
                         except Exception as e:
                             print(f"⚠️ Errore comandi: {e}")
  
