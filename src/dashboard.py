@@ -69,76 +69,115 @@ HTML_TEMPLATE = """
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between">
-                <div>
-                    <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">In Onda Ora</h2>
-                    <div id="current-title" class="text-2xl font-bold text-white mb-2 truncate">Caricamento...</div>
-                </div>
-                <div class="flex items-center text-sm text-slate-400 mt-4">
-                    <span id="current-block" class="px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 mr-2 border border-blue-800">--</span>
-                    Aggiornato: <span id="last-update" class="ml-1">--</span>
-                </div>
-            </div>
-
-            <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-center">
-                <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-4">Controlli di Regia</h2>
-                <div class="flex flex-wrap gap-3">
-                    <button onclick="sendCommand('FORCE_NEXT')" class="flex-1 bg-slate-700 hover:bg-slate-600 transition p-3 rounded-lg font-semibold text-sm flex justify-center items-center">
-                        ⏭️ Salta Blocco
-                    </button>
-                    <button onclick="sendCommand('REGEN_SCHEDULE')" class="flex-1 bg-slate-700 hover:bg-slate-600 transition p-3 rounded-lg font-semibold text-sm flex justify-center items-center">
-                        📅 Rigenera Palinsesto
-                    </button>
-                </div>
-                <div class="mt-3 grid grid-cols-2 gap-3">
-                    <button onclick="sendCommand('TRIGGER_BREAKING_NEWS')" class="col-span-1 bg-red-600/80 hover:bg-red-500 transition border border-red-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
-                        🚨 BREAKING NEWS
-                    </button>
-                    <button id="chime-btn" onclick="triggerChime()" class="col-span-1 bg-amber-600/80 hover:bg-amber-500 transition border border-amber-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(251,191,36,0.3)]">
-                        🔔 Segnale Orario
-                    </button>
-                </div>
-                <div class="mt-5 pt-4 border-t border-slate-700/60">
-                    <h3 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-3">Servizi</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <button onclick="restartService('director')" class="bg-amber-700/80 hover:bg-amber-600 transition border border-amber-600 p-3 rounded-lg font-semibold text-sm">
-                            ↻ Restart Regia
-                        </button>
-                        <button onclick="restartService('stream')" class="bg-cyan-700/80 hover:bg-cyan-600 transition border border-cyan-600 p-3 rounded-lg font-semibold text-sm">
-                            ↻ Restart Stream
-                        </button>
-                        <button onclick="restartService('all')" class="bg-purple-700/80 hover:bg-purple-600 transition border border-purple-600 p-3 rounded-lg font-semibold text-sm">
-                            ↻ Restart Tutto
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sezione Podcast al Volo -->
-            <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between">
-                <div>
+            <!-- Colonna Sinistra (Grande) -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Card Live Monitor -->
+                <div class="glass rounded-xl p-6 shadow-xl flex flex-col">
                     <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-700/50">
                         <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold flex items-center">
-                            🎙️ Podcast Talk al Volo
+                            <span class="flex h-2 w-2 relative mr-2">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                            </span>
+                            🔴 Live Monitor
                         </h2>
-                        <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold uppercase tracking-wider">
-                            Qwen3-TTS
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-bold uppercase tracking-wider">
+                            DIRECT RTMP
                         </span>
                     </div>
-                    <p class="text-xs text-slate-400 mb-4 leading-relaxed">
-                        Digita una tematica (es. <em>il futuro del lavoro</em>). Ollama formulerà il copione e Chiara & Leo condurranno la discussione all'istante.
-                    </p>
-                    <div class="space-y-3">
-                        <textarea id="podcast-topic" rows="3" 
-                            class="w-full bg-slate-900/60 border border-slate-700 focus:border-purple-500 rounded-lg p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition resize-none"
-                            placeholder="Inserisci una tematica stimolante per Chiara e Leo..."></textarea>
+                    <div class="relative w-full aspect-video rounded-lg overflow-hidden border border-slate-700 bg-black/40 shadow-inner">
+                        <iframe class="absolute inset-0 w-full h-full" 
+                            src="https://www.youtube.com/embed/live_stream?channel={{ youtube_channel_id }}&autoplay=0&mute=1" 
+                            frameborder="0" 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                            allowfullscreen>
+                        </iframe>
+                    </div>
+                    <div class="mt-3 flex items-center justify-between text-xs text-slate-400">
+                        <span>Canale: <strong class="text-slate-300">{{ youtube_handle }}</strong></span>
+                        <a href="https://www.youtube.com/{{ youtube_handle }}/live" target="_blank" 
+                            class="text-blue-400 hover:text-blue-300 font-semibold transition flex items-center">
+                            Apri su YouTube ↗️
+                        </a>
                     </div>
                 </div>
-                <div class="mt-4">
-                    <button id="podcast-btn" onclick="launchPodcast()" 
-                        class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm py-3 px-4 rounded-lg transition-all duration-200 flex justify-center items-center shadow-[0_0_15px_rgba(147,51,234,0.3)]">
-                        🚀 Genera e Manda in Onda
-                    </button>
+
+                <!-- Card Controlli di Regia -->
+                <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-center">
+                    <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-4">Controlli di Regia</h2>
+                    <div class="flex flex-wrap gap-3">
+                        <button onclick="sendCommand('FORCE_NEXT')" class="flex-1 bg-slate-700 hover:bg-slate-600 transition p-3 rounded-lg font-semibold text-sm flex justify-center items-center">
+                            ⏭️ Salta Blocco
+                        </button>
+                        <button onclick="sendCommand('REGEN_SCHEDULE')" class="flex-1 bg-slate-700 hover:bg-slate-600 transition p-3 rounded-lg font-semibold text-sm flex justify-center items-center">
+                            📅 Rigenera Palinsesto
+                        </button>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 gap-3">
+                        <button onclick="sendCommand('TRIGGER_BREAKING_NEWS')" class="col-span-1 bg-red-600/80 hover:bg-red-500 transition border border-red-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                            🚨 BREAKING NEWS
+                        </button>
+                        <button id="chime-btn" onclick="triggerChime()" class="col-span-1 bg-amber-600/80 hover:bg-amber-500 transition border border-amber-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+                            🔔 Segnale Orario
+                        </button>
+                    </div>
+                    <div class="mt-5 pt-4 border-t border-slate-700/60">
+                        <h3 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-3">Servizi</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <button onclick="restartService('director')" class="bg-amber-700/80 hover:bg-amber-600 transition border border-amber-600 p-3 rounded-lg font-semibold text-sm">
+                                ↻ Restart Regia
+                            </button>
+                            <button onclick="restartService('stream')" class="bg-cyan-700/80 hover:bg-cyan-600 transition border border-cyan-600 p-3 rounded-lg font-semibold text-sm">
+                                ↻ Restart Stream
+                            </button>
+                            <button onclick="restartService('all')" class="bg-purple-700/80 hover:bg-purple-600 transition border border-purple-600 p-3 rounded-lg font-semibold text-sm">
+                                ↻ Restart Tutto
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Colonna Destra (Stretta) -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Card In Onda Ora -->
+                <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between h-48">
+                    <div>
+                        <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">In Onda Ora</h2>
+                        <div id="current-title" class="text-2xl font-bold text-white mb-2 truncate">Caricamento...</div>
+                    </div>
+                    <div class="flex items-center text-sm text-slate-400 mt-4">
+                        <span id="current-block" class="px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 mr-2 border border-blue-800">--</span>
+                        Aggiornato: <span id="last-update" class="ml-1">--</span>
+                    </div>
+                </div>
+
+                <!-- Card Podcast al Volo -->
+                <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-700/50">
+                            <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold flex items-center">
+                                🎙️ Podcast Talk al Volo
+                            </h2>
+                            <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold uppercase tracking-wider">
+                                Qwen3-TTS
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+                            Digita una tematica (es. <em>il futuro del lavoro</em>). Ollama formulerà il copione e Giulia & Marco condurranno la discussione all'istante.
+                        </p>
+                        <div class="space-y-3">
+                            <textarea id="podcast-topic" rows="3" 
+                                class="w-full bg-slate-900/60 border border-slate-700 focus:border-purple-500 rounded-lg p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition resize-none"
+                                placeholder="Inserisci una tematica stimolante per Giulia e Marco..."></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button id="podcast-btn" onclick="launchPodcast()" 
+                            class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm py-3 px-4 rounded-lg transition-all duration-200 flex justify-center items-center shadow-[0_0_15px_rgba(147,51,234,0.3)]">
+                            🚀 Genera e Manda in Onda
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -331,8 +370,8 @@ HTML_TEMPLATE = """
             let phase = 0;
             const phases = [
                 "🤖 Elaborazione con LLM...",
-                "🎙️ Sintesi Chiara (Qwen3)...",
-                "🎙️ Sintesi Leo (Qwen3)...",
+                "🎙️ Sintesi Giulia (Qwen3)...",
+                "🎙️ Sintesi Marco (Qwen3)...",
                 "🎛️ Unione dei flussi audio..."
             ];
             
@@ -392,7 +431,9 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE)
+    channel_id = os.getenv("YOUTUBE_CHANNEL_ID", "UC_KlYrPJhV-qMmj2Yws1Xrw")
+    handle = os.getenv("YOUTUBE_HANDLE", "@gfiore88")
+    return render_template_string(HTML_TEMPLATE, youtube_channel_id=channel_id, youtube_handle=handle)
 
 @app.route('/api/state')
 def get_state():
