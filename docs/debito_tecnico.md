@@ -1,0 +1,63 @@
+# 📓 Registro dei Debiti Tecnici e Feature Pendenti (NewsicaTV)
+
+Questo documento raccoglie in modo strutturato tutti i **debiti tecnici**, le **fasi di refactoring rimaste appese** e le **feature della Roadmap (MVP 3 & MVP 4)** non ancora implementate. 
+
+L'obiettivo è fornire un archivio chiaro e azionabile con checklist per le lavorazioni future, mantenendo fermo il principio cardine: **Tutto locale, tutto gratuito (Zero Cloud).**
+
+---
+
+## 🧩 1. Refactoring & Architettura Python
+
+### 📻 A. Playout Event Planner (ADR 0019 - Refactor Fase 3b)
+La logica di riproduzione audio regolare è in `playout.py`, ma il sequenziamento (rubrica classica vs show multi-part) è hardcoded nel thread generatore di `director.py` tramite controlli semaforici (`is_multipart.txt`).
+- [ ] **Sviluppare un PlayoutPlanner a Eventi:** Creare una classe o un modulo che traduca il blocco del palinsesto corrente in una sequenza ordinata di oggetti evento polimorfici:
+  ```python
+  class PlayJingle(PlayoutEvent): ...
+  class PlayVoicePart(PlayoutEvent): ...
+  class PlayMusicTrack(PlayoutEvent): ...
+  class UpdateOverlay(PlayoutEvent): ...
+  ```
+- [ ] **Decoppiare il Generatore dalla Coda:** Il generatore deve inserire eventi nella coda del Playout, e il Playout deve processarli sequenzialmente.
+- [ ] **Rimuovere dipendenze semaforiche dirette** come `is_multipart.txt` a favore di metadati strutturati negli eventi.
+
+### ✂️ B. Riduzione e Semplificazione di `director.py` (ADR 0016 - Refactor Fase 4)
+Attualmente `src/director.py` è un file monolitico di oltre 800 righe che fa da supervisore, gestore di rete, controllore FIFO, generatore di segnale orario e player audio sincrono.
+- [ ] **Spostare la gestione del palinsesto (Schedule):** Creare `src/newsica/broadcast/scheduler.py` per gestire l'avanzamento delle fasce orarie e i calcoli delle deadline.
+- [ ] **Spostare la gestione dei file di controllo e overlay:** Creare `src/newsica/broadcast/overlay.py` per isolare la scrittura di `STATE_FILE`, `PROGRAM_FILE`, `NEXT_PROGRAM_FILE` e i file degli accenti colore.
+- [ ] **Spostare la supervisione dei sotto-processi:** Creare un modulo per avviare e monitorare thread o processi secondari (come il ticker).
+- [ ] **Obiettivo finale:** Portare `director.py` sotto le **250 righe di codice** per lasciarlo come puro orchestratore ad alto livello.
+- [ ] **Unit Testing:** Implementare test unitari sul planner e sul selettore di notizie simulando la pipeline senza dover avviare FFmpeg.
+
+---
+
+## 🧠 2. Automazione AI & Agenti (Locali e Gratuiti)
+
+### 🎵 A. Generatore di Musica AI Locale (ADR 0020)
+Il caricamento e l'alternanza dei brani da `assets/ai_music/` sono pronti in `MusicLibrary`, ma manca il motore di generazione.
+- [ ] **Integrazione ACE-Step v1.5:** Creare uno script di background (es. `src/newsica/audio/music_generator.py` o analogo bash) che utilizzi ACE-Step localmente.
+- [ ] **Generazione offline:** Lo script deve generare in anticipo brani da 30-60 secondi nei momenti di minore carico della CPU (o come task schedulato).
+- [ ] **Pipeline di normalizzazione:** Convertire e normalizzare l'audio generato (16-bit PCM, 24kHz o 44.1kHz mono/stereo coerente) prima di salvarlo in `assets/ai_music/` per evitare sbalzi di volume o frequenza in onda.
+
+### 🚨 B. Agente Breaking News Autonomo (MVP 3)
+Il meccanismo di interruzione sincrona a "zero buchi" è stabile nel regista, ma l'innesco è prettamente manuale dalla Dashboard.
+- [ ] **Sviluppare il calcolo dello score d'urgenza:** Creare in `src/breaking_news_agent.py` una logica che valuti le notizie fresche in cache (`tmp/raw_news.json`) calcolando un punteggio:
+  $$\text{score} = \text{freschezza} + \text{peso\_fonte} + \text{parole\_chiave} - \text{duplicati}$$
+- [ ] **Demone di Ingestion periodico:** Eseguire in background un controllo periodico (es. ogni 10-15 minuti) sulle fonti ANSA Ultim'ora.
+- [ ] **Autotrigger:** Se una notizia supera una certa soglia di score, l'agente deve generare autonomamente il bollettino audio e inviare il segnale `BREAKING_NEWS_READY` per interrompere immediatamente il flusso regolare del regista.
+
+### 📅 C. Motore di Palinsesto Giornaliero Dinamico (MVP 3)
+La scaletta quotidiana è generata a partire da una struttura statica (`DEFAULT_SCHEDULE` in `schedule_generator.py`).
+- [ ] **Fasce e formati flessibili:** Rendere il generatore capace di assemblare scalette diverse a seconda del giorno della settimana (es. palinsesto weekend più leggero, rassegna stampa approfondita al mattino, format solo musicali di notte).
+- [ ] **Generazione dinamica dei titoli delle rubriche** basandosi sugli argomenti caldi del giorno.
+
+### 🔍 D. Fact-Checking & Anti-Allucinazione (MVP 3)
+Manca un filtro di validazione editoriale prima della messa in onda dei copioni generati dall'LLM locale.
+- [ ] **Filtro di veridicità e duplicazione:** Sviluppare un modulo (`src/newsica/editorial/fact_checker.py`) per verificare che i fatti descritti dall'LLM corrispondano a dati reali presenti nelle fonti originarie.
+- [ ] **Tracciamento trasparente delle fonti:** Salvare in un archivio strutturato (`archive/aired_log.json`) i link e le agenzie che hanno generato ciascun blocco parlato andato in onda, a scopo di debug e disclosure per le policy di YouTube.
+
+---
+
+## 📺 3. Broadcaster & Regia Video
+
+### 🎨 A. Ripristino Accenti Colore Dinamici in Regia (ADR 0012)
+- [ ] **Integrazione Grafica Overlay:** Il cambio di accento colore nei file in `tmp/accent_*.txt` è pronto, ma l'overlay video di FFmpeg deve essere aggiornato per ricolorare dinamicamente i box grafici (ULTIMORA, orologio, box del programma) in base al personaggio attivo.
