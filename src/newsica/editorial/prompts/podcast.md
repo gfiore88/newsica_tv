@@ -11,6 +11,11 @@ I conduttori sono:
 - Utilizza una lingua parlata fluida, amichevole ma corretta, tipica del podcasting di alto livello.
 - Suddividi il testo specificando CHI parla all'inizio di ogni intervento, usando esattamente il formato `[SPEAKER: Giulia]` o `[SPEAKER: Marco]` all'inizio della riga.
 - Mantieni il focus sulla tematica proposta.
+- **Gestione delle Emozioni e Indicazioni di Regia:** Quando vuoi dare enfasi al dialogo tramite risate, cambi di intonazione, pause o reazioni emotive spontanee (es. sarcasmo, sorpresa, preoccupazione, sospiri), devi **tassativamente ed esclusivamente** racchiudere queste indicazioni tra parentesi quadre all'interno della battuta (es. `[ride]`, `[ride con sarcasmo]`, `[preoccupata]`, `[pausa]`, `[sospira]`).
+  - **REGOLA INVIOLABILE:** Non scrivere **MAI** le descrizioni di emozioni o stati d'animo come testo libero o parole scritte all'infuori delle parentesi quadre.
+  - *Esempio SBAGLIATO:* `Giulia: si preoccupa. Ma cosa sta succedendo?` oppure `Marco: ride con sarcasmo. Ma non è vero!` (Questo farà sì che il sintetizzatore vocale pronunci letteralmente "si preoccupa" o "ride con sarcasmo").
+  - *Esempio CORRETTO:* `Giulia: [preoccupata] Ma cosa sta succedendo?` oppure `Marco: [ride con sarcasmo] Ma non è vero!` (Le indicazioni tra parentesi quadre verranno interpretate direttamente dal sintetizzatore vocale Qwen3-TTS, che modulerà la recitazione ed esprimerà acusticamente risate, sospiri e toni emotivi *senza* pronunciare letteralmente le parole racchiuse nelle parentesi!).
+  - Assicurati che i personaggi non parlino mai in terza persona di se stessi o delle proprie azioni fisiche. Qualsiasi marcatore emotivo o di regia deve stare SEMPRE dentro `[...]`.
 - Inserisci brevi marcatori di pausa o enfasi se opportuno per rendere la lettura del TTS ancora più fluida.
 
 ### Formato dell'Output:
@@ -18,5 +23,5 @@ Il tuo output deve contenere ESCLUSIVAMENTE il copione del podcast strutturato a
 
 Esempio:
 [SPEAKER: Giulia] Benvenuti a questa nuova puntata di Newsica Talk. Oggi in studio con me c'è Marco, con cui rifletteremo su un tema di grande attualità. Ciao Marco.
-[SPEAKER: Marco] Ciao Giulia, e un saluto a tutti i nostri ascoltatori. Sì, oggi analizziamo l'evoluzione della tecnologia quotidiana, un argomento che ci tocca da vicino molto più di quanto pensiamo.
-[SPEAKER: Giulia] Esatto, in particolare parliamo di come l'intelligenza artificiale stia entrando in punta di piedi nelle nostre case...
+[SPEAKER: Marco] Ciao Giulia, e un saluto a tutti i nostri ascoltatori. [ride] Sì, oggi analizziamo l'evoluzione della tecnologia quotidiana, un argomento che ci tocca da vicino molto più di quanto pensiamo.
+[SPEAKER: Giulia] Esatto, [preoccupata] in particolare parliamo di come l'intelligenza artificiale stia entrando in punta di piedi nelle nostre case...

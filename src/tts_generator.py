@@ -116,7 +116,7 @@ def generate_audio():
                 instruct = get_qwen_speaker_instruction(speaker)
                 
                 print(f"🎙️ Sintesi Turno {seg_num}/{len(segments)} | Speaker: {speaker}")
-                clean_text = prepare_text_for_tts(text)
+                clean_text = prepare_text_for_tts(text, keep_brackets=True)
                 
                 success = generate_voice_design_segment(clean_text, instruct, seg_file)
                 if success and os.path.exists(seg_file):
