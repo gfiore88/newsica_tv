@@ -10,6 +10,8 @@ venv/
 env/
 .env
 .venv/
+.venv_tts_spike/
+.external/
 
 # Media Files (Audio / Video generati localmente)
 *.mp4
@@ -25,6 +27,8 @@ tmp_video/
 output/
 tmp/
 runtime/
+!assets/voice_refs/
+!assets/voice_refs/*.wav
 
 # Logs
 *.log

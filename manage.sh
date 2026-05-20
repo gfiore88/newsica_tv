@@ -31,6 +31,7 @@ function show_help() {
   echo -e "  ${YELLOW}restart${NC}   Ferma e riavvia tutto in modo pulito"
   echo -e "  ${CYAN}status${NC}    Visualizza lo stato attuale e i PID dei vari componenti"
   echo -e "  ${BLUE}logs${NC}      Mostra le ultime righe dei log principali"
+  echo -e "  ${PURPLE}tts-spike${NC} Genera/apre il confronto TTS sperimentale"
   echo ""
 }
 
@@ -176,6 +177,31 @@ function do_logs() {
   echo ""
 }
 
+function do_tts_spike() {
+  local spike_python="$BASE_DIR/.venv_tts_spike/bin/python"
+  if [ ! -x "$spike_python" ]; then
+    echo -e "${RED}❌ Ambiente spike non trovato in .venv_tts_spike.${NC}"
+    echo -e "Crea l'ambiente con: uv venv --python /opt/homebrew/bin/python3.12 .venv_tts_spike"
+    echo -e "Poi installa: uv pip install --python .venv_tts_spike/bin/python numpy soundfile scipy torch torchaudio pocket-tts git+https://github.com/resemble-ai/chatterbox.git"
+    exit 1
+  fi
+
+  local giulia_ref="$BASE_DIR/assets/voice_refs/giulia_reference.wav"
+  local marco_ref="$BASE_DIR/assets/voice_refs/marco_reference.wav"
+
+  if [ -f "$giulia_ref" ] && [ -f "$marco_ref" ]; then
+    SPIKE_KYUTAI_GIULIA_VOICE=lola \
+    SPIKE_KYUTAI_MARCO_VOICE=giovanni \
+    SPIKE_CHATTERBOX_GIULIA_VOICE="$giulia_ref" \
+    SPIKE_CHATTERBOX_MARCO_VOICE="$marco_ref" \
+      "$spike_python" "$BASE_DIR/src/tts_spike.py" --engines kyutai,chatterbox,fish-s2 --open
+  else
+    SPIKE_KYUTAI_GIULIA_VOICE=lola \
+    SPIKE_KYUTAI_MARCO_VOICE=giovanni \
+      "$spike_python" "$BASE_DIR/src/tts_spike.py" --engines kyutai,chatterbox,fish-s2 --open
+  fi
+}
+
 case "$1" in
   start)
     do_start
@@ -195,6 +221,9 @@ case "$1" in
     ;;
   logs)
     do_logs
+    ;;
+  tts-spike)
+    do_tts_spike
     ;;
   *)
     show_help

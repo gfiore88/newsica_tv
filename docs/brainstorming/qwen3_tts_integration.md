@@ -1,5 +1,7 @@
 # 🎙️ Brainstorming & Roadmap: Integrazione Qwen3-TTS e Podcast Multi-Speaker in Italiano
 
+> Aggiornamento 2026-05-20: questa direzione e' stata superata da ADR 0021. Qwen3-TTS locale non viene usato come motore podcast definitivo; la pipeline podcast usa Chatterbox Multilingual con reference audio reali per Giulia/Marco e fallback Kokoro. Fish Audio S2 e' stato valutato ma scartato su questa macchina per prestazioni MPS insufficienti.
+
 Questo documento analizza in dettaglio l'integrazione di **Qwen3-TTS** in NewsicaTV per l'abilitazione di rubriche in formato **Podcast Talk Show Multi-Speaker**. Qui facciamo brainstorming sulla scelta della libreria, definiamo l'architettura tecnica e tracciamo una roadmap evolutiva.
 
 ---

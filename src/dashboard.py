@@ -86,8 +86,8 @@ HTML_TEMPLATE = """
                         </span>
                     </div>
                     <div class="relative w-full aspect-video rounded-lg overflow-hidden border border-slate-700 bg-black/40 shadow-inner">
-                        <iframe class="absolute inset-0 w-full h-full" 
-                            src="https://www.youtube.com/embed/live_stream?channel={{ youtube_channel_id }}&autoplay=0&mute=1" 
+                        <iframe id="youtube-live-player" class="absolute inset-0 w-full h-full" 
+                            src="https://www.youtube.com/embed/live_stream?channel={{ youtube_channel_id }}&autoplay=1&mute=1&enablejsapi=1&playsinline=1&controls=1&rel=0" 
                             frameborder="0" 
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                             allowfullscreen>
@@ -95,10 +95,15 @@ HTML_TEMPLATE = """
                     </div>
                     <div class="mt-3 flex items-center justify-between text-xs text-slate-400">
                         <span>Canale: <strong class="text-slate-300">{{ youtube_handle }}</strong></span>
-                        <a href="https://www.youtube.com/{{ youtube_handle }}/live" target="_blank" 
-                            class="text-blue-400 hover:text-blue-300 font-semibold transition flex items-center">
-                            Apri su YouTube ↗️
-                        </a>
+                        <div class="flex items-center gap-3">
+                            <button onclick="activateLiveAudio()" class="text-emerald-400 hover:text-emerald-300 font-semibold transition">
+                                Attiva audio
+                            </button>
+                            <a href="https://www.youtube.com/{{ youtube_handle }}/live" target="_blank" 
+                                class="text-blue-400 hover:text-blue-300 font-semibold transition flex items-center">
+                                Apri su YouTube ↗️
+                            </a>
+                        </div>
                     </div>
                 </div>
 
@@ -160,11 +165,11 @@ HTML_TEMPLATE = """
                                 🎙️ Podcast Talk al Volo
                             </h2>
                             <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold uppercase tracking-wider">
-                                Qwen3-TTS
+                                Chatterbox
                             </span>
                         </div>
                         <p class="text-xs text-slate-400 mb-4 leading-relaxed">
-                            Digita una tematica (es. <em>il futuro del lavoro</em>). Ollama formulerà il copione e Giulia & Marco condurranno la discussione all'istante.
+                            Digita una tematica (es. <em>il futuro del lavoro</em>). Ollama formulerà il copione e Chatterbox darà voce a Giulia & Marco.
                         </p>
                         <div class="space-y-3">
                             <textarea id="podcast-topic" rows="3" 
@@ -177,6 +182,7 @@ HTML_TEMPLATE = """
                             class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm py-3 px-4 rounded-lg transition-all duration-200 flex justify-center items-center shadow-[0_0_15px_rgba(147,51,234,0.3)]">
                             🚀 Genera e Manda in Onda
                         </button>
+                        <div id="podcast-last-time" class="mt-2 text-[11px] text-slate-500 text-center min-h-[16px]"></div>
                     </div>
                 </div>
             </div>
@@ -201,12 +207,42 @@ HTML_TEMPLATE = """
         </div>
     </div>
 
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script>
+        let youtubeLivePlayer = null;
+
+        function onYouTubeIframeAPIReady() {
+            youtubeLivePlayer = new YT.Player('youtube-live-player', {
+                events: {
+                    onReady: (event) => {
+                        event.target.mute();
+                        event.target.playVideo();
+                    }
+                }
+            });
+        }
+
+        function activateLiveAudio() {
+            if (youtubeLivePlayer && youtubeLivePlayer.unMute) {
+                youtubeLivePlayer.unMute();
+                youtubeLivePlayer.setVolume(100);
+                youtubeLivePlayer.playVideo();
+                logMsg('Audio live attivato.');
+            }
+        }
+
         function logMsg(msg) {
             const logPanel = document.getElementById('action-log');
             const time = new Date().toLocaleTimeString();
             logPanel.innerHTML += `[${time}] ${msg}<br>`;
             logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        function formatSeconds(seconds) {
+            const total = Math.max(0, Math.round(Number(seconds) || 0));
+            const minutes = Math.floor(total / 60);
+            const remaining = total % 60;
+            return minutes > 0 ? `${minutes}m ${remaining}s` : `${remaining}s`;
         }
 
         async function fetchState() {
@@ -362,26 +398,34 @@ HTML_TEMPLATE = """
             }
 
             const btn = document.getElementById('podcast-btn');
+            const lastTime = document.getElementById('podcast-last-time');
             const originalText = btn.innerHTML;
             btn.disabled = true;
             btn.classList.add('opacity-60');
             
             // Fasi del caricamento animato
-            let phase = 0;
+            const startedAt = performance.now();
             const phases = [
                 "🤖 Elaborazione con LLM...",
-                "🎙️ Sintesi Giulia (Qwen3)...",
-                "🎙️ Sintesi Marco (Qwen3)...",
-                "🎛️ Unione dei flussi audio..."
+                "🎙️ Sintesi con Chatterbox...",
+                "🎛️ Unione dei segmenti audio...",
+                "📡 Invio alla regia..."
             ];
             
-            btn.innerHTML = `⏳ ${phases[0]}`;
+            const updatePodcastTimer = () => {
+                const elapsed = (performance.now() - startedAt) / 1000;
+                const phase = Math.floor(elapsed / 6) % phases.length;
+                btn.innerHTML = `⏳ ${phases[phase]} · ${formatSeconds(elapsed)}`;
+            };
+            updatePodcastTimer();
             const interval = setInterval(() => {
-                phase = (phase + 1) % phases.length;
-                btn.innerHTML = `⏳ ${phases[phase]}`;
-            }, 6000);
+                updatePodcastTimer();
+            }, 1000);
 
             logMsg(`Richiesta generazione podcast su tematica: "${topic}"`);
+            if (lastTime) {
+                lastTime.textContent = 'Generazione in corso...';
+            }
 
             try {
                 const res = await fetch('/api/podcast', {
@@ -393,8 +437,14 @@ HTML_TEMPLATE = """
                 
                 const data = await res.json();
                 if (data.status === 'OK') {
-                    logMsg(`🎙️ Podcast in onda: "${data.title}"`);
-                    btn.innerHTML = '🚀 Mandato in onda!';
+                    const totalTime = formatSeconds(data.generation_seconds);
+                    const llmTime = formatSeconds(data.llm_seconds);
+                    const ttsTime = formatSeconds(data.tts_seconds);
+                    logMsg(`🎙️ Podcast in onda: "${data.title}" generato in ${totalTime} (LLM ${llmTime}, TTS ${ttsTime})`);
+                    if (lastTime) {
+                        lastTime.textContent = `Ultimo podcast generato in ${totalTime} · LLM ${llmTime} · TTS ${ttsTime}`;
+                    }
+                    btn.innerHTML = `🚀 Mandato in onda in ${totalTime}`;
                     btn.classList.remove('opacity-60');
                     btn.classList.add('bg-green-600/80', 'border-green-500');
                     topicInput.value = ''; // svuota l'input
@@ -405,6 +455,9 @@ HTML_TEMPLATE = """
                     }, 3000);
                 } else {
                     logMsg(`❌ Errore podcast al volo: ${data.message}`);
+                    if (lastTime && data.elapsed_seconds) {
+                        lastTime.textContent = `Errore dopo ${formatSeconds(data.elapsed_seconds)}`;
+                    }
                     btn.innerHTML = '❌ Errore';
                     setTimeout(() => { 
                         btn.innerHTML = originalText; 
@@ -415,6 +468,10 @@ HTML_TEMPLATE = """
             } catch (err) {
                 clearInterval(interval);
                 logMsg(`❌ Errore fetch: ${err}`);
+                if (lastTime) {
+                    const elapsed = (performance.now() - startedAt) / 1000;
+                    lastTime.textContent = `Errore dopo ${formatSeconds(elapsed)}`;
+                }
                 btn.innerHTML = originalText;
                 btn.disabled = false;
                 btn.classList.remove('opacity-60');
@@ -525,7 +582,8 @@ def trigger_chime():
 
 @app.route('/api/podcast', methods=['POST'])
 def trigger_podcast():
-    """Genera il copione del podcast via Ollama, lo sintetizza via Qwen3-TTS e lo manda in onda."""
+    """Genera il copione del podcast via Ollama, lo sintetizza e lo manda in onda."""
+    total_start = time.perf_counter()
     data = request.json or {}
     topic = data.get("topic", "").strip()
     if not topic:
@@ -545,7 +603,7 @@ def trigger_podcast():
         system_prompt = "Sei un duo di conduttori radiofonici e podcaster professionisti di NewsicaTV. Genera un copione per una rubrica stile podcast in formato dialogo a due voci Giulia e Marco."
 
     # 2. Prepara il prompt per Ollama
-    user_prompt = f"Scrivi un copione per il podcast 'Newsica Talk' sulla seguente tematica descritta dall'utente:\n\n\"{topic}\"\n\nRispetta rigorosamente eventuali indicazioni di durata o brevità fornite dall'utente nella tematica. Se non specificato, sviluppa un dialogo naturale e ricco con un numero di parole adeguato alla durata del podcast così come richiesto. Se la durata non è definita dall'utente, sviluppa un dialogo di circa 250-350 parole. Il dialogo deve essere diviso a turni di parola tra Giulia e Marco usando esattamente i tag [SPEAKER: Giulia] e [SPEAKER: Marco] all'inizio di ogni battuta. IMPORTANTE: I dialoghi devono essere in lingua italiana."
+    user_prompt = f"Scrivi un copione per il podcast 'Newsica Talk' sulla seguente tematica descritta dall'utente:\n\n\"{topic}\"\n\nRispetta rigorosamente eventuali indicazioni di durata o brevità fornite dall'utente nella tematica. Se non specificato, sviluppa un dialogo naturale e ricco con un numero di parole adeguato alla durata del podcast così come richiesto. Se la durata non è definita dall'utente, sviluppa un dialogo di circa 250-350 parole. Il dialogo deve essere diviso a turni di parola tra Giulia e Marco usando esattamente i tag [SPEAKER: Giulia] e [SPEAKER: Marco] all'inizio di ogni battuta. IMPORTANTE: I dialoghi devono essere in lingua italiana, con accenti grafici corretti per la sintesi vocale (`è`, `perché`, `cioè`, `può`, `più`, `né`, `sì`, `dà`, `lì`, `là`). Per temi tecnologici preferisci `intelligenza artificiale` o `IA` a `AI`, ed espandi le sigle tecniche alla prima occorrenza."
 
     # 3. Interroga Ollama locale
     import requests
@@ -565,15 +623,25 @@ def trigger_podcast():
     }
 
     script_text = ""
+    llm_start = time.perf_counter()
     try:
         response = requests.post(ollama_url, json=payload, timeout=60)
         response.raise_for_status()
         script_text = response.json().get("response", "").strip()
     except Exception as e:
-        return jsonify({"status": "ERROR", "message": f"Errore di connessione a Ollama: {e}"}), 500
+        return jsonify({
+            "status": "ERROR",
+            "message": f"Errore di connessione a Ollama: {e}",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
+    llm_seconds = time.perf_counter() - llm_start
 
     if not script_text:
-        return jsonify({"status": "ERROR", "message": "Ollama ha restituito un copione vuoto."}), 500
+        return jsonify({
+            "status": "ERROR",
+            "message": "Ollama ha restituito un copione vuoto.",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
 
     # 4. Scrivi il copione in tmp/script.txt
     script_file = os.path.join(TMP_DIR, "script.txt")
@@ -581,9 +649,14 @@ def trigger_podcast():
         with open(script_file, "w", encoding="utf-8") as sf:
             sf.write(script_text)
     except Exception as e:
-        return jsonify({"status": "ERROR", "message": f"Scrittura copione fallita: {e}"}), 500
+        return jsonify({
+            "status": "ERROR",
+            "message": f"Scrittura copione fallita: {e}",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
 
     # 5. Genera l'audio via tts_generator.py podcast
+    tts_start = time.perf_counter()
     try:
         subprocess.run(
             [PYTHON_EXEC, os.path.join(BASE_DIR, "src", "tts_generator.py"), "podcast"],
@@ -595,12 +668,18 @@ def trigger_podcast():
         return jsonify({
             "status": "ERROR", 
             "message": "Sintesi audio fallita.", 
-            "details": e.stderr
+            "details": e.stderr,
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
         }), 500
+    tts_seconds = time.perf_counter() - tts_start
 
     podcast_audio_file = os.path.join(TMP_DIR, "audio.wav")
     if not os.path.exists(podcast_audio_file):
-        return jsonify({"status": "ERROR", "message": "Audio del podcast non trovato dopo la sintesi."}), 500
+        return jsonify({
+            "status": "ERROR",
+            "message": "Audio del podcast non trovato dopo la sintesi.",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
 
     # 6. Estrai una versione corta del titolo
     short_title = topic[:30] + "..." if len(topic) > 30 else topic
@@ -612,9 +691,20 @@ def trigger_podcast():
         with open(CONTROL_FILE, "w") as f:
             f.write(cmd)
     except Exception as e:
-        return jsonify({"status": "ERROR", "message": f"Scrittura comando regia fallita: {e}"}), 500
+        return jsonify({
+            "status": "ERROR",
+            "message": f"Scrittura comando regia fallita: {e}",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
 
-    return jsonify({"status": "OK", "title": pod_display_title})
+    total_seconds = time.perf_counter() - total_start
+    return jsonify({
+        "status": "OK",
+        "title": pod_display_title,
+        "generation_seconds": round(total_seconds, 1),
+        "llm_seconds": round(llm_seconds, 1),
+        "tts_seconds": round(tts_seconds, 1),
+    })
 
 def find_pids(patterns):
     pids = set()

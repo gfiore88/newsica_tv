@@ -334,6 +334,29 @@ def apply_preventive_fade_out_and_write(fifo_fd):
         except BrokenPipeError:
             raise
 
+def stream_file_to_fifo(fifo_fd, media_file, label):
+    cmd_ffmpeg = [
+        FFMPEG_CMD,
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", media_file,
+        "-f", "s16le",
+        "-ar", str(PCM_SAMPLE_RATE),
+        "-ac", str(PCM_CHANNELS),
+        "pipe:1"
+    ]
+    proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
+    chunks = 0
+    while True:
+        chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
+        if not chunk_data:
+            break
+        write_fifo_chunk(fifo_fd, chunk_data)
+        chunks += 1
+    proc.wait()
+    print(f"🎧 {label} riprodotto ({chunks} chunks).")
+    return chunks
+
 def enqueue_current_schedule_metadata():
     audio_queue.put({"type": "metadata", "state": get_current_schedule_state()})
     return True
@@ -830,7 +853,7 @@ def main():
                                     apply_preventive_fade_out_and_write(fifo_fd)
                                     pod_info = {
                                         "status": "ON_AIR",
-                                        "current_block": "news",
+                                        "current_block": "podcast",
                                         "current_title": pod_title,
                                         "next_block": "Ripresa Palinsesto",
                                         "next_start": "",
@@ -855,32 +878,16 @@ def main():
                                             pf.write(pod_title.upper())
                                         with open(NEXT_PROGRAM_FILE, "w") as nf:
                                             nf.write("Ripresa Palinsesto")
-                                        write_accent_files("news")
+                                        write_accent_files("podcast")
                                     except Exception as e:
                                         print(f"⚠️ Errore scrittura stato per podcast al volo: {e}")
 
-                                    # Riproduce il podcast direttamente sulla FIFO (pausa temporanea ma preserva la coda)
-                                    cmd_ffmpeg = [
-                                        FFMPEG_CMD,
-                                        "-hide_banner",
-                                        "-loglevel", "error",
-                                        "-i", pod_file,
-                                        "-f", "s16le",
-                                        "-ar", str(PCM_SAMPLE_RATE),
-                                        "-ac", str(PCM_CHANNELS),
-                                        "pipe:1"
-                                    ]
+                                    # Riproduce jingle di apertura, podcast e stacco finale direttamente sulla FIFO.
                                     try:
-                                        proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
-                                        pod_chunks = 0
-                                        while True:
-                                            chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
-                                            if not chunk_data:
-                                                break
-                                            write_fifo_chunk(fifo_fd, chunk_data)
-                                            pod_chunks += 1
-                                        proc.wait()
-                                        print(f"🎙️ Podcast al volo riprodotto con successo ({pod_chunks} chunks).")
+                                        jingle_file, jingle_label = get_jingle_for_block("podcast")
+                                        stream_file_to_fifo(fifo_fd, jingle_file, jingle_label)
+                                        stream_file_to_fifo(fifo_fd, pod_file, "podcast al volo")
+                                        stream_file_to_fifo(fifo_fd, str(CLASSIC_JINGLE_FILE), "stacco_uscita")
                                     except Exception as e:
                                         print(f"⚠️ Errore riproduzione podcast al volo: {e}")
 

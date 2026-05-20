@@ -49,8 +49,8 @@
       "sources": [
         "meteo"
       ],
-      "jingle": "assets/jingles/newsicatv_jingle.mp3",
-      "jingle_label": "jingle NewsicaTV",
+      "jingle": "assets/jingles/jingle_meteo.mp3",
+      "jingle_label": "jingle meteo",
       "intro_template": "Apriamo {title}, il nostro aggiornamento meteo su NewsicaTV.",
       "accent": "0x38bdf8",
       "format": "single_part"
@@ -104,21 +104,20 @@
     },
     {
       "id": "podcast",
-      "display_name": "Chiara & Leo",
+      "display_name": "Giulia & Marco",
       "rubric_type": "podcast",
-      "voice": "qwen3",
+      "voice": "chatterbox",
       "speed": 1.0,
       "prompt": "editorial/prompts/podcast.md",
       "sources": [
         "ansa_tecnologia",
         "ansa_cultura"
       ],
-      "jingle": "assets/jingles/newsicatv_jingle.mp3",
-      "jingle_label": "jingle NewsicaTV",
+      "jingle": "assets/jingles/jingle_podcast.mp3",
+      "jingle_label": "jingle podcast",
       "intro_template": "È ora di {title}, lo show podcast multi-speaker di NewsicaTV.",
       "accent": "0xf59e0b",
       "format": "podcast"
     }
   ]
 }
-

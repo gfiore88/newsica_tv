@@ -37,12 +37,14 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [ ] **Ticker Intelligente**: Pipeline autonoma (`NewsCollector -> TickerSummarizer`) per visualizzare in basso "Ultime, Meteo, Prossimo blocco" senza limiti statici.
 - [ ] **Fact-Check e Log Fonti**: Filtro anti-allucinazione interno prima del broadcast per verificare data, fonte, duplicati e veridicità.
 
-## MVP 3.5 — Qwen3-TTS & Podcast Multi-Speaker
-**Obiettivo:** Introdurre rubriche speciali a due voci (podcast) interamente autogestite localmente e a costo zero tramite Qwen3-TTS.
-- [ ] **Wrapper Qwen3-TTS**: Sviluppare il modulo di sintesi vocale locale (`qwen_tts.py`) con supporto per accelerazione hardware MPS.
-- [ ] **Preset Voci Italiane (Chiara & Leo)**: Definire i profili vocali stabili in italiano via Voice Design semantico nel registro dei personaggi.
-- [ ] **Parser Dialoghi a Turni**: Implementare in `tts_generator.py` il parsing dei tag `[SPEAKER: Nome]` per spezzare il copione in battute alternate.
-- [ ] **Mixer Audio Conversazionale**: Concatenare i singoli segmenti vocali introducendo micro-pause realistiche (0.3s di silenzio a 24kHz) per rendere naturale il dialogo.
+## MVP 3.5 — Chatterbox & Podcast a Due Voci
+**Obiettivo:** Introdurre rubriche speciali a due voci (podcast) interamente autogestite localmente e a costo zero tramite Chatterbox Multilingual, con fallback Kokoro.
+- [x] **Spike TTS locale**: Confrontati Fish Audio S2, Kyutai Pocket TTS e Chatterbox Multilingual su copione podcast italiano.
+- [x] **Provider Chatterbox Podcast**: Aggiunto modulo di sintesi locale con reference audio per Giulia e Marco.
+- [x] **Reference Voci Italiane (Giulia & Marco)**: Usare `assets/voice_refs/giulia_reference.wav` e `assets/voice_refs/marco_reference.wav` come identita' vocali stabili.
+- [x] **Parser Dialoghi a Turni**: Implementare in `tts_generator.py` il parsing dei tag `[SPEAKER: Nome]` per spezzare il copione in battute alternate.
+- [x] **Mixer Audio Conversazionale**: Concatenare i singoli segmenti vocali introducendo micro-pause realistiche (0.3s di silenzio) per rendere naturale il dialogo.
+- [x] **Fallback Kokoro**: Se Chatterbox non e' disponibile, generare il podcast con Kokoro usando voci locali Giulia/Marco.
 - [ ] **Aggancio Playout & Grafica**: Configurare il Director per pianificare le nuove rubriche Podcast ("Newsica Talk", "L'Angolo del Benessere") e mostrare un overlay video personalizzato.
 
 ## MVP 4 — Automazione Editoriale e Strumenti di Regia
