@@ -62,13 +62,13 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body class="p-4 md:p-8">
-    <div class="max-w-6xl mx-auto">
+    <div class="max-w-7xl mx-auto">
         <header class="flex items-center justify-between mb-8 pb-4 border-b border-slate-700">
             <h1 class="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">NewsicaTV Dashboard</h1>
             <div id="status-badge" class="px-3 py-1 rounded-full text-sm font-bold bg-slate-700 text-slate-300">OFFLINE</div>
         </header>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between">
                 <div>
                     <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">In Onda Ora</h2>
@@ -111,6 +111,34 @@ HTML_TEMPLATE = """
                             ↻ Restart Tutto
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Sezione Podcast al Volo -->
+            <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-700/50">
+                        <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold flex items-center">
+                            🎙️ Podcast Talk al Volo
+                        </h2>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold uppercase tracking-wider">
+                            Qwen3-TTS
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+                        Digita una tematica (es. <em>il futuro del lavoro</em>). Ollama formulerà il copione e Chiara & Leo condurranno la discussione all'istante.
+                    </p>
+                    <div class="space-y-3">
+                        <textarea id="podcast-topic" rows="3" 
+                            class="w-full bg-slate-900/60 border border-slate-700 focus:border-purple-500 rounded-lg p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition resize-none"
+                            placeholder="Inserisci una tematica stimolante per Chiara e Leo..."></textarea>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <button id="podcast-btn" onclick="launchPodcast()" 
+                        class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm py-3 px-4 rounded-lg transition-all duration-200 flex justify-center items-center shadow-[0_0_15px_rgba(147,51,234,0.3)]">
+                        🚀 Genera e Manda in Onda
+                    </button>
                 </div>
             </div>
         </div>
@@ -286,6 +314,74 @@ HTML_TEMPLATE = """
             }
         }
 
+        async function launchPodcast() {
+            const topicInput = document.getElementById('podcast-topic');
+            const topic = topicInput.value.trim();
+            if (!topic) {
+                alert('Inserisci una descrizione della tematica per il podcast!');
+                return;
+            }
+
+            const btn = document.getElementById('podcast-btn');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.classList.add('opacity-60');
+            
+            // Fasi del caricamento animato
+            let phase = 0;
+            const phases = [
+                "🤖 Elaborazione con LLM...",
+                "🎙️ Sintesi Chiara (Qwen3)...",
+                "🎙️ Sintesi Leo (Qwen3)...",
+                "🎛️ Unione dei flussi audio..."
+            ];
+            
+            btn.innerHTML = `⏳ ${phases[0]}`;
+            const interval = setInterval(() => {
+                phase = (phase + 1) % phases.length;
+                btn.innerHTML = `⏳ ${phases[phase]}`;
+            }, 6000);
+
+            logMsg(`Richiesta generazione podcast su tematica: "${topic}"`);
+
+            try {
+                const res = await fetch('/api/podcast', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic })
+                });
+                clearInterval(interval);
+                
+                const data = await res.json();
+                if (data.status === 'OK') {
+                    logMsg(`🎙️ Podcast in onda: "${data.title}"`);
+                    btn.innerHTML = '🚀 Mandato in onda!';
+                    btn.classList.remove('opacity-60');
+                    btn.classList.add('bg-green-600/80', 'border-green-500');
+                    topicInput.value = ''; // svuota l'input
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        btn.classList.remove('bg-green-600/80', 'border-green-500');
+                    }, 3000);
+                } else {
+                    logMsg(`❌ Errore podcast al volo: ${data.message}`);
+                    btn.innerHTML = '❌ Errore';
+                    setTimeout(() => { 
+                        btn.innerHTML = originalText; 
+                        btn.disabled = false; 
+                        btn.classList.remove('opacity-60'); 
+                    }, 3000);
+                }
+            } catch (err) {
+                clearInterval(interval);
+                logMsg(`❌ Errore fetch: ${err}`);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                btn.classList.remove('opacity-60');
+            }
+        }
+
         setInterval(fetchState, 2000);
         fetchState();
 
@@ -385,6 +481,99 @@ def trigger_chime():
         return jsonify({"status": "ERROR", "message": f"Scrittura controllo fallita: {e}"}), 500
 
     return jsonify({"status": "OK", "text": text})
+
+@app.route('/api/podcast', methods=['POST'])
+def trigger_podcast():
+    """Genera il copione del podcast via Ollama, lo sintetizza via Qwen3-TTS e lo manda in onda."""
+    data = request.json or {}
+    topic = data.get("topic", "").strip()
+    if not topic:
+        return jsonify({"status": "ERROR", "message": "Nessuna tematica fornita."}), 400
+
+    # 1. Carica il prompt di sistema
+    prompt_path = os.path.join(BASE_DIR, "src", "newsica", "editorial", "prompts", "podcast.md")
+    system_prompt = ""
+    if os.path.exists(prompt_path):
+        try:
+            with open(prompt_path, "r", encoding="utf-8") as pf:
+                system_prompt = pf.read()
+        except Exception as e:
+            print(f"⚠️ Impossibile leggere il prompt del podcast: {e}")
+    
+    if not system_prompt:
+        system_prompt = "Sei un duo di conduttori radiofonici e podcaster professionisti di NewsicaTV. Genera un copione per una rubrica stile podcast in formato dialogo a due voci Giulia e Marco."
+
+    # 2. Prepara il prompt per Ollama
+    user_prompt = f"Scrivi un copione per il podcast 'Newsica Talk' sulla seguente tematica descritta dall'utente:\n\n\"{topic}\"\n\nRispetta rigorosamente eventuali indicazioni di durata o brevità fornite dall'utente nella tematica. Se non specificato, sviluppa un dialogo naturale e ricco di circa 250-350 parole. Il dialogo deve essere diviso a turni di parola tra Giulia e Marco usando esattamente i tag [SPEAKER: Giulia] e [SPEAKER: Marco] all'inizio di ogni battuta."
+
+    # 3. Interroga Ollama locale
+    import requests
+    ollama_url = "http://localhost:11434/api/generate"
+    model_name = os.getenv("OLLAMA_MODEL", "gemma3:12b")
+    
+    payload = {
+        "model": model_name,
+        "system": system_prompt,
+        "prompt": user_prompt,
+        "stream": False,
+        "keep_alive": "30m",
+        "options": {
+            "temperature": 0.5,
+            "num_predict": 600,
+        },
+    }
+
+    script_text = ""
+    try:
+        response = requests.post(ollama_url, json=payload, timeout=60)
+        response.raise_for_status()
+        script_text = response.json().get("response", "").strip()
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": f"Errore di connessione a Ollama: {e}"}), 500
+
+    if not script_text:
+        return jsonify({"status": "ERROR", "message": "Ollama ha restituito un copione vuoto."}), 500
+
+    # 4. Scrivi il copione in tmp/script.txt
+    script_file = os.path.join(TMP_DIR, "script.txt")
+    try:
+        with open(script_file, "w", encoding="utf-8") as sf:
+            sf.write(script_text)
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": f"Scrittura copione fallita: {e}"}), 500
+
+    # 5. Genera l'audio via tts_generator.py podcast
+    try:
+        subprocess.run(
+            [PYTHON_EXEC, os.path.join(BASE_DIR, "src", "tts_generator.py"), "podcast"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        return jsonify({
+            "status": "ERROR", 
+            "message": "Sintesi audio fallita.", 
+            "details": e.stderr
+        }), 500
+
+    podcast_audio_file = os.path.join(TMP_DIR, "audio.wav")
+    if not os.path.exists(podcast_audio_file):
+        return jsonify({"status": "ERROR", "message": "Audio del podcast non trovato dopo la sintesi."}), 500
+
+    # 6. Estrai una versione corta del titolo
+    short_title = topic[:30] + "..." if len(topic) > 30 else topic
+    pod_display_title = f"Talk: {short_title}"
+
+    # 7. Invia comando alla regia
+    cmd = f"PLAY_PODCAST_IMMEDIATE|{podcast_audio_file}|{pod_display_title}"
+    try:
+        with open(CONTROL_FILE, "w") as f:
+            f.write(cmd)
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": f"Scrittura comando regia fallita: {e}"}), 500
+
+    return jsonify({"status": "OK", "title": pod_display_title})
 
 def find_pids(patterns):
     pids = set()

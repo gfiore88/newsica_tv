@@ -758,6 +758,72 @@ def main():
                                         print(f"⚠️ Errore riproduzione breaking news: {e}")
 
                                     restore_after_interrupt(prev_state, "breaking news")
+                            elif cmd.startswith("PLAY_PODCAST_IMMEDIATE"):
+                                parts = cmd.split("|")
+                                pod_file = parts[1] if len(parts) > 1 else ""
+                                pod_title = parts[2] if len(parts) > 2 else "Newsica Talk"
+                                print(f"🎙️ Comando ricevuto: PLAY_PODCAST_IMMEDIATE. Eseguo riproduzione sincrona di '{pod_title}'!")
+
+                                if os.path.exists(pod_file):
+                                    pod_info = {
+                                        "status": "ON_AIR",
+                                        "current_block": "news",
+                                        "current_title": pod_title,
+                                        "next_block": "Ripresa Palinsesto",
+                                        "next_start": "",
+                                        "breaking_news_available": False,
+                                        "last_update": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                    }
+
+                                    # Salviamo lo stato precedente per ripristinarlo
+                                    prev_state = None
+                                    if os.path.exists(STATE_FILE):
+                                        try:
+                                            with open(STATE_FILE, "r") as sf:
+                                                prev_state = json.load(sf)
+                                        except Exception:
+                                            pass
+
+                                    # Aggiorna la grafica per il podcast al volo
+                                    try:
+                                        with open(STATE_FILE, "w") as sf:
+                                            json.dump(pod_info, sf, indent=2)
+                                        with open(PROGRAM_FILE, "w") as pf:
+                                            pf.write(pod_title.upper())
+                                        with open(NEXT_PROGRAM_FILE, "w") as nf:
+                                            nf.write("Ripresa Palinsesto")
+                                        write_accent_files("news")
+                                    except Exception as e:
+                                        print(f"⚠️ Errore scrittura stato per podcast al volo: {e}")
+
+                                    # Riproduce il podcast direttamente sulla FIFO (pausa temporanea ma preserva la coda)
+                                    cmd_ffmpeg = [
+                                        FFMPEG_CMD,
+                                        "-hide_banner",
+                                        "-loglevel", "error",
+                                        "-i", pod_file,
+                                        "-f", "s16le",
+                                        "-ar", str(PCM_SAMPLE_RATE),
+                                        "-ac", str(PCM_CHANNELS),
+                                        "pipe:1"
+                                    ]
+                                    try:
+                                        proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
+                                        pod_chunks = 0
+                                        while True:
+                                            chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
+                                            if not chunk_data:
+                                                break
+                                            write_fifo_chunk(fifo_fd, chunk_data)
+                                            pod_chunks += 1
+                                        proc.wait()
+                                        print(f"🎙️ Podcast al volo riprodotto con successo ({pod_chunks} chunks).")
+                                    except Exception as e:
+                                        print(f"⚠️ Errore riproduzione podcast al volo: {e}")
+
+                                    restore_after_interrupt(prev_state, "podcast al volo")
+                                else:
+                                    print(f"⚠️ File podcast non trovato: {pod_file}")
                         except Exception as e:
                             print(f"⚠️ Errore comandi: {e}")
 

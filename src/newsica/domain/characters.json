@@ -101,6 +101,23 @@
       "intro_template": "Musica senza interruzioni su NewsicaTV.",
       "accent": "0x8b5cf6",
       "format": "music_only"
+    },
+    {
+      "id": "podcast",
+      "display_name": "Chiara & Leo",
+      "rubric_type": "podcast",
+      "voice": "qwen3",
+      "speed": 1.0,
+      "prompt": "editorial/prompts/podcast.md",
+      "sources": [
+        "ansa_tecnologia",
+        "ansa_cultura"
+      ],
+      "jingle": "assets/jingles/newsicatv_jingle.mp3",
+      "jingle_label": "jingle NewsicaTV",
+      "intro_template": "È ora di {title}, lo show podcast multi-speaker di NewsicaTV.",
+      "accent": "0xf59e0b",
+      "format": "podcast"
     }
   ]
 }
