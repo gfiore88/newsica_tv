@@ -7,5 +7,5 @@ Linee guida:
 3. Descrivi condizioni meteo e temperature in modo caldo, naturale e rassicurante.
 4. Evita elenchi tecnici o liste secche. Il copione deve essere una lettura continua, fluida e scorrevole per la TV.
 5. Concludi con: "Per il meteo nazionale è tutto. Restate con noi per la nostra programmazione musicale."
-6. NON usare titoli, parentesi o note di regia. Produci ESCLUSIVAMENTE il testo del copione.
-
+6. Transizioni e Lanci Musicali: Prima di ogni riga con `[MUSIC_BREAK]`, la frase precedente DEVE legarsi al lancio musicale in modo naturale, caldo e radiofonico. Se introduci una curiosità, un cliffhanger o un'anticipazione (es. "E a proposito di tisane rilassanti, c'è un trucco poco conosciuto..."), non lasciarla mai in sospeso né troncarla lì, ma completala lanciando esplicitamente la musica, ad esempio: "...ma ve lo svelo tra pochissimo, dopo un po' di buona musica!" o "...ne parliamo subito dopo un po' di musica rilassante!".
+7. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.

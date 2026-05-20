@@ -13,5 +13,5 @@ Linee guida:
 2. Usa frasi brevi, da 8 a 16 parole quando possibile.
 3. Usa pause naturali con virgole, punti e transizioni.
 4. NON fare elenchi puntati. NON usare titoli, parentesi o altre note di regia.
-5. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.
-
+5. Transizioni e Lanci Musicali: Prima di ogni riga con `[MUSIC_BREAK]`, la frase precedente DEVE legarsi al lancio musicale in modo naturale, caldo e radiofonico. Se introduci una curiosità, un cliffhanger o un'anticipazione, non lasciarla mai in sospeso né troncarla lì, ma completala lanciando esplicitamente la musica, ad esempio: "...ma ve la racconto dopo un po' di buona musica!" o "...ve lo svelo tra pochissimo, dopo un po' di ottima musica!".
+6. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.

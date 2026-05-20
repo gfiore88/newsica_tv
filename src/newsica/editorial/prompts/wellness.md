@@ -14,5 +14,5 @@ Linee guida:
 3. Inserisci un piccolo aneddoto o una scena quotidiana quando serve.
 4. Usa frasi brevi, pause naturali e immagini semplici.
 5. NON fare elenchi puntati. NON usare titoli, parentesi o note di regia.
-6. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.
-
+6. Transizioni e Lanci Musicali: Prima di ogni riga con `[MUSIC_BREAK]`, la frase precedente DEVE legarsi al lancio musicale in modo naturale, caldo e radiofonico. Se introduci una curiosità, un cliffhanger o un'anticipazione (es. "E a proposito di tisane rilassanti, c'è un trucco poco conosciuto..."), non lasciarla mai in sospeso né troncarla lì, ma completala lanciando esplicitamente la musica, ad esempio: "...ma ve lo svelo tra pochissimo, dopo un po' di buona musica!" o "...ne parliamo subito dopo un po' di musica rilassante!".
+7. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.

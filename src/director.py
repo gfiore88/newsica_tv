@@ -482,10 +482,11 @@ def generator_worker():
                         last_used_music = music_file
                         playout.mix_and_queue(music_file, part_file)
                         
-                    # Se non è l'ultima parte, riproduce 3 brani musicali interi (stacco radiofonico)
+                    # Se non è l'ultima parte, riproduce brani musicali interi (stacco radiofonico)
                     if i < num_parts:
-                        songs_between = 3 # Numero di canzoni intere tra un intervento e l'altro
-                        print(f"🎵 Stacco musicale radiofonico: riproduzione di {songs_between} brani completi...")
+                        # 1 brano per rubriche informative veloci (news/sport/meteo/wellness) come da ADR 0013, 3 per i podcast
+                        songs_between = 1 if current_type == "podcast" else 1
+                        print(f"🎵 Stacco musicale radiofonico ({current_type}): riproduzione di {songs_between} brani completi...")
                         for s in range(songs_between):
                             if schedule_interrupt_event.is_set() or breaking_news_active:
                                 break
