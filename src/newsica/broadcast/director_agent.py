@@ -21,6 +21,10 @@ from newsica.editorial.memory import (
 )
 from newsica.audio.jingles import get_jingle_for_block, CLASSIC_JINGLE_FILE
 
+EVENING_PODCAST_SLOT = "20:00"
+EVENING_PODCAST_TITLE = "Newsica Podcast - Dopo Sera"
+EVENING_PODCAST_MIN_REMAINING_SECONDS = 20 * 60
+
 class DirectorAgent:
     def __init__(self, playout=None):
         self.playout = playout
@@ -170,6 +174,47 @@ class DirectorAgent:
             # Se l'audio non è ancora pronto, dice al regista di aspettare o rigenerare
             return {"action": "WAIT_OR_GENERATE", "character": block_type, "title": title, "time_key": state.get("scheduled_slot")}
 
+        elif current_segment == "evening_podcast_generate":
+            return {
+                "action": "WAIT_OR_GENERATE",
+                "character": "podcast",
+                "title": EVENING_PODCAST_TITLE,
+                "time_key": state.get("scheduled_slot"),
+                "next_segment": "evening_podcast_ready"
+            }
+
+        elif current_segment == "evening_podcast_ready":
+            if os.path.exists(voice_file):
+                state["current_segment"] = "evening_podcast_playing"
+                state["evening_podcast_inserted"] = True
+                write_state_files(state)
+                return {
+                    "action": "PLAY_VOICE",
+                    "file": voice_file,
+                    "character": "podcast",
+                    "title": EVENING_PODCAST_TITLE,
+                    "segment": "Extra"
+                }
+            return {
+                "action": "WAIT_OR_GENERATE",
+                "character": "podcast",
+                "title": EVENING_PODCAST_TITLE,
+                "time_key": state.get("scheduled_slot"),
+                "next_segment": "evening_podcast_ready"
+            }
+
+        elif current_segment == "evening_podcast_playing":
+            state["current_segment"] = "voice_closing"
+            state["current_block"] = block_type
+            state["current_title"] = title
+            write_state_files(state)
+            return {
+                "action": "PLAY_JINGLE",
+                "file": self.classic_jingle,
+                "label": "stacco_uscita_podcast_serale",
+                "next_segment": "music_rotation_until_deadline"
+            }
+
         elif current_segment.startswith("voice_part_"):
             # Gestione del sequenziamento multi-part delle rubriche
             try:
@@ -244,6 +289,18 @@ class DirectorAgent:
 
         elif current_segment == "voice_closing" or current_segment == "music_rotation_until_deadline":
             # Una volta completato il blocco parlato della rubrica, trasmette musica fino al cambio fascia oraria
+            if self._should_insert_evening_podcast(state, block_type, current_time=state.get("scheduled_slot"), next_time=next_time):
+                state["current_segment"] = "evening_podcast_generate"
+                state["evening_podcast_inserted"] = True
+                write_state_files(state)
+                jingle_file, jingle_label = get_jingle_for_block("podcast")
+                return {
+                    "action": "PLAY_JINGLE",
+                    "file": jingle_file,
+                    "label": jingle_label,
+                    "next_segment": "evening_podcast_generate"
+                }
+
             state["current_segment"] = "music_rotation_until_deadline"
             write_state_files(state)
             
@@ -264,58 +321,39 @@ class DirectorAgent:
                 
         return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
 
+    def _should_insert_evening_podcast(self, state, block_type, current_time, next_time):
+        if block_type != "news":
+            return False
+        if current_time != EVENING_PODCAST_SLOT:
+            return False
+        if state.get("evening_podcast_inserted"):
+            return False
+
+        deadline = schedule_deadline(next_time)
+        time_remaining = (deadline - datetime.datetime.now()).total_seconds()
+        return time_remaining >= EVENING_PODCAST_MIN_REMAINING_SECONDS
+
     def _handle_podcast_progression(self, state, title, current_segment, next_time):
         """
-        Gestione specifica per la rubrica Podcast a due voci (Fase MVP 3.5).
-        Il podcast ha un numero di parti fisso (solitamente 3) intercalate da musica.
+        Gestione specifica per la rubrica Podcast a due voci.
+        La pipeline podcast corrente produce un file unico `audio.wav`.
         """
-        # La logica del podcast cerca i file in TMP_DIR (audio_part1.wav, audio_part2.wav, etc.)
-        voice_part_1 = os.path.join(TMP_DIR, "audio_part1.wav")
-        voice_part_2 = os.path.join(TMP_DIR, "audio_part2.wav")
-        voice_part_3 = os.path.join(TMP_DIR, "audio_part3.wav")
-        
-        has_3_parts = os.path.exists(voice_part_1) and os.path.exists(voice_part_2) and os.path.exists(voice_part_3)
-        has_2_parts = os.path.exists(voice_part_1) and os.path.exists(voice_part_2) and not os.path.exists(voice_part_3)
-        
-        num_podcast_parts = 3 if has_3_parts else (2 if has_2_parts else 0)
+        voice_file = os.path.join(TMP_DIR, "audio.wav")
         
         if current_segment == "intro" or current_segment == "init":
-            if num_podcast_parts > 0:
-                state["current_segment"] = "podcast_part_1"
+            if os.path.exists(voice_file):
+                state["current_segment"] = "podcast_playing"
                 write_state_files(state)
-                # Il podcast ha Giulia e Marco (multi-speaker) già pre-mixati senza musica di sottofondo o con un leggero mix
-                # Per non coprire i due speaker, li riproduciamo in modalità classica s16le pulita o con un mix leggerissimo
                 return {
                     "action": "PLAY_VOICE",
-                    "file": voice_part_1,
+                    "file": voice_file,
                     "character": "podcast",
                     "title": title,
-                    "segment": "Podcast Parte 1"
+                    "segment": "Completo"
                 }
-            else:
-                return {"action": "WAIT_OR_GENERATE", "character": "podcast", "title": title, "time_key": state.get("scheduled_slot")}
-                
-        elif current_segment.startswith("podcast_part_"):
-            try:
-                curr_part = int(current_segment.split("_")[-1])
-            except ValueError:
-                curr_part = 1
-                
-            if curr_part < num_podcast_parts:
-                next_part = curr_part + 1
-                state["current_segment"] = f"podcast_music_stacco_{curr_part}_to_{next_part}"
-                write_state_files(state)
-                
-                # Mettiamo un brano intero di stacco tra le parti del talk show podcast
-                music_file = self._select_non_repeated_music()
-                if music_file:
-                    add_music_track(music_file)
-                    return {
-                        "action": "PLAY_MUSIC",
-                        "file": music_file,
-                        "label": "stacco_musicale_podcast"
-                    }
-                    
+            return {"action": "WAIT_OR_GENERATE", "character": "podcast", "title": title, "time_key": state.get("scheduled_slot")}
+
+        elif current_segment == "podcast_playing":
             state["current_segment"] = "podcast_closing"
             write_state_files(state)
             return {
@@ -324,26 +362,6 @@ class DirectorAgent:
                 "label": "stacco_uscita_podcast",
                 "next_segment": "music_rotation_until_deadline"
             }
-            
-        elif current_segment.startswith("podcast_music_stacco_"):
-            parts = current_segment.split("_")
-            next_part = int(parts[-1])
-            next_file = os.path.join(TMP_DIR, f"audio_part{next_part}.wav")
-            
-            if os.path.exists(next_file):
-                state["current_segment"] = f"podcast_part_{next_part}"
-                write_state_files(state)
-                return {
-                    "action": "PLAY_VOICE",
-                    "file": next_file,
-                    "character": "podcast",
-                    "title": title,
-                    "segment": f"Podcast Parte {next_part}"
-                }
-            else:
-                state["current_segment"] = "podcast_closing"
-                write_state_files(state)
-                return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
                 
         elif current_segment == "podcast_closing" or current_segment == "music_rotation_until_deadline":
             state["current_segment"] = "music_rotation_until_deadline"
@@ -484,27 +502,59 @@ class DirectorAgent:
             
         # Calcola la durata residua dello slot interrotto
         try:
-            # Recuperiamo i tempi dal palinsesto
             _, _, _, next_time, current_time, _ = get_current_block_info()
             
             if current_time == interrupted_slot:
-                # Calcola quanti minuti mancano al prossimo blocco
                 deadline = schedule_deadline(next_time)
                 now = datetime.datetime.now()
                 time_remaining = (deadline - now).total_seconds()
                 
-                # Calcola la durata totale dello slot
-                # (Semplificazione: ipotizziamo una durata standard di 30 o 60 minuti se non calcolabile)
-                total_duration = 1800.0  # 30 minuti di default
+                # Calcola la durata reale dello slot dal palinsesto invece di usare
+                # un valore fisso di 1800s che era errato per fasce lunghe (es. 2 ore).
+                # Usiamo il tempo trascorso dall'inizio slot + il residuo come proxy.
+                try:
+                    slot_start_hour, slot_start_min = map(int, interrupted_slot.split(":"))
+                    slot_start = now.replace(
+                        hour=slot_start_hour, minute=slot_start_min,
+                        second=0, microsecond=0
+                    )
+                    if slot_start > now:  # slot del giorno precedente
+                        slot_start -= datetime.timedelta(days=1)
+                    total_duration = (deadline - slot_start).total_seconds()
+                except Exception:
+                    total_duration = 1800.0
                 
-                # Se manca ancora almeno il 40% del tempo dello slot, lo riprendiamo
-                if time_remaining >= (total_duration * 0.40):
-                    print(f"🔄 [DirectorAgent] Ripristino slot interrotto '{interrupted_title}' (Fascia delle {interrupted_slot}) - Rimangono {time_remaining/60:.1f} minuti (>=40%).")
+                # Soglia: ripristina se rimangono almeno 5 minuti O almeno il 20% dello slot
+                # (soglia abbassata dal 40% originale per evitare restart da parte 1 a fine fascia)
+                min_threshold = max(300.0, total_duration * 0.20)
+                
+                if time_remaining >= min_threshold:
+                    print(f"🔄 [DirectorAgent] Ripristino slot interrotto '{interrupted_title}' "
+                          f"(Fascia delle {interrupted_slot}) - Rimangono {time_remaining/60:.1f} min "
+                          f"su {total_duration/60:.0f} min totali.")
                     restored_state = {
                         "status": "ON_AIR",
                         "current_block": interrupted_block,
                         "current_title": interrupted_title,
-                        "current_segment": "music_rotation_until_deadline", # riprendiamo con musica
+                        "current_segment": "music_rotation_until_deadline",
+                        "next_block": state.get("next_block", ""),
+                        "next_start": state.get("next_start", ""),
+                        "scheduled_slot": interrupted_slot,
+                        "breaking_news_available": False,
+                        "last_update": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                    }
+                    write_state_files(restored_state)
+                    return
+                else:
+                    print(f"⏭️ [DirectorAgent] Slot quasi scaduto ({time_remaining/60:.1f} min residui, "
+                          f"soglia {min_threshold/60:.1f} min). Attendo naturale cambio fascia.")
+                    # Non impostiamo OFFLINE: aspettiamo che il watchdog wallclock
+                    # rilevi il cambio di fascia naturalmente alla prossima ora
+                    restored_state = {
+                        "status": "ON_AIR",
+                        "current_block": interrupted_block,
+                        "current_title": interrupted_title,
+                        "current_segment": "music_rotation_until_deadline",
                         "next_block": state.get("next_block", ""),
                         "next_start": state.get("next_start", ""),
                         "scheduled_slot": interrupted_slot,

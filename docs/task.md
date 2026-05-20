@@ -26,3 +26,7 @@
 | 23 | /python_engineer | ✅ Done | Refactoring di `director.py` e allineamento tag parser copioni |
 | 24 | /streaming_expert | ✅ Done | Sfondo speciale per Special Broadcast ed overlay grafici |
 | 25 | /code_reviewer | ✅ Done | Esecuzione test unitari e verifica di compatibilità locale a costo zero |
+| 26 | /python_engineer | ✅ Done | Podcast fill serale dopo `Newsica Sera` quando resta tempo prima delle 22:00 |
+| 27 | /python_engineer | ✅ Done | Rename pubblico a `Newsica Podcast` in palinsesto, prompt, dashboard e documentazione |
+| 28 | /orchestrator | ✅ Done | Reso obbligatorio il protocollo "log prima delle ipotesi" per ogni debug live |
+| 29 | /streaming_expert | ✅ Done | Ripristinata diretta con restart governato da `manage.sh` e aggiunto `live-health` end-to-end |

@@ -18,6 +18,8 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] Grafica Dinamica: Ticker aggiornati in tempo reale e sovrimpressioni (Orologio e box ULTIMORA fisso).
 - [x] Stabilizzazione Stream: Clock video costante a 30 fps, pacing realtime della pipe audio e fallback PCM coerente.
 - [x] Anti-stallo H24: fallback a silenzio PCM quando la coda e' vuota e watchdog FFmpeg su `out_time_ms`.
+- [x] **Protocollo Debug Live dai Log (ADR 0025)**: Ogni incidente su diretta, audio, palinsesto, overlay, RTMP o processi deve partire da `manage.sh status`, `director.log`, `stream.log`, `ffmpeg_progress.txt`, stato runtime e verifica runner prima di qualunque diagnosi o fix.
+- [x] **Live Health End-to-End**: Aggiunto `./manage.sh live-health` per verificare in un solo comando processi, log, progress FFmpeg, runner locale, connessione RTMP e player pubblico YouTube.
 - [x] **Fix Race Condition Startup (ADR 0023)**: Risolto deadlock tra `generator_worker` e FFmpeg: introdotto `fifo_connected_event` per bloccare il precaricamento audio finché FFmpeg non si connette; ridotto `audio_queue maxsize` da 5000 a 200 chunk (~17s di buffer sicuro).
 - [x] Rotazione agenti robusta: fallback locale per copioni news/sport/meteo quando Ollama non e' disponibile.
 - [x] Espressivita' speaker: prompt piu' parlati, punteggiatura naturale e velocita' TTS per personaggio.
@@ -46,7 +48,8 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] **Parser Dialoghi a Turni**: Implementare in `tts_generator.py` il parsing dei tag `[SPEAKER: Nome]` per spezzare il copione in battute alternate.
 - [x] **Mixer Audio Conversazionale**: Concatenare i singoli segmenti vocali introducendo micro-pause realistiche (0.3s di silenzio) per rendere naturale il dialogo.
 - [x] **Fallback Kokoro**: Se Chatterbox non e' disponibile, generare il podcast con Kokoro usando voci locali Giulia/Marco.
-- [x] **Aggancio Playout & Grafica**: Configurare il Director per pianificare le nuove rubriche Podcast ("Newsica Talk", "L'Angolo del Benessere") e mostrare un overlay video personalizzato.
+- [x] **Aggancio Playout & Grafica**: Configurare il Director per pianificare le nuove rubriche Podcast ("Newsica Podcast", "L'Angolo del Benessere") e mostrare un overlay video personalizzato.
+- [x] **Podcast Fill Serale**: Se `Newsica Sera` completa lo speaker con almeno 20 minuti residui prima delle 22:00, il Director inserisce una puntata extra `Newsica Podcast - Dopo Sera`.
 
 ## MVP 4 — Automazione Editoriale e Strumenti di Regia
 **Obiettivo:** Aumentare il ritmo e l'affidabilità con controlli locali e archiviazione.

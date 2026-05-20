@@ -30,6 +30,7 @@ function show_help() {
   echo -e "  ${RED}stop${NC}      Ferma tutti i servizi in esecuzione, ripulisce lock e pipe"
   echo -e "  ${YELLOW}restart${NC}   Ferma e riavvia tutto in modo pulito"
   echo -e "  ${CYAN}status${NC}    Visualizza lo stato attuale e i PID dei vari componenti"
+  echo -e "  ${CYAN}live-health${NC} Verifica log locali, RTMP e stato pubblico YouTube"
   echo -e "  ${BLUE}logs${NC}      Mostra le ultime righe dei log principali"
   echo -e "  ${PURPLE}tts-spike${NC} Genera/apre il confronto TTS sperimentale"
   echo ""
@@ -108,6 +109,12 @@ function do_stop() {
     fi
   done
 
+  # Chiude eventuali sessioni screen create da manage.sh start.
+  for session_name in newsica-dashboard newsica-watchdog newsica-stream; do
+    screen -S "$session_name" -X quit 2>/dev/null || true
+  done
+  screen -wipe >/dev/null 2>&1 || true
+
   # Rimozione dei lockfile e della pipe
   echo -e "🧹 Rimozione lock e pipe orfane..."
   rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
@@ -136,7 +143,7 @@ function do_start() {
   # 3. Avvia la Dashboard (Web Server)
   if [ -z "$(get_pid "src/dashboard.py")" ]; then
     echo "  -> Avvio Dashboard..."
-    "$VENV_PYTHON" "$BASE_DIR/src/dashboard.py" > "$TMP_DIR/dashboard.log" 2>&1 &
+    screen -dmS newsica-dashboard bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' '$BASE_DIR/src/dashboard.py' > '$TMP_DIR/dashboard.log' 2>&1"
     sleep 2
   else
     echo "  [i] Dashboard già attiva."
@@ -145,7 +152,7 @@ function do_start() {
   # 4. Avvia il Watchdog della Regia (che avvia e monitora director.py)
   if [ -z "$(get_pid "src/watchdog.sh")" ]; then
     echo "  -> Avvio Watchdog Regia..."
-    bash "$BASE_DIR/src/watchdog.sh" > "$TMP_DIR/director.log" 2>&1 &
+    screen -dmS newsica-watchdog bash -lc "cd '$BASE_DIR' && exec bash '$BASE_DIR/src/watchdog.sh' > '$TMP_DIR/director.log' 2>&1"
     sleep 2
   else
     echo "  [i] Watchdog Regia già attivo."
@@ -154,7 +161,7 @@ function do_start() {
   # 5. Avvia lo Streamer (FFmpeg/YouTube)
   if [ -z "$(get_pid "ffmpeg.*audio_pipe")" ]; then
     echo "  -> Avvio Streamer (FFmpeg)..."
-    bash "$BASE_DIR/src/stream.sh" > "$TMP_DIR/stream.log" 2>&1 &
+    screen -dmS newsica-stream bash -lc "cd '$BASE_DIR' && exec bash '$BASE_DIR/src/stream.sh' > '$TMP_DIR/stream.log' 2>&1"
     sleep 1
   else
     echo "  [i] Streamer già attivo."
@@ -174,6 +181,73 @@ function do_logs() {
   echo -e "\n${BOLD}📺 Log Recenti Streamer (stream.log):${NC}"
   echo "------------------------------------------------"
   tail -n 12 "$TMP_DIR/stream.log" 2>/dev/null || echo "(Nessun log trovato)"
+  echo ""
+}
+
+function do_live_health() {
+  echo -e "\n${BOLD}🩺 Live Health Check NewsicaTV:${NC}"
+  echo -e "------------------------------------------------"
+
+  do_status
+
+  echo -e "${BOLD}Log Regia:${NC}"
+  tail -n 25 "$TMP_DIR/director.log" 2>/dev/null || echo "(Nessun director.log trovato)"
+
+  echo -e "\n${BOLD}Log Stream:${NC}"
+  tail -n 35 "$TMP_DIR/stream.log" 2>/dev/null || echo "(Nessun stream.log trovato)"
+
+  echo -e "\n${BOLD}Progress FFmpeg:${NC}"
+  if [ -s "$TMP_DIR/ffmpeg_progress.txt" ]; then
+    tail -n 18 "$TMP_DIR/ffmpeg_progress.txt"
+  else
+    echo "❌ Nessun progress FFmpeg scritto."
+  fi
+
+  echo -e "\n${BOLD}Stato Runtime:${NC}"
+  if [ -f "$RUNTIME_DIR/on-air-state.json" ]; then
+    cat "$RUNTIME_DIR/on-air-state.json"
+    echo ""
+  else
+    echo "❌ runtime/on-air-state.json mancante."
+  fi
+  [ -f "$TMP_DIR/current_program.txt" ] && echo "Current: $(cat "$TMP_DIR/current_program.txt")"
+  [ -f "$TMP_DIR/next_program.txt" ] && echo "Next: $(cat "$TMP_DIR/next_program.txt")"
+
+  echo -e "\n${BOLD}Runner:${NC}"
+  screen -ls 2>/dev/null || true
+  if launchctl list | rg 'com\.newsica' >/dev/null 2>&1; then
+    echo "❌ Trovati processi launchctl Newsica non governati da manage.sh:"
+    launchctl list | rg 'com\.newsica'
+  else
+    echo "✅ Nessun processo launchctl Newsica rilevato."
+  fi
+
+  echo -e "\n${BOLD}Connessione RTMP locale:${NC}"
+  local ffmpeg_pid
+  ffmpeg_pid=$(get_pid "ffmpeg.*audio_pipe")
+  if [ -n "$ffmpeg_pid" ]; then
+    if lsof -Pan -p "$ffmpeg_pid" -iTCP -sTCP:ESTABLISHED 2>/dev/null | rg ':1935|:443' >/dev/null; then
+      echo "✅ FFmpeg ha una connessione RTMP/RTMPS stabilita."
+    else
+      echo "❌ FFmpeg è attivo ma non risulta una connessione TCP RTMP/RTMPS stabilita."
+    fi
+  else
+    echo "❌ FFmpeg non risulta attivo."
+  fi
+
+  echo -e "\n${BOLD}Player pubblico YouTube:${NC}"
+  if [ -f "$BASE_DIR/.env" ]; then
+    export $(cat "$BASE_DIR/.env" | xargs)
+  fi
+  local public_url="https://www.youtube.com/${YOUTUBE_HANDLE:-@gfiore88}/live"
+  local page
+  page=$(curl -L -s -A "Mozilla/5.0" "$public_url" 2>/dev/null || true)
+  if echo "$page" | rg '"isLiveNow":true|"isLiveContent":true|"text":"LIVE"' >/dev/null; then
+    echo "✅ Il canale pubblico risulta live: $public_url"
+  else
+    echo "❌ Il player pubblico non risulta live: $public_url"
+    echo "   Se RTMP è connesso, apri YouTube Studio e verifica che la broadcast sia avviata/agganciata allo stream corretto."
+  fi
   echo ""
 }
 
@@ -221,6 +295,9 @@ case "$1" in
     ;;
   logs)
     do_logs
+    ;;
+  live-health)
+    do_live_health
     ;;
   tts-spike)
     do_tts_spike

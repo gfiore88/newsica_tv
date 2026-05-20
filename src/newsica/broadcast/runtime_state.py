@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import tempfile
 from newsica.config.paths import TMP_DIR, RUNTIME_DIR
 
 STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
@@ -42,9 +43,16 @@ def write_accent_files(block_type):
         active_key = block_type if block_type in ACCENT_FILES else "news"
     for key, accent_file in ACCENT_FILES.items():
         try:
-            temp_file = accent_file + ".tmp"
-            with open(temp_file, "w") as f:
+            os.makedirs(os.path.dirname(accent_file), exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                "w",
+                dir=os.path.dirname(accent_file),
+                prefix=os.path.basename(accent_file) + ".",
+                suffix=".tmp",
+                delete=False,
+            ) as f:
                 f.write(" " if key == active_key else "")
+                temp_file = f.name
             os.replace(temp_file, accent_file)
         except Exception as e:
             print(f"⚠️ Errore scrittura accent file {key}: {e}")
@@ -55,18 +63,32 @@ def write_state_files(state):
     
     # Scrittura atomica dello stato JSON
     try:
-        temp_state = STATE_FILE + ".tmp"
-        with open(temp_state, "w") as sf:
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            dir=os.path.dirname(STATE_FILE),
+            prefix=os.path.basename(STATE_FILE) + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as sf:
             json.dump(state, sf, indent=2)
+            temp_state = sf.name
         os.replace(temp_state, STATE_FILE)
     except Exception as e:
         print(f"⚠️ Errore scrittura atomica STATE_FILE: {e}")
         
     # Scrittura atomica di current_program.txt
     try:
-        temp_prog = PROGRAM_FILE + ".tmp"
-        with open(temp_prog, "w") as pf:
+        os.makedirs(os.path.dirname(PROGRAM_FILE), exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            dir=os.path.dirname(PROGRAM_FILE),
+            prefix=os.path.basename(PROGRAM_FILE) + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as pf:
             pf.write(state.get("current_title", "").upper())
+            temp_prog = pf.name
         os.replace(temp_prog, PROGRAM_FILE)
     except Exception as e:
         print(f"⚠️ Errore scrittura atomica PROGRAM_FILE: {e}")
@@ -78,9 +100,16 @@ def write_state_files(state):
         next_label = f"A seguire: {next_title}" if next_title else ""
         if next_label and next_start:
             next_label = f"{next_label} - {next_start}"
-        temp_next = NEXT_PROGRAM_FILE + ".tmp"
-        with open(temp_next, "w") as nf:
+        os.makedirs(os.path.dirname(NEXT_PROGRAM_FILE), exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            dir=os.path.dirname(NEXT_PROGRAM_FILE),
+            prefix=os.path.basename(NEXT_PROGRAM_FILE) + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as nf:
             nf.write(next_label)
+            temp_next = nf.name
         os.replace(temp_next, NEXT_PROGRAM_FILE)
     except Exception as e:
         print(f"⚠️ Errore scrittura atomica NEXT_PROGRAM_FILE: {e}")

@@ -102,7 +102,8 @@ class TestDirectorAgent(unittest.TestCase):
     @patch("newsica.broadcast.director_agent.get_current_block_info")
     @patch("newsica.broadcast.director_agent.schedule_deadline")
     def test_restore_after_interrupt_less_than_40_percent_remaining(self, mock_deadline, mock_block_info, mock_write_state, mock_get_state):
-        # Se ora sono le 15:25, mancano solo 5 minuti (< 40%). Dovrebbe passare al prossimo blocco (OFFLINE).
+        # Se resta poco tempo, il DirectorAgent ripristina lo slot in rotazione musicale
+        # e lascia al watchdog wallclock il cambio fascia naturale.
         
         mock_get_state.return_value = {
             "status": "SPECIAL_BROADCAST",
@@ -120,8 +121,52 @@ class TestDirectorAgent(unittest.TestCase):
         
         self.director.handle_restore_after_interrupt()
         
-        # Controlla che lo stato sia OFFLINE per forzare il passaggio al prossimo slot
-        mock_write_state.assert_called_once_with({"status": "OFFLINE"})
+        restored_state = mock_write_state.call_args[0][0]
+        self.assertEqual(restored_state["status"], "ON_AIR")
+        self.assertEqual(restored_state["current_block"], "sport")
+        self.assertEqual(restored_state["current_segment"], "music_rotation_until_deadline")
+
+    @patch("newsica.broadcast.director_agent.get_jingle_for_block")
+    @patch("newsica.broadcast.director_agent.write_state_files")
+    @patch("newsica.broadcast.director_agent.schedule_deadline")
+    def test_evening_news_inserts_podcast_when_time_remains(self, mock_deadline, mock_write_state, mock_get_jingle):
+        mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=45)
+        mock_get_jingle.return_value = ("assets/jingles/jingle_podcast.mp3", "jingle podcast")
+        state = {
+            "status": "ON_AIR",
+            "current_block": "news",
+            "current_title": "Newsica Sera - Completo",
+            "current_segment": "music_rotation_until_deadline",
+            "scheduled_slot": "20:00",
+            "evening_podcast_inserted": False,
+        }
+
+        action = self.director._handle_standard_rubric_progression(
+            state, "news", "Newsica Sera", "music_rotation_until_deadline", "22:00"
+        )
+
+        self.assertEqual(action["action"], "PLAY_JINGLE")
+        self.assertEqual(action["next_segment"], "evening_podcast_generate")
+        self.assertTrue(state["evening_podcast_inserted"])
+
+    @patch("newsica.broadcast.director_agent.write_state_files")
+    @patch("newsica.broadcast.director_agent.schedule_deadline")
+    def test_evening_news_skips_podcast_when_already_inserted(self, mock_deadline, mock_write_state):
+        mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=45)
+        state = {
+            "status": "ON_AIR",
+            "current_block": "news",
+            "current_title": "Newsica Sera - Completo",
+            "current_segment": "music_rotation_until_deadline",
+            "scheduled_slot": "20:00",
+            "evening_podcast_inserted": True,
+        }
+
+        action = self.director._handle_standard_rubric_progression(
+            state, "news", "Newsica Sera", "music_rotation_until_deadline", "22:00"
+        )
+
+        self.assertEqual(action["action"], "PLAY_MUSIC")
 
 if __name__ == "__main__":
     unittest.main()

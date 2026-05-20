@@ -170,7 +170,7 @@ HTML_TEMPLATE = """
                     <div>
                         <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-700/50">
                             <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold flex items-center">
-                                🎙️ Podcast Talk al Volo
+                                🎙️ Newsica Podcast al Volo
                             </h2>
                             <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold uppercase tracking-wider">
                                 Chatterbox
@@ -611,7 +611,7 @@ def trigger_podcast():
         system_prompt = "Sei un duo di conduttori radiofonici e podcaster professionisti di NewsicaTV. Genera un copione per una rubrica stile podcast in formato dialogo a due voci Giulia e Marco."
 
     # 2. Prepara il prompt per Ollama
-    user_prompt = f"Scrivi un copione per il podcast 'Newsica Talk' sulla seguente tematica descritta dall'utente:\n\n\"{topic}\"\n\nRispetta rigorosamente eventuali indicazioni di durata o brevità fornite dall'utente nella tematica. Se non specificato, sviluppa un dialogo naturale e ricco con un numero di parole adeguato alla durata del podcast così come richiesto. Se la durata non è definita dall'utente, sviluppa un dialogo di circa 250-350 parole. Il dialogo deve essere diviso a turni di parola tra Giulia e Marco usando esattamente i tag [SPEAKER: Giulia] e [SPEAKER: Marco] all'inizio di ogni battuta. IMPORTANTE: I dialoghi devono essere in lingua italiana, con accenti grafici corretti per la sintesi vocale (`è`, `perché`, `cioè`, `può`, `più`, `né`, `sì`, `dà`, `lì`, `là`). Per temi tecnologici preferisci `intelligenza artificiale` o `IA` a `AI`, ed espandi le sigle tecniche alla prima occorrenza."
+    user_prompt = f"Scrivi un copione per il podcast 'Newsica Podcast' sulla seguente tematica descritta dall'utente:\n\n\"{topic}\"\n\nRispetta rigorosamente eventuali indicazioni di durata o brevità fornite dall'utente nella tematica. Se non specificato, sviluppa un dialogo naturale e ricco con un numero di parole adeguato alla durata del podcast così come richiesto. Se la durata non è definita dall'utente, sviluppa un dialogo di circa 250-350 parole. Il dialogo deve essere diviso a turni di parola tra Giulia e Marco usando esattamente i tag [SPEAKER: Giulia] e [SPEAKER: Marco] all'inizio di ogni battuta. IMPORTANTE: I dialoghi devono essere in lingua italiana, con accenti grafici corretti per la sintesi vocale (`è`, `perché`, `cioè`, `può`, `più`, `né`, `sì`, `dà`, `lì`, `là`). Per temi tecnologici preferisci `intelligenza artificiale` o `IA` a `AI`, ed espandi le sigle tecniche alla prima occorrenza."
 
     # 3. Interroga Ollama locale
     import requests
@@ -691,7 +691,7 @@ def trigger_podcast():
 
     # 6. Estrai una versione corta del titolo
     short_title = topic[:30] + "..." if len(topic) > 30 else topic
-    pod_display_title = f"Talk: {short_title}"
+    pod_display_title = f"Newsica Podcast: {short_title}"
 
     # 7. Invia comando alla regia
     cmd = f"PLAY_PODCAST_IMMEDIATE|{podcast_audio_file}|{pod_display_title}"

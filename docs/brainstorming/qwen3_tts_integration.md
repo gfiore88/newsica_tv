@@ -40,7 +40,7 @@ Per dare al canale NewsicaTV un'impronta editoriale da vera emittente radiotelev
 
 ```
          +-----------------------------------------------------------+
-         |                     NEWSICA TALK                          |
+         |                    NEWSICA PODCAST                        |
          |         Un podcast quotidiano a due voci                  |
          +-----------------------------+-----------------------------+
                                        |
@@ -67,7 +67,7 @@ Per evitare di dipendere da file audio di clonazione esterni (che potrebbero deg
 
 Il `DirectorAgent` (tramite `schedule_generator.py`) potrà inserire a palinsesto diverse rubriche speciali a seconda dell'orario della giornata. Ollama genererà lo script su misura per la rubrica selezionata:
 
-1.  **Newsica Talk — Tech Pulse (Fascia Pomeridiana):**
+1.  **Newsica Podcast — Tech Pulse (Fascia Pomeridiana):**
     *   *Tematica:* Ultime novità su Intelligenza Artificiale, gadget e spazio.
     *   *Stile:* Dialogo informale e brillante tra Chiara e Leo.
 2.  **L'Angolo del Benessere (Fascia Mattutina):**
@@ -127,7 +127,7 @@ Proponiamo un percorso incrementale in **4 Fasi** per testare la stabilità loca
 
 ### 📍 Fase 3: Collegamento al `DirectorAgent` e al Palinsesto
 *   [ ] Aggiornamento di `src/schedule_generator.py` per inserire blocchi di tipo `"podcast"` (es. una rubrica da 5-7 minuti ogni 2 ore).
-*   [ ] Predisposizione in `director.py` dell'aggancio per caricare e trasmettere il file audio unificato `audio_podcast.wav` con un overlay dedicato sullo schermo (es. "NEWSICA TALK - Chiara & Leo in studio").
+*   [ ] Predisposizione in `director.py` dell'aggancio per caricare e trasmettere il file audio unificato `audio_podcast.wav` con un overlay dedicato sullo schermo (es. "NEWSICA PODCAST - Chiara & Leo in studio").
 
 ### 📍 Fase 4: Validazione ed Estensioni Creative
 *   [ ] Monitoraggio dell'uso della memoria e del calore del Mac durante le fasi di picco del TTS.

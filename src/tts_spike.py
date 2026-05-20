@@ -17,7 +17,7 @@ import soundfile as sf
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 OUT_DIR = BASE_DIR / "tmp" / "tts_spike"
-DEFAULT_SCRIPT = """[SPEAKER: Giulia] Benvenuti a Newsica Talk. Oggi facciamo una prova tecnica: vogliamo capire se una voce sintetica riesce a sembrare naturale in italiano, senza effetto lettura.
+DEFAULT_SCRIPT = """[SPEAKER: Giulia] Benvenuti a Newsica Podcast. Oggi facciamo una prova tecnica: vogliamo capire se una voce sintetica riesce a sembrare naturale in italiano, senza effetto lettura.
 [SPEAKER: Marco] Esatto. La sfida vera non e' solo pronunciare bene le parole, ma mantenere ritmo, pause e identita' dei due speaker durante una conversazione.
 [SPEAKER: Giulia] E soprattutto dobbiamo capire se il modello gestisce davvero il dialogo multi-speaker, oppure se dobbiamo costruire noi una pipeline a turni.
 [SPEAKER: Marco] Questo test ci serve proprio a scegliere con orecchio critico, non solo leggendo le promesse dei modelli."""

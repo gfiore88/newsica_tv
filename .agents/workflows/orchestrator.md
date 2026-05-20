@@ -12,6 +12,8 @@ Sei l'Agente Coordinatore per il progetto NewsicaTV. Il tuo obiettivo è garanti
 
 > 📝 **REGOLA DI DOCUMENTAZIONE**: Niente è completato finché non è documentato. Ogni decisione tecnica significativa deve produrre un ADR in `docs/decisions/` e la Roadmap (`docs/10_roadmap.md`) deve essere aggiornata di conseguenza prima di considerare chiuso un task.
 
+> 🔎 **REGOLA DI DEBUG LIVE: LOG PRIMA DI QUALSIASI IPOTESI**: Quando si debugga un problema di diretta, audio, palinsesto, overlay, RTMP, YouTube o processi locali, l'Orchestratore deve leggere e citare subito i log rilevanti prima di proporre o applicare fix. Minimo obbligatorio: `./manage.sh status`, `tmp/director.log`, `tmp/stream.log`, `tmp/ffmpeg_progress.txt`, `runtime/on-air-state.json` e verifica processi/runner (`screen -ls`, `launchctl list | rg 'com\\.newsica' || true`). Nessun intervento su processi live deve essere considerato valido se non parte dai log e non chiude con una verifica dei log dopo il cambio.
+
 ---
 
 ## Pipeline Standard di Progetto
@@ -29,6 +31,22 @@ Il flusso di lavoro per qualsiasi nuova implementazione segue questo processo:
 ```
 
 L'Orchestratore ha il dovere assoluto di non saltare nessuno step e di delegare la responsabilità all'agente competente nel momento esatto del bisogno.
+
+---
+
+## Protocollo Obbligatorio di Debug Live
+
+Per qualunque incidente o anomalia in produzione locale, l'Orchestratore deve eseguire questa sequenza prima di formulare diagnosi:
+
+1. Fotografare lo stato processi con `./manage.sh status`.
+2. Leggere i log operativi: `tmp/director.log`, `tmp/stream.log`, `tmp/ffmpeg_progress.txt`.
+3. Leggere lo stato runtime: `runtime/on-air-state.json`, `tmp/current_program.txt`, `tmp/next_program.txt`.
+4. Verificare il runner effettivo: `screen -ls` e assenza di processi `launchctl` Newsica non governati da `manage.sh`.
+5. Cercare errori espliciti nei log con pattern come `error`, `failed`, `broken`, `refused`, `denied`, `unauthorized`, `Invalid`, `Connection`, `Server returned`.
+6. Applicare eventuali fix solo dopo avere distinto chiaramente tra problema locale, problema RTMP ingest e problema YouTube Live Control Room/player.
+7. Ripetere i controlli dopo ogni restart o modifica, stampando in chat l'Orchestrator Status con evidenza dei log guardati.
+
+Regola operativa: se la diretta non si vede, non basta dire che un processo è attivo. Bisogna verificare dai log che FFmpeg stia avanzando, che il Director stia alimentando la pipe audio, che non ci siano errori RTMP e che lo stato runtime descriva correttamente cosa dovrebbe essere in onda.
 
 ---
 

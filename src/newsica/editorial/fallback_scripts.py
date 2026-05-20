@@ -21,6 +21,23 @@ def build_fallback_script(character_id, filtered_news):
     elif character_id == "meteo":
         opening = "Ed eccoci agli aggiornamenti meteo nazionali. Vediamo la situazione sulla nostra Penisola per le prossime ore."
         closing = "Per il meteo nazionale è tutto. Restate con noi per la nostra programmazione musicale."
+    elif character_id == "podcast":
+        news_items = filtered_news[:3]
+        lines = [
+            "[SPEAKER: Giulia] Benvenuti a Newsica Podcast. Facciamo il punto con Marco su alcuni temi emersi nelle ultime ore.",
+            "[SPEAKER: Marco] Ciao Giulia. È un buon momento per rallentare il ritmo e capire che cosa c'è dietro i titoli, senza rincorrere solo l'urgenza.",
+        ]
+        for index, item in enumerate(news_items):
+            title = clean_text(item.get("title", ""))
+            summary = clean_text(item.get("summary", ""))
+            if not title and not summary:
+                continue
+            if index % 2 == 0:
+                lines.append(f"[SPEAKER: Giulia] Partiamo da questo: {title}. {summary}")
+            else:
+                lines.append(f"[SPEAKER: Marco] Il punto interessante è proprio qui: {title}. {summary}")
+        lines.append("[SPEAKER: Giulia] Per questa conversazione è tutto. Restate con noi, la serata di NewsicaTV continua.")
+        return "\n".join(lines)
     else:
         opening = "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."
         music_launch = "Ed ora, spazio alla musica su NewsicaTV. Ci risentiamo tra poco."
@@ -68,4 +85,3 @@ def build_fallback_script(character_id, filtered_news):
             parts_text.append(f"{reentry}\n\n{content}\n\n{music_launch}")
 
     return "\n\n[MUSIC_BREAK]\n\n".join(parts_text)
-

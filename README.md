@@ -69,6 +69,12 @@ chmod +x manage.sh
     ./manage.sh logs
     ```
 
+*   **Verificare la salute della diretta end-to-end**:
+    ```bash
+    ./manage.sh live-health
+    ```
+    *Controlla processi locali, log Director/FFmpeg, progress RTMP, runner `screen`/`launchctl` e stato pubblico del player YouTube.*
+
 ---
 
 ## 📜 Licenza

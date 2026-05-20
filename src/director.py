@@ -171,12 +171,13 @@ def generator_worker():
                 char = action_info["character"]
                 title = action_info["title"]
                 time_key = action_info["time_key"]
+                next_segment = action_info.get("next_segment", "intro")
                 
                 print(f"🚀 Genero blocco in background: {title} ({char})")
                 run_pipeline(char, title)
                 
                 state = get_current_state()
-                state["current_segment"] = "intro"
+                state["current_segment"] = next_segment
                 write_state_files(state)
                 
             elif action == "TRIGGER_NEXT_BLOCK":
@@ -481,13 +482,23 @@ def main():
                 try:
                     item = audio_queue.get_nowait()
                     if isinstance(item, dict) and item.get("type") == "metadata":
-                        # FIX: merge con lo stato esistente invece di sovrascriverlo.
-                        # block_info (il metadata) non include current_segment, quindi
-                        # una sovrascrittura totale lo cancellerebbe, causando il reset
-                        # della macchina a stati del DirectorAgent a "init" (loop del blocco).
+                        # Aggiorna solo i campi "display" — quelli che la Dashboard legge
+                        # per mostrare titolo, blocco attivo, prossimo programma, ecc.
+                        # I campi della macchina a stati (status, current_segment,
+                        # scheduled_slot, interrupted_*) sono gestiti ESCLUSIVAMENTE
+                        # dal DirectorAgent e non devono mai essere sovrascritti da
+                        # block_info, che ha "status": "ON_AIR" hardcoded e non include
+                        # current_segment — causando reset del loop E perdita del
+                        # SPECIAL_BROADCAST durante l'edizione straordinaria.
+                        _DISPLAY_FIELDS = {
+                            "current_block", "current_title", "next_block",
+                            "next_start", "breaking_news_available", "last_update",
+                        }
                         existing_state = get_current_state()
-                        merged_state = {**existing_state, **item["state"]}
-                        write_state_files(merged_state)
+                        for _field in _DISPLAY_FIELDS:
+                            if _field in item["state"]:
+                                existing_state[_field] = item["state"][_field]
+                        write_state_files(existing_state)
                         audio_queue.task_done()
                         continue
                         

@@ -14,11 +14,11 @@ DEFAULT_SCHEDULE = {
     "10:00": {"title": "Meteo Update", "type": "meteo"},
     "12:00": {"title": "Pranzo News", "type": "news"},
     "14:00": {"title": "Pomeriggio Sport", "type": "sport"},
-    "15:00": {"title": "Newsica Talk", "type": "podcast"},
+    "15:00": {"title": "Newsica Podcast", "type": "podcast"},
     "16:00": {"title": "Pausa Wellness", "type": "wellness"},
     "18:00": {"title": "Riepilogo Giornata", "type": "news"},
     "20:00": {"title": "Newsica Sera", "type": "news"},
-    "21:00": {"title": "Newsica Talk", "type": "podcast"},
+    "21:00": {"title": "Newsica Podcast", "type": "podcast"},
     "22:00": {"title": "Meteo Notte", "type": "meteo"}
 }
 
