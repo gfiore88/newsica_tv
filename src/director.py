@@ -566,7 +566,7 @@ def check_singleton(name):
             try:
                 os.kill(existing_pid, 0)  # Segnale 0 = solo verifica esistenza
                 # Il processo è vivo: vero conflitto
-                print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione! (PID {existing_pid})")
+                print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione! (PID {existing_pid}, Mio PID: {os.getpid()}, Parent PID: {os.getppid()})")
                 return False
             except ProcessLookupError:
                 # Il processo non esiste più → lock stale

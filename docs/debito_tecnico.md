@@ -61,3 +61,14 @@ Manca un filtro di validazione editoriale prima della messa in onda dei copioni 
 
 ### 🎨 A. Ripristino Accenti Colore Dinamici in Regia (ADR 0012)
 - [ ] **Integrazione Grafica Overlay:** Il cambio di accento colore nei file in `tmp/accent_*.txt` è pronto, ma l'overlay video di FFmpeg deve essere aggiornato per ricolorare dinamicamente i box grafici (ULTIMORA, orologio, box del programma) in base al personaggio attivo.
+
+---
+
+## 🖥️ 4. Infrastruttura e Gestione Processi
+
+### 🐕 Conflitto tra Daemon System-Level (launchd) e Script di Gestione (manage.sh)
+- [x] **Debito Risolto (2026-05-20):** La presenza di file plist ereditati/sperimentali in `.agents/launchd/` caricati nel database `launchd` di macOS generava istanze duplicate della Regia e dello Streamer ogni 10 secondi (con `Parent PID: 1`). Queste istanze entravano in collisione con quelle ufficiali lanciate da `./manage.sh` tramite `watchdog.sh`, riempiendo `director.log` di errori di singleton.
+- [ ] **Linee Guida Future:** 
+  - Evitare l'avvio manuale in parallelo a launchd.
+  - Se si desidera utilizzare launchd per la stabilità in produzione H24, integrare l'abilitazione/disabilitazione dei plist direttamente dentro `./manage.sh` (es. `./manage.sh daemon-enable` e `./manage.sh daemon-disable`) anziché usare loop di background shell orfani.
+
