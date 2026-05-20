@@ -8,6 +8,7 @@ import re
 from kokoro_onnx import Kokoro
 import soundfile as sf
 from newsica.domain.characters import get_character
+from newsica.editorial.gravity_assessor import assess_news_gravity
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
@@ -45,11 +46,30 @@ def generate_breaking_news():
     
     testo = testo_default
     
+    severity_score = 0
+    reason = "Valutazione di default"
+    
     if notizia:
         titolo = notizia.get("title", "")
         sintesi = notizia.get("summary", "")
         news_text = f"TITOLO: {titolo}\nSINTESI: {sintesi}"
         print(f"📰 Notizia di ultim'ora selezionata: {titolo}")
+        
+        # Valuta la gravità della notizia
+        try:
+            severity_score, is_emergency, reason = assess_news_gravity(titolo, sintesi, "news")
+            print(f"📊 [BreakingNewsAgent] Gravità: {severity_score}/100 | Emergenza: {is_emergency} | Motivo: {reason}")
+        except Exception as e:
+            print(f"⚠️ Errore nella valutazione della gravità: {e}")
+            severity_score = 30
+            reason = "Errore valutazione"
+            
+        # Forza la gravità da variabile d'ambiente per agevolare il testing
+        force_severity = os.getenv("FORCE_SEVERITY")
+        if force_severity:
+            severity_score = int(force_severity)
+            reason = "Test forzato di Edizione Straordinaria"
+            print(f"🚨 [Test] Forza gravità a: {severity_score}")
         
         # 2. Rielaborazione testo tramite LLM (Ollama locale)
         OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -147,7 +167,7 @@ def generate_breaking_news():
         ])
         
     # 7. Invio comando di ready al regista
-    cmd = f"BREAKING_NEWS_READY|{bn_audio}"
+    cmd = f"BREAKING_NEWS_READY|{bn_audio}|{severity_score}|{reason}"
     with open(CONTROL_FILE, "w") as f:
         f.write(cmd)
         

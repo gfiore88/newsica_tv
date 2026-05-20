@@ -250,11 +250,12 @@ class AudioPlayout:
         process.wait()
         self.current_process = None
 
-    def queue_single_music_track(self):
+    def queue_single_music_track(self, music_file=None):
         if self.is_interrupted():
             return
 
-        music_file = self.get_random_music(exclude=self.last_music_file)
+        if not music_file:
+            music_file = self.get_random_music(exclude=self.last_music_file)
         if not music_file:
             time.sleep(1)
             return

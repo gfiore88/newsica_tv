@@ -19,3 +19,10 @@
 | 16 | /python_engineer | Done | Refactor Fase 3a: estratti audio playout, music library e predisposta rotazione brani AI locali |
 | 17 | /python_engineer | Done | Fix trigger UI segnale orario: comando manuale forza il chime anche vicino a cambi fascia |
 | 18 | /python_engineer | Done | Segnale orario UI con `jingle_ora_esatta.mp3` e voce TTS sull'orario reale, inclusi i minuti |
+| 19 | /task_analyzer | Done | Brainstorming approvato e pianificazione DirectorAgent / Trasmissione Straordinaria |
+| 20 | /python_engineer | ✅ Done | Sviluppo moduli `scheduler.py`, `runtime_state.py` e `memory.py` |
+| 21 | /python_engineer | ✅ Done | Sviluppo modulo `gravity_assessor.py` (valutazione urgenza news) |
+| 22 | /python_engineer | ✅ Done | Sviluppo `director_agent.py` (decision engine e coda a eventi) |
+| 23 | /python_engineer | ✅ Done | Refactoring di `director.py` e allineamento tag parser copioni |
+| 24 | /streaming_expert | ✅ Done | Sfondo speciale per Special Broadcast ed overlay grafici |
+| 25 | /code_reviewer | ✅ Done | Esecuzione test unitari e verifica di compatibilità locale a costo zero |

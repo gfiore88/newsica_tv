@@ -34,7 +34,7 @@ def update_ticker():
                 with open(STATE_FILE, "r") as f:
                     state = json.load(f)
                 
-                if state.get("current_block") == "breaking_news":
+                if state.get("current_block") in {"breaking_news", "trasmissione_straordinaria"} or state.get("status") == "SPECIAL_BROADCAST":
                     status_text = "🚨 EDIZIONE STRAORDINARIA"
                 elif state.get("current_title"):
                     status_text = f"In onda: {state.get('current_title').upper()}"
