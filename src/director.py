@@ -7,7 +7,7 @@ import queue
 import json
 import datetime
 from schedule_generator import get_current_schedule, generate_schedule
-from newsica.audio.jingles import get_jingle_for_block
+from newsica.audio.jingles import get_jingle_for_block, CLASSIC_JINGLE_FILE
 from newsica.audio.playout import AudioPlayout
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 from newsica.domain.characters import get_character
@@ -285,6 +285,46 @@ def write_fifo_chunk(fifo_fd, data, blocking=True):
             time.sleep(0.02)
     return True
 
+FADE_IN_TOTAL_CHUNKS = 20
+FADE_OUT_TOTAL_CHUNKS = 10
+
+def apply_preventive_fade_out_and_write(fifo_fd):
+    """
+    Legge fino a FADE_OUT_TOTAL_CHUNKS dalla audio_queue, applica un fade-out software lineare con NumPy,
+    e li scrive direttamente sulla pipe FIFO per far sfumare gradualmente l'audio attivo prima di un'interruzione.
+    """
+    import numpy as np
+    chunks = []
+    while len(chunks) < FADE_OUT_TOTAL_CHUNKS:
+        try:
+            item = audio_queue.get_nowait()
+            if isinstance(item, dict) and item.get("type") == "metadata":
+                audio_queue.task_done()
+                continue
+            data = item["data"] if isinstance(item, dict) else item
+            chunks.append(data)
+            audio_queue.task_done()
+        except queue.Empty:
+            break
+            
+    if not chunks:
+        return
+        
+    num_chunks = len(chunks)
+    for idx in range(num_chunks):
+        data = chunks[idx]
+        samples = np.frombuffer(data, dtype=np.int16).copy()
+        
+        start_factor = (num_chunks - idx) / num_chunks
+        end_factor = (num_chunks - idx - 1) / num_chunks
+        factors = np.linspace(start_factor, end_factor, len(samples))
+        
+        faded_data = (samples * factors).astype(np.int16).tobytes()
+        try:
+            write_fifo_chunk(fifo_fd, faded_data)
+        except BrokenPipeError:
+            raise
+
 def enqueue_current_schedule_metadata():
     audio_queue.put({"type": "metadata", "state": get_current_schedule_state()})
     return True
@@ -453,6 +493,10 @@ def generator_worker():
                 else:
                     playout.mix_and_queue(music_file, voice_file)
 
+            # Iniezione del jingle di stacco istituzionale (sigla d'uscita) a fine blocco parlato
+            if not schedule_interrupt_event.is_set() and not breaking_news_active:
+                playout.queue_jingle(str(CLASSIC_JINGLE_FILE), "stacco_uscita")
+
             if not schedule_interrupt_event.is_set() and not breaking_news_active:
                 deadline = schedule_deadline(next_time)
 
@@ -567,6 +611,7 @@ def main():
             fifo_fd = os.open(AUDIO_PIPE, os.O_WRONLY | os.O_NONBLOCK)
             print("✅ FFmpeg collegato! Trasmissione in corso...")
             enqueue_current_schedule_metadata()
+            fade_in_chunks_remaining = 0
             while True:
                     if manual_block_override_index is None:
                         current_schedule_key = get_wallclock_schedule_key()
@@ -633,6 +678,8 @@ def main():
 
                                 if os.path.exists(chime_file):
                                     print("🔔 Riproduzione sincrona del rintocco orario in corso...")
+                                    # Dissolvenza software preventiva in uscita prima del chime
+                                    apply_preventive_fade_out_and_write(fifo_fd)
                                     chime_info = {
                                         "status": "ON_AIR",
                                         "current_block": "chime",
@@ -690,6 +737,7 @@ def main():
                                         print(f"⚠️ Errore riproduzione chime: {e}")
 
                                     restore_after_interrupt(prev_state, "chime")
+                                    fade_in_chunks_remaining = FADE_IN_TOTAL_CHUNKS
                                 else:
                                     print(f"⚠️ File rintocco non trovato: {chime_file}")
                             elif cmd == "TRIGGER_BREAKING_NEWS":
@@ -701,6 +749,8 @@ def main():
                                 print("🚨 Comando ricevuto: BREAKING_NEWS_READY. Eseguo riproduzione sincrona!")
 
                                 if os.path.exists(bn_file):
+                                    # Dissolvenza software preventiva in uscita prima dell'Ultim'Ora
+                                    apply_preventive_fade_out_and_write(fifo_fd)
                                     bn_info = {
                                         "status": "ON_AIR",
                                         "current_block": "breaking_news",
@@ -758,6 +808,7 @@ def main():
                                         print(f"⚠️ Errore riproduzione breaking news: {e}")
 
                                     restore_after_interrupt(prev_state, "breaking news")
+                                    fade_in_chunks_remaining = FADE_IN_TOTAL_CHUNKS
                             elif cmd.startswith("PLAY_PODCAST_IMMEDIATE"):
                                 parts = cmd.split("|")
                                 pod_file = parts[1] if len(parts) > 1 else ""
@@ -765,6 +816,8 @@ def main():
                                 print(f"🎙️ Comando ricevuto: PLAY_PODCAST_IMMEDIATE. Eseguo riproduzione sincrona di '{pod_title}'!")
 
                                 if os.path.exists(pod_file):
+                                    # Dissolvenza software preventiva in uscita prima del podcast al volo
+                                    apply_preventive_fade_out_and_write(fifo_fd)
                                     pod_info = {
                                         "status": "ON_AIR",
                                         "current_block": "news",
@@ -822,6 +875,7 @@ def main():
                                         print(f"⚠️ Errore riproduzione podcast al volo: {e}")
 
                                     restore_after_interrupt(prev_state, "podcast al volo")
+                                    fade_in_chunks_remaining = FADE_IN_TOTAL_CHUNKS
                                 else:
                                     print(f"⚠️ File podcast non trovato: {pod_file}")
                         except Exception as e:
@@ -853,6 +907,19 @@ def main():
                             continue
                             
                         data = item["data"] if isinstance(item, dict) else item
+                        if fade_in_chunks_remaining > 0:
+                            import numpy as np
+                            try:
+                                samples = np.frombuffer(data, dtype=np.int16).copy()
+                                idx = FADE_IN_TOTAL_CHUNKS - fade_in_chunks_remaining
+                                start_factor = idx / FADE_IN_TOTAL_CHUNKS
+                                end_factor = (idx + 1) / FADE_IN_TOTAL_CHUNKS
+                                factors = np.linspace(start_factor, end_factor, len(samples))
+                                data = (samples * factors).astype(np.int16).tobytes()
+                                fade_in_chunks_remaining -= 1
+                            except Exception as e:
+                                print(f"⚠️ Errore durante l'applicazione del fade-in: {e}")
+                                
                         write_fifo_chunk(fifo_fd, data)
                         audio_queue.task_done()
                     except queue.Empty:

@@ -82,7 +82,7 @@ class AudioPlayout:
             "-loglevel", "error",
             "-i", music_file,
             "-vn",
-            "-filter:a", "volume=0.8",
+            "-filter:a", "volume=0.8,afade=t=in:ss=0:d=2.5",
             "-f", "s16le",
             "-ar", str(PCM_SAMPLE_RATE),
             "-ac", str(PCM_CHANNELS),
@@ -96,7 +96,7 @@ class AudioPlayout:
             "-i", voice_file,
             "-i", music_file,
             "-filter_complex",
-            "[0:a]volume=1.5,asplit=2[v_main][v_side]; "
+            "[0:a]apad=pad_len=72000,volume=1.5,asplit=2[v_main][v_side]; "
             "[1:a]volume=0.25[m]; "
             "[m][v_side]sidechaincompress=threshold=0.03:ratio=20:attack=50:release=1000[music]; "
             "[v_main][music]amix=inputs=2:duration=first:dropout_transition=0",
@@ -172,24 +172,48 @@ class AudioPlayout:
         process = subprocess.Popen(self._mix_command(music_file, voice_file), stdout=subprocess.PIPE)
         self.current_process = process
 
-        print("Caricamento audio nella coda...")
-        count = 0
+        # Legge l'intero audio in memoria per applicare il fade-out software finale
+        chunks = []
         while True:
             if self.is_interrupted():
-                print("⏭️ Interrompo il mixaggio regolare.")
                 process.terminate()
                 break
-
             data = process.stdout.read(PCM_CHUNK_BYTES)
             if not data:
                 break
-            if not self.queue_item({"type": "audio", "data": data}):
-                process.terminate()
-                break
-            count += 1
+            chunks.append(data)
 
         process.wait()
         self.current_process = None
+
+        if self.is_interrupted() or not chunks:
+            print("⏭️ Interrompo o nessun chunk generato.")
+            return
+
+        # Applica fade-out software lineare sugli ultimi 30 chunk (circa 2.5 secondi)
+        import numpy as np
+        fade_chunks = min(30, len(chunks))
+        for idx in range(fade_chunks):
+            chunk_idx = len(chunks) - fade_chunks + idx
+            data = chunks[chunk_idx]
+            
+            samples = np.frombuffer(data, dtype=np.int16).copy()
+            start_factor = (fade_chunks - idx) / fade_chunks
+            end_factor = (fade_chunks - idx - 1) / fade_chunks
+            factors = np.linspace(start_factor, end_factor, len(samples))
+            
+            chunks[chunk_idx] = (samples * factors).astype(np.int16).tobytes()
+
+        # Inserisce i chunk nella coda
+        print(f"Caricamento di {len(chunks)} chunk audio con fade-out finale nella coda...")
+        count = 0
+        for data in chunks:
+            if self.is_interrupted():
+                break
+            if not self.queue_item({"type": "audio", "data": data}):
+                break
+            count += 1
+
         print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
 
     def get_random_music(self, exclude=None):
