@@ -12,6 +12,15 @@ from newsica.audio.playout import AudioPlayout
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 from newsica.domain.characters import get_character
 
+# Custom print con timestamp per i log della regia
+_original_print = print
+def print(*args, **kwargs):
+    now = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    if args:
+        _original_print(f"{now} {args[0]}", *args[1:], **kwargs)
+    else:
+        _original_print(now, **kwargs)
+
 # Cartelle di progetto
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
