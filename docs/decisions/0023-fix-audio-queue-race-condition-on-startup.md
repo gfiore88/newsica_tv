@@ -110,3 +110,49 @@ Architettura più corretta a lungo termine ma fuori scope per questo hotfix.
 ## File Modificati
 
 - `src/director.py`: `audio_queue maxsize`, `fifo_connected_event`, `generator_worker()`, ciclo FIFO principale
+
+---
+
+## Bug Secondario Correlato — Loop del Palinsesto (stesso commit)
+
+### Contesto
+
+La riduzione di `maxsize` a 200 chunk ha esposto un **secondo bug latente** nella gestione
+dei metadata in coda: il palinsesto ripeteva lo stesso blocco vocale dall'inizio invece di
+procedere alla musica successiva.
+
+### Causa Radice
+
+`mix_and_queue()` inserisce in testa alla coda un item di tipo `metadata` contenente il
+`block_info` (titolo, blocco attivo, ecc.), ma **senza il campo `current_segment`**.
+
+Il thread principale (FIFO writer), quando legge questo metadata, chiamava:
+
+```python
+write_state_files(item["state"])   # sovrascrittura totale → current_segment scompare!
+```
+
+Con `maxsize=5000` (prima del fix), tutti i 538 chunk venivano caricati in coda in <200ms
+e il `generator_worker` avanzava immediatamente al blocco successivo prima che il thread
+principale consumasse il metadata. Con `maxsize=200`, il generator rimane bloccato per
+~45 secondi in `queue_item` (aspettando che la coda si svuoti) e nel frattempo il thread
+principale consuma il metadata, sovrascrivendo `current_segment` con un dict che non lo
+include. Al loop successivo: `state.get("current_segment", "init")` → `"init"` → il
+`DirectorAgent` ricominciava il blocco dall'inizio.
+
+### Fix Applicato
+
+Sostituzione della sovrascrittura totale con un **merge** dello stato:
+
+```python
+# PRIMA — sovrascrittura totale (cancella current_segment)
+write_state_files(item["state"])
+
+# DOPO — merge: i campi display (titolo, blocco) aggiornano, current_segment preservato
+existing_state = get_current_state()
+merged_state = {**existing_state, **item["state"]}
+write_state_files(merged_state)
+```
+
+Questo garantisce che i campi della macchina a stati (`current_segment`, `scheduled_slot`,
+ecc.) vengano preservati anche quando il metadata di display li omette.

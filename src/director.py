@@ -481,7 +481,13 @@ def main():
                 try:
                     item = audio_queue.get_nowait()
                     if isinstance(item, dict) and item.get("type") == "metadata":
-                        write_state_files(item["state"])
+                        # FIX: merge con lo stato esistente invece di sovrascriverlo.
+                        # block_info (il metadata) non include current_segment, quindi
+                        # una sovrascrittura totale lo cancellerebbe, causando il reset
+                        # della macchina a stati del DirectorAgent a "init" (loop del blocco).
+                        existing_state = get_current_state()
+                        merged_state = {**existing_state, **item["state"]}
+                        write_state_files(merged_state)
                         audio_queue.task_done()
                         continue
                         
