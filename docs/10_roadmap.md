@@ -18,6 +18,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] Grafica Dinamica: Ticker aggiornati in tempo reale e sovrimpressioni (Orologio e box ULTIMORA fisso).
 - [x] Stabilizzazione Stream: Clock video costante a 30 fps, pacing realtime della pipe audio e fallback PCM coerente.
 - [x] Anti-stallo H24: fallback a silenzio PCM quando la coda e' vuota e watchdog FFmpeg su `out_time_ms`.
+- [x] **Fix Race Condition Startup (ADR 0023)**: Risolto deadlock tra `generator_worker` e FFmpeg: introdotto `fifo_connected_event` per bloccare il precaricamento audio finché FFmpeg non si connette; ridotto `audio_queue maxsize` da 5000 a 200 chunk (~17s di buffer sicuro).
 - [x] Rotazione agenti robusta: fallback locale per copioni news/sport/meteo quando Ollama non e' disponibile.
 - [x] Espressivita' speaker: prompt piu' parlati, punteggiatura naturale e velocita' TTS per personaggio.
 - [x] Agente Wellness: rubrica fitness, benessere e cura della persona con fonti dedicate e spunti sempre vari.

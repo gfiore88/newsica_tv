@@ -49,11 +49,16 @@ if not os.path.exists(PYTHON_EXEC):
 if not os.path.exists(PYTHON_EXEC):
     PYTHON_EXEC = sys.executable
 
-audio_queue = queue.Queue(maxsize=5000)
+# Coda audio con buffer limitato a ~17 secondi (200 chunk × 4096 byte × 1/24000 Hz)
+# Era 5000 (>7 minuti) — causava saturazione pre-FFmpeg e deadlock sull'encoder H.264
+audio_queue = queue.Queue(maxsize=200)
 manual_block_override_index = None
 current_active_index = 0
 breaking_news_active = False
 schedule_interrupt_event = threading.Event()
+# Evento che segnala quando la FIFO è aperta in scrittura (FFmpeg collegato)
+# Il generator_worker lo aspetta per evitare di pre-caricare audio prima del tempo
+fifo_connected_event = threading.Event()
 
 playout = AudioPlayout(
     audio_queue,
@@ -89,6 +94,13 @@ def run_pipeline(character="news", title=None):
 def generator_worker():
     global breaking_news_active, manual_block_override_index
     print("🤖 Thread Generatore (DirectorAgent Event Loop) avviato.")
+    
+    # Aspetta che la FIFO sia aperta da FFmpeg prima di pre-caricare audio.
+    # Senza questo wait, mix_and_queue() riempirebbe la coda (200 chunk) in <0.1s
+    # e il director scriverebbe troppo veloce prima che FFmpeg finisca l'handshake RTMP.
+    print("⏸️  Generator in attesa che FFmpeg apra la pipe audio...")
+    fifo_connected_event.wait()
+    print("▶️  Generator sbloccato — avvio ciclo palinsesto.")
     
     while True:
         try:
@@ -217,8 +229,7 @@ def write_fifo_chunk(fifo_fd, data, blocking=True):
     written_total = 0
     while written_total < len(view):
         try:
-            next_end = min(written_total + 512, len(view))
-            written = os.write(fifo_fd, view[written_total:next_end])
+            written = os.write(fifo_fd, view[written_total:])
             if written == 0:
                 raise BrokenPipeError
             written_total += written
@@ -299,8 +310,11 @@ def main():
         try:
             fifo_fd = os.open(AUDIO_PIPE, os.O_WRONLY | os.O_NONBLOCK)
             print("✅ FFmpeg collegato! Trasmissione in corso...")
+            # Segnala al generator_worker che può iniziare a produrre audio
+            fifo_connected_event.set()
             audio_queue.put({"type": "metadata", "state": get_current_state()})
             fade_in_chunks_remaining = 0
+            next_write_time = time.time()
             while True:
                 if manual_block_override_index is None:
                     current_schedule_key = get_wallclock_schedule_key()
@@ -398,6 +412,12 @@ def main():
                                 fade_in_chunks_remaining = 20
                         elif cmd == "TRIGGER_BREAKING_NEWS":
                             threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")])).start()
+                        elif cmd == "TRIGGER_SPECIAL_BROADCAST_TEST":
+                            def run_forced_breaking_news():
+                                env = os.environ.copy()
+                                env["FORCE_SEVERITY"] = "95"
+                                subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")], env=env)
+                            threading.Thread(target=run_forced_breaking_news).start()
                         elif cmd.startswith("BREAKING_NEWS_READY"):
                             parts = cmd.split("|")
                             bn_file = parts[1] if len(parts) > 1 else ""
@@ -481,6 +501,14 @@ def main():
                             
                     write_fifo_chunk(fifo_fd, data)
                     audio_queue.task_done()
+                    
+                    chunk_duration = len(data) / (2 * PCM_SAMPLE_RATE)
+                    next_write_time += chunk_duration
+                    sleep_time = next_write_time - time.time()
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+                    elif sleep_time < -0.5:
+                        next_write_time = time.time()
                 except queue.Empty:
                     if breaking_news_active:
                         breaking_news_active = False
@@ -492,6 +520,14 @@ def main():
                     try:
                         if not write_fifo_chunk(fifo_fd, silence, blocking=False):
                             time.sleep(0.02)
+                        else:
+                            chunk_duration = len(silence) / (2 * PCM_SAMPLE_RATE)
+                            next_write_time += chunk_duration
+                            sleep_time = next_write_time - time.time()
+                            if sleep_time > 0:
+                                time.sleep(sleep_time)
+                            elif sleep_time < -0.5:
+                                next_write_time = time.time()
                     except BrokenPipeError:
                         break
                 except BrokenPipeError:
@@ -500,6 +536,9 @@ def main():
             print(f"⚠️ Errore pipe: {e}")
             time.sleep(2)
         finally:
+            # Se la FIFO si chiude (FFmpeg si disconnette), resettiamo l'evento
+            # così il generator_worker si fermerà e aspetterà la riconnessione
+            fifo_connected_event.clear()
             if fifo_fd is not None:
                 try:
                     os.close(fifo_fd)

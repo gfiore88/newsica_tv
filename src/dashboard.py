@@ -126,6 +126,14 @@ HTML_TEMPLATE = """
                             🔔 Segnale Orario
                         </button>
                     </div>
+                    <div class="mt-3 grid grid-cols-2 gap-3">
+                        <button onclick="sendCommand('TRIGGER_SPECIAL_BROADCAST_TEST')" class="col-span-1 bg-rose-700/90 hover:bg-rose-600 transition border border-rose-500 p-3 rounded-lg font-bold text-xs md:text-sm flex justify-center items-center shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+                            🔴 ED. STRAORDINARIA (TEST)
+                        </button>
+                        <button onclick="sendCommand('REVOKE_SPECIAL_BROADCAST')" class="col-span-1 bg-emerald-700/80 hover:bg-emerald-600 transition border border-emerald-500 p-3 rounded-lg font-bold text-xs md:text-sm flex justify-center items-center shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                            🟢 RIPRISTINA PALINSESTO
+                        </button>
+                    </div>
                     <div class="mt-5 pt-4 border-t border-slate-700/60">
                         <h3 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-3">Servizi</h3>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
