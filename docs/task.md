@@ -32,3 +32,5 @@
 | 29 | /streaming_expert | ✅ Done | Ripristinata diretta con restart governato da `manage.sh` e aggiunto `live-health` end-to-end |
 | 30 | /streaming_expert | ✅ Done | Recuperato `tmp/audio.wav` del podcast e mandato in onda con comando `PLAY_PODCAST_IMMEDIATE` |
 | 31 | /python_engineer | ✅ Done | Fix audio stale: al cambio fascia il Director invalida `audio.wav`/`audio_part*.wav` e verifica TTS fresco |
+| 32 | /orchestrator | ✅ Done | Refactor HUD locale: `overlay_agent.py` renderizza ON AIR/orologio/prossimi eventi su FIFO rawvideo per FFmpeg |
+| 33 | /orchestrator | ✅ Done | Coerenza editoriale titolo-contenuto: tema obbligatorio nei prompt e manifest di validazione asset |

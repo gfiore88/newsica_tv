@@ -59,6 +59,7 @@ if [ -z "$YOUTUBE_STREAM_KEY" ] || [ "$YOUTUBE_STREAM_KEY" == "inserisci_qui_la_
 fi
 
 AUDIO_FILE="tmp/audio_pipe"
+OVERLAY_PIPE="tmp/overlay_pipe"
 TICKER_FILE="tmp/ticker.txt"
 LOGO_FILE="assets/splashscreen.png"
 PROGRESS_FILE="tmp/ffmpeg_progress.txt"
@@ -96,6 +97,10 @@ if [ ! -p "$AUDIO_FILE" ]; then
   echo "❌ ERRORE: Pipe audio non trovata ($AUDIO_FILE). Esegui prima director.py"
   exit 1
 fi
+if [ ! -p "$OVERLAY_PIPE" ]; then
+  echo "❌ ERRORE: Pipe overlay non trovata ($OVERLAY_PIPE). Esegui prima overlay_agent.py"
+  exit 1
+fi
 
 echo "🎬 Avvio dello streaming FFmpeg verso YouTube..."
 echo "📡 Destinazione: $YOUTUBE_STREAM_URL"
@@ -128,8 +133,7 @@ if [ "$STREAM_TEST_CARD" = "1" ]; then
   FILTER='[0:v]setsar=1,format=yuv420p[bg]; [bg]drawbox=x=0:y=0:w=iw:h=90:color=black@0.75:t=fill[top]; [top]drawtext=text='"'"'NEWSICA TV TEST - SEGNALE VIDEO ATTIVO'"'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=42:x=30:y=25[outv]'
 else
   VIDEO_INPUT_ARGS=(-re -framerate 30 -loop 1 -i "$LOGO_FILE")
-  SCHEDULE_FILE="tmp/schedule_next.txt"
-  FILTER='[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=30[bg]; [bg]drawbox=y=ih-80:color=black@0.7:width=iw:height=80:t=fill[bg_box]; [bg_box]drawtext=textfile='"$TICKER_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=40:y=h-60:x=w-mod(t*200\,w+tw):alpha=0.9[ticker]; [ticker]drawbox=x=0:y=ih-80:color=red@1:width=250:height=80:t=fill[ticker_box]; [ticker_box]drawtext=text='"'ULTIMORA'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=35:x=20:y=h-58[main_v]; [main_v]drawbox=x=30:y=30:w=620:h=92:color=0x0f172af5:t=fill[top_bg]; [top_bg]drawtext=text='"'ON AIR'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=0xfca5a5:fontsize=14:x=52:y=42[top_label]; [top_label]drawtext=textfile='"$PROGRAM_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=24:x=52:y=60:expansion=none[current_program]; [current_program]drawtext=textfile='"$NEXT_PROGRAM_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=0xcbd5e1:fontsize=16:x=52:y=94:expansion=none[main_osd]; [main_osd]drawbox=x=iw-200:y=30:w=170:h=92:color=0x0f172af5:t=fill[clock_bg]; [clock_bg]drawbox=x=iw-38:y=30:w=8:h=92:color=0xffffff99:t=fill[clock_accent]; [clock_accent]drawtext=textfile='"$CLOCK_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=32:x=w-182:y=44[clock_time]; [clock_time]drawtext=textfile='"$DATE_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=0xcbd5e1:fontsize=14:x=w-182:y=84[clock_date]; [clock_date]drawbox=x=30:y=ih-148:w=1220:h=52:color=0x0f172ad9:t=fill[sched_bg]; [sched_bg]drawbox=x=30:y=ih-148:w=6:h=52:color=0x38bdf8cc:t=fill[sched_accent]; [sched_accent]drawtext=text='"'A SEGUIRE'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=0x7dd3fc:fontsize=14:x=52:y=h-132[sched_label]; [sched_label]drawtext=textfile='"$SCHEDULE_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=0xe2e8f0:fontsize=20:x=168:y=h-135:expansion=none[outv]'
+  FILTER='[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=30[bg]; [1:v]format=rgba,fps=30[overlay]; [bg][overlay]overlay=0:0:format=auto[main_v]; [main_v]drawbox=y=ih-80:color=black@0.7:width=iw:height=80:t=fill[bg_box]; [bg_box]drawtext=textfile='"$TICKER_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=40:y=h-60:x=w-mod(t*200\,w+tw):alpha=0.9[ticker]; [ticker]drawbox=x=0:y=ih-80:color=red@1:width=250:height=80:t=fill[ticker_box]; [ticker_box]drawtext=text='"'ULTIMORA'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=35:x=20:y=h-58[outv]'
 fi
 
 FFMPEG_PID=""
@@ -183,9 +187,10 @@ while true; do
     -hide_banner -stats_period 5 \
     -progress "$PROGRESS_FILE" \
     -thread_queue_size 4096 "${VIDEO_INPUT_ARGS[@]}" \
+    -thread_queue_size 128 -f rawvideo -pix_fmt rgba -s 1280x720 -r 1 -i "$OVERLAY_PIPE" \
     -thread_queue_size 4096 -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
     -filter_complex "$FILTER" \
-    -map "[outv]" -map 1:a \
+    -map "[outv]" -map 2:a \
     -c:v libx264 -preset veryfast -tune stillimage \
     -b:v 3000k -minrate 3000k -maxrate 3000k -bufsize 6000k \
     -x264-params "nal-hrd=cbr:force-cfr=1:filler=1" \

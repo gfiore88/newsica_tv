@@ -32,8 +32,25 @@ class ContentStrategistAgent:
         print(f"[{datetime.now()}] Scraping completato. Salvate {len(all_news)} notizie in {self.output_file}")
         return all_news
 
-    def _build_prompt_payload(self, news_items):
-        news_text = "Ecco le notizie da rielaborare:\n\n"
+    def _build_prompt_payload(self, news_items, title=None, character_id=None):
+        news_text = ""
+        if title:
+            news_text += (
+                "TEMA OBBLIGATORIO DELLA PUNTATA:\n"
+                f"{title}\n\n"
+                "Regola editoriale: il copione deve rispettare questo titolo. "
+                "Usa gli spunti sotto solo se aiutano il tema; non cambiare argomento "
+                "e non trasformare la puntata in una rassegna generica.\n\n"
+            )
+            if character_id == "wellness":
+                news_text += (
+                    "Per una rubrica wellness, traduci il tema in consigli pratici, "
+                    "sicuri e quotidiani. Se il titolo parla di esercizi per l'ufficio, "
+                    "concentrati su movimenti semplici da scrivania, postura, pause attive "
+                    "e respirazione, senza prescrizioni mediche.\n\n"
+                )
+
+        news_text += "Ecco le notizie o gli spunti da rielaborare:\n\n"
         for item in news_items:
             news_text += f"- TITOLO: {item.get('title', '')}\n"
             news_text += f"  SINTESI: {item.get('summary', '')}\n\n"
@@ -52,8 +69,8 @@ class ContentStrategistAgent:
             print(f"⚠️ Nessuna notizia specifica per '{character.id}'. Uso quelle generali.")
             filtered_news = fallback_general_news(all_news)
             
-        fallback_script = build_fallback_script(character.id, filtered_news)
-        prompt = self._build_prompt_payload(filtered_news)
+        fallback_script = build_fallback_script(character.id, filtered_news, title=title)
+        prompt = self._build_prompt_payload(filtered_news, title=title, character_id=character.id)
         system_prompt = character.read_prompt()
         
         intro = ""

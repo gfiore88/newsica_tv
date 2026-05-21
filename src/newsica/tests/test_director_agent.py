@@ -3,14 +3,25 @@ from unittest.mock import MagicMock, patch, mock_open
 import datetime
 import json
 import os
+import tempfile
 
 from newsica.broadcast.director_agent import DirectorAgent
 
 class TestDirectorAgent(unittest.TestCase):
     def setUp(self):
+        self.audit_tmp = tempfile.TemporaryDirectory()
+        self.previous_audit_log = os.environ.get("NEWSICA_AUDIT_LOG_FILE")
+        os.environ["NEWSICA_AUDIT_LOG_FILE"] = os.path.join(self.audit_tmp.name, "audit_trail.log")
         self.mock_playout = MagicMock()
         self.mock_playout.get_random_music.return_value = "assets/music/track_test.mp3"
         self.director = DirectorAgent(self.mock_playout)
+
+    def tearDown(self):
+        if self.previous_audit_log is None:
+            os.environ.pop("NEWSICA_AUDIT_LOG_FILE", None)
+        else:
+            os.environ["NEWSICA_AUDIT_LOG_FILE"] = self.previous_audit_log
+        self.audit_tmp.cleanup()
 
     @patch("newsica.broadcast.director_agent.write_state_files")
     @patch("newsica.broadcast.director_agent.get_jingle_for_block")

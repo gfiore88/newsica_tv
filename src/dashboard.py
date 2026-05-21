@@ -31,6 +31,7 @@ SERVICES = {
             r"src/watchdog\.sh",
             r"src/director\.py",
             r"src/ticker_agent\.py",
+            r"src/overlay_agent\.py",
             r"src/hourly_chime_agent\.py",
             r"src/breaking_news_agent\.py",
         ],

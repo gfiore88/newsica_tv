@@ -1,6 +1,7 @@
 import os
 import shutil
 import time
+import json
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent
@@ -15,12 +16,36 @@ class SystemAdminAgent:
         for d in ["planned", "preparing", "ready", "queued", "aired", "failed", "archive"]:
             (ASSETS_DIR / d).mkdir(parents=True, exist_ok=True)
             
-    def prepare_slot(self, slot_time):
+    def _manifest_matches(self, ready_dir, character=None, title=None):
+        manifest_path = ready_dir / "manifest.json"
+        if not manifest_path.exists():
+            return False
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        if character and manifest.get("character") != character:
+            return False
+        if title and manifest.get("title") != title:
+            return False
+        return True
+
+    def prepare_slot(self, slot_time, character=None, title=None):
         """Prepara la cartella per l'asset in generazione e previene le race condition."""
         slot_id = slot_time.replace(":", "")
         ready_dir = ASSETS_DIR / "ready" / slot_id
         preparing_dir = ASSETS_DIR / "preparing" / slot_id
         
+        if ready_dir.exists():
+            if not self._manifest_matches(ready_dir, character=character, title=title):
+                stale_dir = ASSETS_DIR / "archive" / f"{slot_id}_stale_{int(time.time())}"
+                if stale_dir.exists():
+                    shutil.rmtree(stale_dir)
+                ready_dir.rename(stale_dir)
+                print(f"♻️ [SystemAdminAgent] Asset pronto per {slot_time} non coerente col palinsesto attuale. Rigenero.")
+            else:
+                return None, "L'asset è già pronto."
+            
         if ready_dir.exists():
             return None, "L'asset è già pronto."
             
@@ -30,7 +55,7 @@ class SystemAdminAgent:
         preparing_dir.mkdir(parents=True, exist_ok=True)
         return preparing_dir, "OK"
         
-    def commit_assets(self, slot_time, audio_files, preparing_dir):
+    def commit_assets(self, slot_time, audio_files, preparing_dir, metadata=None):
         """Sposta i file validati nella cartella ready."""
         slot_id = slot_time.replace(":", "")
         ready_dir = ASSETS_DIR / "ready" / slot_id
@@ -38,6 +63,11 @@ class SystemAdminAgent:
         try:
             for f in audio_files:
                 shutil.copy(f, preparing_dir / f.name)
+            if metadata:
+                (preparing_dir / "manifest.json").write_text(
+                    json.dumps(metadata, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
                 
             if ready_dir.exists():
                 shutil.rmtree(ready_dir)

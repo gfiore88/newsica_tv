@@ -68,6 +68,7 @@ function do_status() {
   check_status "Regia (Director)" "src/director.py"
   check_status "Stream (FFmpeg)" "ffmpeg.*audio_pipe"
   check_status "Ticker Agent" "src/ticker_agent.py"
+  check_status "Overlay Agent" "src/overlay_agent.py"
   check_status "Chime Agent" "src/hourly_chime_agent.py"
   check_status "Watchdog" "src/watchdog.sh"
   echo -e "------------------------------------------------\n"
@@ -84,7 +85,7 @@ function do_stop() {
   fi
 
   # Invia SIGTERM ordinato a Regia, Dashboard e Stream
-  local targets=("src/director.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py")
+  local targets=("src/director.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py")
   for target in "${targets[@]}"; do
     local pids=$(get_all_pids "$target")
     if [ -n "$pids" ]; then
@@ -120,7 +121,7 @@ function do_stop() {
   echo -e "🧹 Rimozione lock e pipe orfane..."
   rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
   rm -rf "$RUNTIME_DIR"/stream.lock 2>/dev/null || true
-  rm -f "$TMP_DIR"/audio_pipe 2>/dev/null || true
+  rm -f "$TMP_DIR"/audio_pipe "$TMP_DIR"/overlay_pipe 2>/dev/null || true
 
   echo -e "${GREEN}✅ Tutto l'ecosistema è stato spento correttamente.${NC}\n"
 }
@@ -139,6 +140,10 @@ function do_start() {
   if [ ! -p "$TMP_DIR/audio_pipe" ]; then
     echo "  -> Creazione pipe audio FIFO..."
     mkfifo "$TMP_DIR/audio_pipe"
+  fi
+  if [ ! -p "$TMP_DIR/overlay_pipe" ]; then
+    echo "  -> Creazione pipe overlay FIFO..."
+    mkfifo "$TMP_DIR/overlay_pipe"
   fi
 
   # 3. Avvia la Dashboard (Web Server)

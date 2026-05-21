@@ -90,6 +90,20 @@ Se un contenuto previsto non è pronto entro la sua deadline editoriale, il Dire
 
 La continuità dello stream ha priorità assoluta rispetto alla fedeltà rigida del palinsesto, ma ogni variazione deve essere gestita in modo editoriale e non come errore tecnico.
 
+## Regola di Coerenza Titolo-Contenuto
+
+Il titolo del programma nel palinsesto è un contratto editoriale con lo spettatore, non solo una label grafica.
+
+Ogni pipeline di generazione contenuti deve passare il titolo dello slot al prompt LLM come tema obbligatorio. Gli spunti RSS, le notizie cache e i fallback locali possono essere usati solo se supportano quel tema; non devono mai spostare la rubrica su un argomento diverso.
+
+Per ogni asset pre-prodotto deve esistere un manifest locale con almeno:
+- orario slot;
+- tipo rubrica/personaggio;
+- titolo editoriale;
+- timestamp di preparazione.
+
+La regia non deve mandare in onda asset privi di manifest valido o con manifest non coerente con lo slot corrente. In quel caso deve attendere la rigenerazione o usare un fallback di continuità coerente, senza riusare audio di un programma precedente.
+
 ---
 
 ## Regola di Integrazione UI e Testabilità

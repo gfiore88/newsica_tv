@@ -270,6 +270,7 @@ def main():
     threading.Thread(target=generator_worker, daemon=True).start()
     threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "preparation_agent.py")]), daemon=True).start()
     threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "ticker_agent.py")]), daemon=True).start()
+    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "overlay_agent.py")]), daemon=True).start()
     threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "hourly_chime_agent.py")]), daemon=True).start()
     
     silence = b'\x00' * PCM_CHUNK_BYTES

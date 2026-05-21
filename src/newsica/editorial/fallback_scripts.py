@@ -7,7 +7,44 @@ def clean_text(value):
     return value.strip()
 
 
-def build_fallback_script(character_id, filtered_news):
+def wellness_fallback_for_title(title):
+    normalized = clean_text(title).lower()
+    if "ufficio" not in normalized and "scrivania" not in normalized:
+        return None
+
+    return "\n\n[MUSIC_BREAK]\n\n".join([
+        (
+            "È il momento del benessere su NewsicaTV. Piccole idee per stare meglio, ogni giorno.\n\n"
+            "Oggi parliamo di esercizi per l'ufficio: gesti semplici, da fare alla scrivania, "
+            "senza trasformare la giornata in una seduta di palestra. Si parte dalle spalle. "
+            "Appoggiamo bene i piedi, lasciamo scendere le braccia e facciamo qualche rotazione lenta, "
+            "prima in avanti e poi indietro. Il punto non è forzare, ma sciogliere quella rigidità "
+            "che arriva dopo tante ore davanti allo schermo.\n\n"
+            "Ora lasciamo respirare anche la musica. Tra poco torniamo con una pausa attiva da meno di un minuto."
+        ),
+        (
+            "Eccoci di nuovo insieme. Una pausa attiva in ufficio può essere piccolissima: "
+            "alzarsi, fare due passi, aprire il petto e guardare per qualche secondo lontano dal monitor. "
+            "Anche il collo ringrazia se lo muoviamo con calma, portando lo sguardo a destra e a sinistra "
+            "senza scatti. Sono movimenti quotidiani, non prestazioni.\n\n"
+            "Ci prendiamo un altro brano, e poi chiudiamo con un esercizio di respirazione discreto, da fare anche tra una riunione e l'altra."
+        ),
+        (
+            "Rientriamo in studio per l'ultimo consiglio del giorno. Prima di riprendere il lavoro, "
+            "proviamo tre respiri lenti: inspiriamo dal naso, lasciamo espandere il torace, poi espiriamo senza fretta. "
+            "Se possiamo, aggiungiamo una piccola estensione delle gambe sotto la scrivania, alternando destra e sinistra. "
+            "Pochi secondi, ma ripetuti nella giornata fanno la differenza nella percezione di leggerezza.\n\n"
+            "Per ora è tutto. Prendiamoci una piccola pausa, e continuiamo a volerci bene."
+        ),
+    ])
+
+
+def build_fallback_script(character_id, filtered_news, title=None):
+    if character_id == "wellness" and title:
+        themed_script = wellness_fallback_for_title(title)
+        if themed_script:
+            return themed_script
+
     if character_id == "sport":
         opening = "Un saluto a tutti gli appassionati di sport! Oggi giornata ricca di emozioni."
         music_launch = "E adesso, carichiamo i motori con un po' di musica! A tra poco."

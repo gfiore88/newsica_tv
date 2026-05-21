@@ -152,6 +152,22 @@ class DirectorAgent:
         
         voice_file = os.path.join(ready_dir, "audio.wav")
         multipart_indicator = os.path.join(ready_dir, "is_multipart.txt")
+        manifest_file = os.path.join(ready_dir, "manifest.json")
+        if os.path.exists(ready_dir):
+            try:
+                with open(manifest_file, "r", encoding="utf-8") as f:
+                    manifest = json.load(f)
+                if manifest.get("character") != block_type or manifest.get("title") != title:
+                    print(
+                        f"⚠️ [DirectorAgent] Asset pronto non coerente per {scheduled_slot}: "
+                        f"atteso {block_type}/{title}, trovato {manifest}."
+                    )
+                    voice_file = ""
+                    multipart_indicator = ""
+            except Exception:
+                print(f"⚠️ [DirectorAgent] Asset pronto senza manifest valido per {scheduled_slot}. Attendo rigenerazione.")
+                voice_file = ""
+                multipart_indicator = ""
         
         # Determina se il file generato è multi-part o classico singolo
         is_multipart = False

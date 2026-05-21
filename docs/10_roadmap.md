@@ -22,6 +22,8 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] **Live Health End-to-End**: Aggiunto `./manage.sh live-health` per verificare in un solo comando processi, log, progress FFmpeg, runner locale, connessione RTMP e player pubblico YouTube.
 - [x] **Invalidazione Audio Temporaneo (ADR 0026)**: Al cambio fascia il Director elimina `audio.wav`, `audio_part*.wav` e `is_multipart.txt` per impedire che uno slot riusi audio stale di podcast/news/meteo precedenti.
 - [x] **Fix Race Condition Startup (ADR 0023)**: Risolto deadlock tra `generator_worker` e FFmpeg: introdotto `fifo_connected_event` per bloccare il precaricamento audio finché FFmpeg non si connette; ridotto `audio_queue maxsize` da 5000 a 200 chunk (~17s di buffer sicuro).
+- [x] **Overlay Grafico Locale (ADR 0028)**: Spostata la HUD ON AIR/orologio/prossimi eventi da filtri FFmpeg monolitici a `overlay_agent.py`, che renderizza frame RGBA via Pillow su FIFO rawvideo locale.
+- [x] **Coerenza Titolo-Contenuto (ADR 0029)**: Il titolo dello slot diventa tema obbligatorio nel prompt e gli asset pronti vengono validati tramite manifest rubrica/titolo prima della messa in onda.
 - [x] Rotazione agenti robusta: fallback locale per copioni news/sport/meteo quando Ollama non e' disponibile.
 - [x] Espressivita' speaker: prompt piu' parlati, punteggiatura naturale e velocita' TTS per personaggio.
 - [x] Agente Wellness: rubrica fitness, benessere e cura della persona con fonti dedicate e spunti sempre vari.

@@ -37,8 +37,31 @@ def load_news_items():
         sys.exit(1)
 
 
-def build_prompt_payload(news_items):
-    news_text = "Ecco le notizie da rielaborare:\n\n"
+def resolve_title():
+    if len(sys.argv) > 2:
+        return sys.argv[2]
+    return os.getenv("NEWSICA_BLOCK_TITLE", "")
+
+
+def build_prompt_payload(news_items, title=None, character_id=None):
+    news_text = ""
+    if title:
+        news_text += (
+            "TEMA OBBLIGATORIO DELLA PUNTATA:\n"
+            f"{title}\n\n"
+            "Regola editoriale: il copione deve rispettare questo titolo. "
+            "Usa gli spunti sotto solo se aiutano il tema; non cambiare argomento "
+            "e non trasformare la puntata in una rassegna generica.\n\n"
+        )
+        if character_id == "wellness":
+            news_text += (
+                "Per una rubrica wellness, traduci il tema in consigli pratici, "
+                "sicuri e quotidiani. Se il titolo parla di esercizi per l'ufficio, "
+                "concentrati su movimenti semplici da scrivania, postura, pause attive "
+                "e respirazione, senza prescrizioni mediche.\n\n"
+            )
+
+    news_text += "Ecco le notizie o gli spunti da rielaborare:\n\n"
     for item in news_items:
         news_text += f"- TITOLO: {item.get('title', '')}\n"
         news_text += f"  SINTESI: {item.get('summary', '')}\n\n"
@@ -56,6 +79,7 @@ def generate_script():
     print("Avvio della rielaborazione editoriale tramite LLM (Ollama locale)...")
 
     character = resolve_character()
+    title = resolve_title()
     news_items = load_news_items()
     filtered_news = filter_items_for_character(news_items, character)
 
@@ -65,11 +89,11 @@ def generate_script():
 
     print(f"Ho letto {len(filtered_news)} notizie per {character.id}. Invio al modello {MODEL_NAME}...")
 
-    fallback_script = build_fallback_script(character.id, filtered_news)
+    fallback_script = build_fallback_script(character.id, filtered_news, title=title)
     payload = {
         "model": MODEL_NAME,
         "system": character.read_prompt(),
-        "prompt": build_prompt_payload(filtered_news),
+        "prompt": build_prompt_payload(filtered_news, title=title, character_id=character.id),
         "stream": False,
         "keep_alive": "30m",
         "options": {

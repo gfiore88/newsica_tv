@@ -63,7 +63,7 @@ def run_loop():
                 
                 if is_complex_block(character):
                     # Richiediamo lo spazio di lavoro al SysAdmin
-                    preparing_dir, status = sysadmin.prepare_slot(slot_time)
+                    preparing_dir, status = sysadmin.prepare_slot(slot_time, character=character, title=title)
                     if not preparing_dir:
                         # Asset già pronto o in preparazione
                         continue
@@ -81,7 +81,17 @@ def run_loop():
                             raise RuntimeError("Nessun file audio prodotto dall'Integrator.")
                             
                         # Fase 3: Consegna e Commit
-                        sysadmin.commit_assets(slot_time, audio_files, preparing_dir)
+                        sysadmin.commit_assets(
+                            slot_time,
+                            audio_files,
+                            preparing_dir,
+                            metadata={
+                                "slot_time": slot_time,
+                                "character": character,
+                                "title": title,
+                                "prepared_at": datetime.datetime.now().isoformat(timespec="seconds"),
+                            },
+                        )
                         
                     except Exception as e:
                         sysadmin.fail_slot(slot_time, preparing_dir, error=str(e))
