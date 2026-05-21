@@ -1,0 +1,123 @@
+import os
+import re
+import json
+import subprocess
+import requests
+import soundfile as sf
+import numpy as np
+from pathlib import Path
+
+from newsica.config.paths import TMP_DIR
+from newsica.audio.tts_text import prepare_text_for_tts
+
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:12b")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "60"))
+
+BASE_DIR = Path(__file__).parent.parent.parent.parent
+CHATTERBOX_PYTHON = os.getenv("CHATTERBOX_PYTHON", str(BASE_DIR / ".venv_tts_spike" / "bin" / "python"))
+CHATTERBOX_SCRIPT = str(BASE_DIR / "src" / "newsica" / "audio" / "chatterbox_tts.py")
+
+class AIIntegratorAgent:
+    def __init__(self, work_dir=TMP_DIR):
+        self.work_dir = Path(work_dir)
+        self.work_dir.mkdir(parents=True, exist_ok=True)
+        
+    def generate_script(self, content_data):
+        """Genera lo script usando Ollama"""
+        print(f"Avvio rielaborazione editoriale tramite LLM (Ollama locale) per {content_data['character_id']}...")
+        
+        payload = {
+            "model": MODEL_NAME,
+            "system": content_data["system_prompt"],
+            "prompt": content_data["prompt"],
+            "stream": False,
+            "keep_alive": "30m",
+            "options": {
+                "temperature": 0.4,
+                "num_predict": 700,
+            },
+        }
+
+        try:
+            response = requests.post(OLLAMA_URL, json=payload, timeout=OLLAMA_TIMEOUT)
+            response.raise_for_status()
+            script = response.json().get("response", "").strip()
+            if not script:
+                print("⚠️ Ollama ha restituito un copione vuoto. Uso fallback locale.")
+                script = content_data["fallback_script"]
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Errore connessione a Ollama: {e}")
+            print("⚠️ Uso copione fallback locale.")
+            script = content_data["fallback_script"]
+            
+        # Aggiungi intro se presente
+        if content_data.get("intro"):
+            script = f"{content_data['intro']}\n\n{script}"
+            
+        script_file = self.work_dir / "script.txt"
+        script_file.write_text(script, encoding="utf-8")
+        return script
+
+    def parse_speaker_segments(self, raw_text):
+        pattern = re.compile(r'\[SPEAKER:\s*([^\]]+)\]')
+        matches = list(pattern.finditer(raw_text))
+        segments = []
+
+        if not matches:
+            print("⚠️ Attenzione: Nessun tag SPEAKER rilevato. Uso Giulia come conduttrice di default.")
+            return [("Giulia", raw_text)]
+
+        for idx, match in enumerate(matches):
+            speaker = match.group(1).strip()
+            start_idx = match.end()
+            end_idx = matches[idx + 1].start() if idx + 1 < len(matches) else len(raw_text)
+            text_content = raw_text[start_idx:end_idx].strip()
+            if text_content:
+                segments.append((speaker, text_content))
+
+        return segments
+
+    def _generate_podcast(self, segments):
+        # Utilizza il subprocess verso tts_generator.py o riusa logica qui?
+        # Per semplicità invochiamo tts_generator.py per ora, ma l'obiettivo è
+        # assorbire la logica. Visto che Kokoro_onnx è installato globalmente.
+        pass
+
+    def generate_audio(self, script_text, content_data):
+        """
+        Sintetizza l'audio a partire dallo script.
+        Restituisce una lista di path (Path) ai file generati.
+        """
+        script_file = self.work_dir / "script.txt"
+        script_file.write_text(script_text, encoding="utf-8")
+        
+        # Piuttosto che riscrivere le 200 righe di tts_generator.py e la complessità di Kokoro/Chatterbox
+        # lo invochiamo qui per non spaccare nulla che è già testato.
+        # L'architettura è salva perché l'agent nasconde l'implementazione al PreparationAgent.
+        
+        # Pulizia pre-generazione in work_dir
+        for f in self.work_dir.glob("audio*.wav"):
+            f.unlink()
+        if (self.work_dir / "is_multipart.txt").exists():
+            (self.work_dir / "is_multipart.txt").unlink()
+            
+        import sys
+        PYTHON_EXEC = sys.executable
+        tts_script = BASE_DIR / "src" / "tts_generator.py"
+        
+        print("Sintesi vocale (TTS)...")
+        # tts_generator si aspetta che script.txt sia in TMP_DIR
+        subprocess.run([str(PYTHON_EXEC), str(tts_script), content_data["character_id"]], check=True)
+        
+        generated_files = []
+        if (self.work_dir / "audio.wav").exists():
+            generated_files.append(self.work_dir / "audio.wav")
+            
+        for f in self.work_dir.glob("audio_part*.wav"):
+            generated_files.append(f)
+            
+        if (self.work_dir / "is_multipart.txt").exists():
+            generated_files.append(self.work_dir / "is_multipart.txt")
+            
+        return generated_files

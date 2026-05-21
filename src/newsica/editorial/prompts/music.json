@@ -1,0 +1,18 @@
+{
+  "morning": [
+    "Upbeat morning news intro, energetic, synthetic pop",
+    "Soft acoustic guitar morning vibes, optimistic"
+  ],
+  "afternoon": [
+    "Lo-fi hip hop, chill afternoon, relaxed beat",
+    "Corporate background music, steady, neutral"
+  ],
+  "evening": [
+    "Late night jazz lounge, smooth sax, slow tempo",
+    "Ambient electronic, deep focus, night time"
+  ],
+  "breaking_news": [
+    "Intense orchestral news theme, dramatic, suspense",
+    "Fast electronic pulse, urgent, breaking news alert"
+  ]
+}

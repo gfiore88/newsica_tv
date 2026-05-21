@@ -68,37 +68,6 @@ playout = AudioPlayout(
 FFMPEG_CMD = resolve_ffmpeg_cmd()
 director_agent = DirectorAgent(playout)
 
-def add_rubric_intro_to_script(title, character):
-    script_file = os.path.join(TMP_DIR, "script.txt")
-    if not os.path.exists(script_file):
-        return
-    intro = get_character(character).render_intro(title)
-    with open(script_file, "r", encoding="utf-8") as f:
-        script = f.read().strip()
-    if script.startswith(intro):
-        return
-    with open(script_file, "w", encoding="utf-8") as f:
-        f.write(f"{intro}\n\n{script}")
-
-def run_pipeline(character="news", title=None):
-    print(f"\n--- 🔄 Avvio ciclo di aggiornamento news ({character}) ---")
-    generation_start = time.time()
-    print("Scraping news...")
-    subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "scraper.py")], check=True)
-    print("Elaborazione testo (LLM)...")
-    subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "llm_processor.py"), character], check=True)
-    if title:
-        add_rubric_intro_to_script(title, character)
-    print("Sintesi vocale (TTS)...")
-    subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "tts_generator.py"), character], check=True)
-    generated_files = [os.path.join(TMP_DIR, "audio.wav")]
-    generated_files.extend(
-        os.path.join(TMP_DIR, f_name)
-        for f_name in os.listdir(TMP_DIR)
-        if f_name.startswith("audio_part") and f_name.endswith(".wav")
-    )
-    if not any(os.path.exists(path) and os.path.getmtime(path) >= generation_start for path in generated_files):
-        raise RuntimeError(f"TTS non ha prodotto audio fresco per {character} ({title})")
 
 def generator_worker():
     global breaking_news_active, manual_block_override_index
@@ -175,20 +144,11 @@ def generator_worker():
                 music_file = action_info["file"]
                 label = action_info["label"]
                 playout.queue_single_music_track(music_file)
+                if action_info.get("trigger_ai_music_gen"):
+                    print("🚀 [Director] Tempo residuo lungo: trigger background AI Music Gen...")
+                    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_generator.py")]), daemon=True).start()
                 
-            elif action == "WAIT_OR_GENERATE":
-                char = action_info["character"]
-                title = action_info["title"]
-                time_key = action_info["time_key"]
-                next_segment = action_info.get("next_segment", "intro")
-                
-                print(f"🚀 Genero blocco in background: {title} ({char})")
-                run_pipeline(char, title)
-                
-                state = get_current_state()
-                state["current_segment"] = next_segment
-                write_state_files(state)
-                
+
             elif action == "TRIGGER_NEXT_BLOCK":
                 manual_block_override_index = None
                 schedule_interrupt_event.set()
@@ -308,6 +268,7 @@ def main():
     write_state_files({"status": "OFFLINE"})
     
     threading.Thread(target=generator_worker, daemon=True).start()
+    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "preparation_agent.py")]), daemon=True).start()
     threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "ticker_agent.py")]), daemon=True).start()
     threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "hourly_chime_agent.py")]), daemon=True).start()
     

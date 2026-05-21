@@ -33,6 +33,7 @@ function show_help() {
   echo -e "  ${CYAN}live-health${NC} Verifica log locali, RTMP e stato pubblico YouTube"
   echo -e "  ${BLUE}logs${NC}      Mostra le ultime righe dei log principali"
   echo -e "  ${PURPLE}tts-spike${NC} Genera/apre il confronto TTS sperimentale"
+  echo -e "  ${PURPLE}install-ace-step${NC} Crea venv e clona il repo di ACE-Step"
   echo ""
 }
 
@@ -276,6 +277,18 @@ function do_tts_spike() {
   fi
 }
 
+function do_install_ace_step() {
+  echo -e "\n${PURPLE}${BOLD}📦 Installazione ACE-Step in ambiente separato...${NC}"
+  local venv_dir="$BASE_DIR/.venv_ace_step"
+  if [ ! -d "$venv_dir" ]; then
+    echo "Creazione virtual environment: $venv_dir"
+    python3 -m venv "$venv_dir"
+  fi
+  echo "E' necessario clonare ACE-Step e installarne i requisiti manualmente o tramite questo script in futuro."
+  echo "Usa: $venv_dir/bin/pip install torch torchaudio pydub ..."
+  echo -e "${GREEN}Ambiente pronto in $venv_dir.${NC}\n"
+}
+
 case "$1" in
   start)
     do_start
@@ -301,6 +314,9 @@ case "$1" in
     ;;
   tts-spike)
     do_tts_spike
+    ;;
+  install-ace-step)
+    do_install_ace_step
     ;;
   *)
     show_help

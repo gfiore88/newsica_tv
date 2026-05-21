@@ -125,6 +125,9 @@ class DirectorAgent:
         if datetime.datetime.now() >= deadline:
             return {"action": "TRIGGER_NEXT_BLOCK"}
             
+        time_remaining = (deadline - datetime.datetime.now()).total_seconds()
+        trigger_ai_music_gen = time_remaining >= 180
+        
         # Sceglie un brano musicale rispettando la memoria editoriale
         music_file = self._select_non_repeated_music()
         if music_file:
@@ -132,7 +135,8 @@ class DirectorAgent:
             return {
                 "action": "PLAY_MUSIC",
                 "file": music_file,
-                "label": "music_rotation"
+                "label": "music_rotation",
+                "trigger_ai_music_gen": trigger_ai_music_gen
             }
         else:
             return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 5}
@@ -141,8 +145,11 @@ class DirectorAgent:
         """
         Progressione per news, sport, meteo, wellness.
         """
-        voice_file = os.path.join(TMP_DIR, "audio.wav")
-        multipart_indicator = os.path.join(TMP_DIR, "is_multipart.txt")
+        scheduled_slot = state.get("scheduled_slot", "").replace(":", "")
+        ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot)
+        
+        voice_file = os.path.join(ready_dir, "audio.wav")
+        multipart_indicator = os.path.join(ready_dir, "is_multipart.txt")
         
         # Determina se il file generato è multi-part o classico singolo
         is_multipart = False
@@ -159,7 +166,7 @@ class DirectorAgent:
             # Passiamo alla messa in onda del copione (singolo o multipart)
             if is_multipart and num_parts > 0:
                 # Iniziamo la prima parte del multi-part
-                next_part_file = os.path.join(TMP_DIR, "audio_part1.wav")
+                next_part_file = os.path.join(ready_dir, "audio_part1.wav")
                 if os.path.exists(next_part_file):
                     music_file = self._select_non_repeated_music()
                     if music_file:
@@ -191,8 +198,21 @@ class DirectorAgent:
                     "segment": "Completo"
                 }
             
-            # Se l'audio non è ancora pronto, dice al regista di aspettare o rigenerare
-            return {"action": "WAIT_OR_GENERATE", "character": block_type, "title": title, "time_key": state.get("scheduled_slot")}
+            # Se l'audio non è pronto, inneschiamo un fallback musicale.
+            # Questo evita il blocco stream e fa da "attesa".
+            state["current_segment"] = "music_rotation_until_deadline"
+            write_state_files(state)
+            
+            music_file = self._select_non_repeated_music()
+            if music_file:
+                add_music_track(music_file)
+                return {
+                    "action": "PLAY_MUSIC",
+                    "file": music_file,
+                    "label": "fallback_non_pronto",
+                    "trigger_ai_music_gen": False
+                }
+            return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
 
         elif current_segment == "evening_podcast_generate":
             return {
@@ -244,7 +264,7 @@ class DirectorAgent:
                 
             if current_part_idx < num_parts:
                 next_part_idx = current_part_idx + 1
-                next_part_file = os.path.join(TMP_DIR, f"audio_part{next_part_idx}.wav")
+                next_part_file = os.path.join(ready_dir, f"audio_part{next_part_idx}.wav")
                 
                 # Prima di mandare in onda la prossima parte, riproduciamo 1 brano intermedio di stacco
                 # Per non saltare il sequenziamento, creiamo uno stato intermedio di stacco musicale
@@ -274,7 +294,9 @@ class DirectorAgent:
             # Rientriamo dallo stacco musicale alla parte successiva del parlato
             parts = current_segment.split("_")
             next_part_idx = int(parts[-1])
-            next_part_file = os.path.join(TMP_DIR, f"audio_part{next_part_idx}.wav")
+            scheduled_slot = state.get("scheduled_slot", "").replace(":", "")
+            ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot)
+            next_part_file = os.path.join(ready_dir, f"audio_part{next_part_idx}.wav")
             
             if os.path.exists(next_part_file):
                 music_file = self._select_non_repeated_music()
@@ -328,13 +350,17 @@ class DirectorAgent:
             if datetime.datetime.now() >= deadline:
                 return {"action": "TRIGGER_NEXT_BLOCK"}
                 
+            time_remaining = (deadline - datetime.datetime.now()).total_seconds()
+            trigger_ai_music_gen = time_remaining >= 180
+                
             music_file = self._select_non_repeated_music()
             if music_file:
                 add_music_track(music_file)
                 return {
                     "action": "PLAY_MUSIC",
                     "file": music_file,
-                    "label": "music_rotation"
+                    "label": "music_rotation",
+                    "trigger_ai_music_gen": trigger_ai_music_gen
                 }
             else:
                 return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 5}
@@ -358,7 +384,9 @@ class DirectorAgent:
         Gestione specifica per la rubrica Podcast a due voci.
         La pipeline podcast corrente produce un file unico `audio.wav`.
         """
-        voice_file = os.path.join(TMP_DIR, "audio.wav")
+        scheduled_slot = state.get("scheduled_slot", "").replace(":", "")
+        ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot)
+        voice_file = os.path.join(ready_dir, "audio.wav")
         
         if current_segment == "intro" or current_segment == "init":
             if os.path.exists(voice_file):
@@ -371,7 +399,20 @@ class DirectorAgent:
                     "title": title,
                     "segment": "Completo"
                 }
-            return {"action": "WAIT_OR_GENERATE", "character": "podcast", "title": title, "time_key": state.get("scheduled_slot")}
+            # Se l'audio non è pronto, inneschiamo un fallback musicale.
+            state["current_segment"] = "music_rotation_until_deadline"
+            write_state_files(state)
+            
+            music_file = self._select_non_repeated_music()
+            if music_file:
+                add_music_track(music_file)
+                return {
+                    "action": "PLAY_MUSIC",
+                    "file": music_file,
+                    "label": "fallback_non_pronto",
+                    "trigger_ai_music_gen": False
+                }
+            return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
 
         elif current_segment == "podcast_playing":
             state["current_segment"] = "podcast_closing"
@@ -391,13 +432,17 @@ class DirectorAgent:
             if datetime.datetime.now() >= deadline:
                 return {"action": "TRIGGER_NEXT_BLOCK"}
                 
+            time_remaining = (deadline - datetime.datetime.now()).total_seconds()
+            trigger_ai_music_gen = time_remaining >= 180
+                
             music_file = self._select_non_repeated_music()
             if music_file:
                 add_music_track(music_file)
                 return {
                     "action": "PLAY_MUSIC",
                     "file": music_file,
-                    "label": "music_rotation"
+                    "label": "music_rotation",
+                    "trigger_ai_music_gen": trigger_ai_music_gen
                 }
             else:
                 return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 5}

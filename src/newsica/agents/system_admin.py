@@ -1,0 +1,78 @@
+import os
+import shutil
+import time
+from pathlib import Path
+
+BASE_DIR = Path(__file__).parent.parent.parent.parent
+RUNTIME_DIR = BASE_DIR / "runtime"
+ASSETS_DIR = RUNTIME_DIR / "assets"
+
+class SystemAdminAgent:
+    def __init__(self):
+        self._ensure_asset_dirs()
+        
+    def _ensure_asset_dirs(self):
+        for d in ["planned", "preparing", "ready", "queued", "aired", "failed", "archive"]:
+            (ASSETS_DIR / d).mkdir(parents=True, exist_ok=True)
+            
+    def prepare_slot(self, slot_time):
+        """Prepara la cartella per l'asset in generazione e previene le race condition."""
+        slot_id = slot_time.replace(":", "")
+        ready_dir = ASSETS_DIR / "ready" / slot_id
+        preparing_dir = ASSETS_DIR / "preparing" / slot_id
+        
+        if ready_dir.exists():
+            return None, "L'asset è già pronto."
+            
+        if preparing_dir.exists():
+            return None, "L'asset è già in preparazione."
+            
+        preparing_dir.mkdir(parents=True, exist_ok=True)
+        return preparing_dir, "OK"
+        
+    def commit_assets(self, slot_time, audio_files, preparing_dir):
+        """Sposta i file validati nella cartella ready."""
+        slot_id = slot_time.replace(":", "")
+        ready_dir = ASSETS_DIR / "ready" / slot_id
+        
+        try:
+            for f in audio_files:
+                shutil.copy(f, preparing_dir / f.name)
+                
+            if ready_dir.exists():
+                shutil.rmtree(ready_dir)
+            preparing_dir.rename(ready_dir)
+            print(f"✅ [SystemAdminAgent] Asset per {slot_time} pronto in {ready_dir.name}")
+        except Exception as e:
+            self.fail_slot(slot_time, preparing_dir, error=str(e))
+            raise
+            
+    def fail_slot(self, slot_time, preparing_dir, error=""):
+        """Gestisce il fallimento spostando in failed."""
+        print(f"❌ [SystemAdminAgent] Errore generazione per {slot_time}: {error}")
+        slot_id = slot_time.replace(":", "")
+        failed_dir = ASSETS_DIR / "failed" / slot_id
+        
+        if failed_dir.exists():
+            shutil.rmtree(failed_dir)
+        if preparing_dir.exists():
+            preparing_dir.rename(failed_dir)
+            
+    def cleanup_old_assets(self, max_age_hours=24):
+        """Pulisce le vecchie directory per evitare l'esaurimento dello spazio."""
+        now = time.time()
+        for status_dir in ["ready", "queued", "aired", "failed", "archive"]:
+            dir_path = ASSETS_DIR / status_dir
+            if not dir_path.exists():
+                continue
+                
+            for slot_dir in dir_path.iterdir():
+                if not slot_dir.is_dir():
+                    continue
+                age = now - slot_dir.stat().st_mtime
+                if age > (max_age_hours * 3600):
+                    try:
+                        shutil.rmtree(slot_dir)
+                        print(f"🧹 [SystemAdminAgent] Rimossa vecchia cartella: {slot_dir}")
+                    except Exception:
+                        pass

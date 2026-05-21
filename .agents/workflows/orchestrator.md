@@ -63,3 +63,29 @@ Mantieni aggiornato lo status nel `docs/task.md` (o file simile) e **STAMPALO SE
 | 2 | /python_engineer | 🔄 In corso | Sviluppo script scraping |
 | 3 | /code_reviewer | ⏳ Pending | Verifica esecuzione locale |
 ```
+
+---
+
+## Regola di Pre-Produzione dei Contenuti
+
+NewsicaTV non deve generare i contenuti complessi nel momento esatto della messa in onda.
+
+Ogni contenuto che richiede una pipeline lunga, come podcast, rubriche articolate, musica AI generata, dibattiti a due speaker o blocchi con più passaggi audio, deve essere preparato anticipatamente rispetto allo slot previsto dal palinsesto.
+
+La regia deve distinguere tra:
+- contenuti rapidi, generabili quasi in tempo reale;
+- contenuti pesanti, che devono essere pre-prodotti, validati e accodati.
+
+Il DirectorAgent deve guardare avanti nel palinsesto, individuare gli slot futuri, verificare quali asset non sono ancora pronti e attivare gli agenti necessari durante i tempi morti della programmazione.
+
+Un contenuto può andare in onda solo se si trova in stato `ready` o `queued`.
+Un contenuto in stato `planned`, `preparing`, `failed` o `expired` non deve mai bloccare lo stream.
+
+Se un contenuto previsto non è pronto entro la sua deadline editoriale, il DirectorAgent deve attivare un fallback coerente:
+- musica di riempimento;
+- rubrica evergreen;
+- news flash breve;
+- annuncio editoriale;
+- slittamento del contenuto al primo slot utile.
+
+La continuità dello stream ha priorità assoluta rispetto alla fedeltà rigida del palinsesto, ma ogni variazione deve essere gestita in modo editoriale e non come errore tecnico.
