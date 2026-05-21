@@ -32,8 +32,7 @@ class MusicLibrary:
         ]
 
     def get_random_track(self, exclude=None):
-        if not self._tracks_by_source:
-            self.refresh()
+        self.refresh()
 
         available_sources = [
             source
