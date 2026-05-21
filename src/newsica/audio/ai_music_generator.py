@@ -11,7 +11,6 @@ import os
 import random
 import sys
 import time
-import fcntl
 from datetime import datetime
 from pathlib import Path
 
@@ -106,7 +105,7 @@ def normalize_audio(input_path: Path, output_path: Path):
     """
     logger.info(f"Normalizing audio: {input_path.name}")
     # Esempio: usiamo ffmpeg per normalizzare (loudnorm), abbassare il bitrate a 24000 Hz Mono, e fare un fadeout di 5 secondi alla fine
-    cmd = f'ffmpeg -y -i "{input_path}" -ar 24000 -ac 1 -af "loudnorm=I=-23:TP=-2:LRA=11,afade=t=out:st=55:d=5" "{output_path}" -nostats -loglevel error'
+    cmd = f'ffmpeg -y -i "{input_path}" -ar 24000 -ac 1 -af "loudnorm=I=-14:TP=-1:LRA=11,afade=t=out:st=54:d=5" "{output_path}" -nostats -loglevel error'
     res = os.system(cmd)
     if res != 0:
         logger.error("FFmpeg normalization failed. Saving raw instead.")
@@ -167,24 +166,47 @@ def generate_track():
     return False
 
 def acquire_lock():
+    """Lock basato su PID: se il processo proprietario è morto, rimuove il lock orfano."""
     lockfile = BASE_DIR / "tmp" / "ai_music.lock"
     try:
-        lock_fd = os.open(lockfile, os.O_CREAT | os.O_RDWR)
-        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return lock_fd
-    except (IOError, OSError):
+        # Se il lockfile esiste, verifica se il processo è ancora vivo
+        if lockfile.exists():
+            try:
+                pid = int(lockfile.read_text().strip())
+                # Controlla se il processo con quel PID esiste ancora
+                os.kill(pid, 0)  # Signal 0 = solo controllo esistenza
+                # Il processo è ancora vivo → generazione in corso, esci
+                logger.info(f"Generazione già in corso (PID {pid}). Esco.")
+                return None
+            except (ValueError, ProcessLookupError, PermissionError):
+                # PID non valido o processo morto → lock orfano, lo rimuoviamo
+                logger.warning("Lock orfano rilevato. Rimosso e riprendo.")
+                lockfile.unlink(missing_ok=True)
+        
+        # Scrivi il nostro PID nel lockfile
+        lockfile.write_text(str(os.getpid()))
+        return True
+    except Exception as e:
+        logger.error(f"Errore durante l'acquisizione del lock: {e}")
         return None
+
+def release_lock():
+    """Rimuove il lockfile al termine della generazione."""
+    lockfile = BASE_DIR / "tmp" / "ai_music.lock"
+    try:
+        lockfile.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
     
-    lock_fd = acquire_lock()
-    if lock_fd is None:
-        logger.info("Generation already in progress. Exiting.")
+    lock = acquire_lock()
+    if lock is None:
         sys.exit(0)
         
     try:
         generate_track()
     finally:
-        os.close(lock_fd)
+        release_lock()

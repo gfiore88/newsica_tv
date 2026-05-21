@@ -82,7 +82,7 @@ class AudioPlayout:
             "-loglevel", "error",
             "-i", music_file,
             "-vn",
-            "-filter:a", "volume=0.8,afade=t=in:ss=0:d=2.5",
+            "-filter:a", "volume=1.2,afade=t=in:ss=0:d=2.5",
             "-f", "s16le",
             "-ar", str(PCM_SAMPLE_RATE),
             "-ac", str(PCM_CHANNELS),
@@ -96,7 +96,7 @@ class AudioPlayout:
             "-i", voice_file,
             "-i", music_file,
             "-filter_complex",
-            "[0:a]apad=pad_len=72000,volume=1.5,asplit=2[v_main][v_side]; "
+            "[0:a]apad=pad_len=72000,volume=4.5,asplit=2[v_main][v_side]; "
             "[1:a]volume=0.25[m]; "
             "[m][v_side]sidechaincompress=threshold=0.03:ratio=20:attack=50:release=1000[music]; "
             "[v_main][music]amix=inputs=2:duration=first:dropout_transition=0",

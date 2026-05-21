@@ -3,6 +3,7 @@ import json
 import datetime
 import random
 from newsica.config.paths import TMP_DIR, RUNTIME_DIR, ASSETS_DIR
+from newsica.utils.audit_logger import log_decision
 from newsica.broadcast.scheduler import (
     get_current_block_info,
     get_next_block_info_for_key,
@@ -50,6 +51,7 @@ class DirectorAgent:
         # Se lo stato attuale è OFFLINE o non coincide con il blocco corrente, inizializziamo la transizione
         if status == "OFFLINE" or state.get("scheduled_slot") != current_time:
             print(f"🎬 [DirectorAgent] Inizializzazione fascia palinsesto: {current_time} ({title})")
+            log_decision("DirectorAgent", f"Inizializzazione fascia palinsesto: {current_time} ({title})", level="PLAYOUT")
             return self._initialize_scheduled_block(block_type, title, next_title, next_time, current_time)
             
         # 3. Gestiamo la progressione interna del blocco attivo
@@ -507,6 +509,7 @@ class DirectorAgent:
         
         if severity_score >= 90:
             print(f"🚨 [DirectorAgent] RILEVATO EVENTO ECCEZIONALE (Score {severity_score}). Attivo SPECIAL_BROADCAST!")
+            log_decision("DirectorAgent", f"RILEVATO EVENTO ECCEZIONALE (Score {severity_score}). Attivo SPECIAL_BROADCAST!", level="BREAKING")
             
             # Salviamo lo slot interrotto per decidere come ripristinarlo successivamente
             prev_block = state.get("current_block", "music_only")
@@ -597,6 +600,7 @@ class DirectorAgent:
                     print(f"🔄 [DirectorAgent] Ripristino slot interrotto '{interrupted_title}' "
                           f"(Fascia delle {interrupted_slot}) - Rimangono {time_remaining/60:.1f} min "
                           f"su {total_duration/60:.0f} min totali.")
+                    log_decision("DirectorAgent", f"Ripristino slot interrotto '{interrupted_title}' (residuo {time_remaining/60:.1f} min).", level="RESTORE")
                     restored_state = {
                         "status": "ON_AIR",
                         "current_block": interrupted_block,
@@ -609,10 +613,12 @@ class DirectorAgent:
                         "last_update": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
                     }
                     write_state_files(restored_state)
+                    log_decision("DirectorAgent", f"Ripristinato il blocco: {interrupted_title}", level="INIT")
                     return
                 else:
                     print(f"⏭️ [DirectorAgent] Slot quasi scaduto ({time_remaining/60:.1f} min residui, "
                           f"soglia {min_threshold/60:.1f} min). Attendo naturale cambio fascia.")
+                    log_decision("DirectorAgent", f"Salto ripristino '{interrupted_title}'. Tempo residuo troppo basso ({time_remaining/60:.1f} min).", level="RESTORE")
                     # Non impostiamo OFFLINE: aspettiamo che il watchdog wallclock
                     # rilevi il cambio di fascia naturalmente alla prossima ora
                     restored_state = {

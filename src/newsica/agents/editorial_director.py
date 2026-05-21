@@ -3,6 +3,7 @@ import json
 import logging
 import requests
 from datetime import date
+from newsica.utils.audit_logger import log_decision
 
 logger = logging.getLogger(__name__)
 
@@ -110,36 +111,33 @@ Esempio di struttura richiesta:
             res.raise_for_status()
             response_text = res.json().get("response", "").strip()
             
-            # Pulizia per sicurezza (spesso l'LLM mette markdown nonostante i divieti)
-            if response_text.startswith("```json"):
-                response_text = response_text[7:]
-            if response_text.startswith("```"):
-                response_text = response_text[3:]
-            if response_text.endswith("```"):
-                response_text = response_text[:-3]
+            if res.status_code == 200:
+                result = res.json().get("response", "")
+                
+                # Cerca un blocco JSON nella risposta
+                start = result.find('{')
+                end = result.rfind('}') + 1
+                if start != -1 and end != -1:
+                    result = result[start:end]
+                    
+                parsed_schedule = json.loads(result)
+                # Verifica che tutte le chiavi fisse siano presenti
+                for key, val in fixed_slots.items():
+                    parsed_schedule[key] = val
+                    
+                # Riordina il dizionario per orario
+                sorted_schedule = {k: parsed_schedule[k] for k in sorted(parsed_schedule.keys())}
+                
+                log_decision("EditorialDirector", f"Generato nuovo palinsesto dinamico per oggi con {len(sorted_schedule)} programmi.", level="SCHEDULING")
+                return sorted_schedule
             
-            response_text = response_text.strip()
-            
-            schedule = json.loads(response_text)
-            
-            # Validazione minima
-            if "00:00" not in schedule:
-                schedule["00:00"] = {"title": "Night Vibes", "type": "music_only"}
-            
-            # Sovrascrittura sicura delle colonne portanti
-            for k, v in fixed_slots.items():
-                schedule[k] = v
-            
-            # Ordina le chiavi
-            sorted_schedule = {k: schedule[k] for k in sorted(schedule.keys())}
-            logger.info("✅ Palinsesto dinamico generato con successo dall'IA!")
-            return sorted_schedule
-
+            logger.warning(f"Ollama ha restituito status {res.status_code}. Uso il fallback precalcolato.")
+            log_decision("EditorialDirector", f"Fallback attivato: Ollama ha restituito status {res.status_code}", level="WARNING")
         except Exception as e:
             logger.error(f"❌ Errore durante la generazione LLM del palinsesto: {e}")
-            logger.error(f"❌ (Ollama) Connessione fallita: {e}")
+            log_decision("EditorialDirector", f"Fallback attivato: Errore di esecuzione: {e}", level="ERROR")
             
-            return self.fallback_schedule
+        return self.fallback_schedule
 
     def generate_music_prompt(self, time_of_day: str, fallback_prompt: str) -> str:
         logger.info(f"🧠 [EditorialDirectorAgent] Invenzione di un nuovo prompt musicale per {time_of_day}...")
@@ -175,10 +173,13 @@ Inventa una combinazione nuova e interessante, diversa dall'esempio."""
                 result = response.json().get("response", "").strip()
                 if result:
                     logger.info(f"🎵 Prompt generato da Ollama: '{result}'")
+                    log_decision("EditorialDirector", f"Inventato nuovo prompt per AI Music '{time_of_day}': {result}", level="MUSIC")
                     return result
             logger.warning(f"Ollama ha restituito status {response.status_code}, uso fallback.")
+            log_decision("EditorialDirector", f"Errore generazione prompt AI Music (status {response.status_code}). Uso fallback.", level="WARNING")
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ (Ollama) Errore nella generazione musicale: {e}. Uso fallback.")
+            log_decision("EditorialDirector", f"Errore di rete generazione prompt AI Music. Uso fallback.", level="ERROR")
             
         return fallback_prompt
 
