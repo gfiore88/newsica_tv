@@ -59,6 +59,7 @@ class DirectorAgent:
         """
         Prepara il passaggio a un nuovo blocco di palinsesto.
         """
+        self._clear_transient_audio()
         new_state = {
             "status": "ON_AIR",
             "current_block": block_type,
@@ -80,6 +81,25 @@ class DirectorAgent:
             "label": jingle_label,
             "next_segment": "intro"
         }
+
+    def _clear_transient_audio(self):
+        """
+        Invalida gli artefatti audio temporanei quando cambia fascia.
+        `tmp/audio.wav` e `tmp/audio_part*.wav` non sono cache globali: appartengono
+        allo slot appena generato e non possono essere riusati dal blocco successivo.
+        """
+        transient_names = {"audio.wav", "is_multipart.txt"}
+        for file_name in os.listdir(TMP_DIR):
+            if (
+                file_name in transient_names
+                or (file_name.startswith("audio_part") and file_name.endswith(".wav"))
+            ):
+                try:
+                    os.remove(os.path.join(TMP_DIR, file_name))
+                except FileNotFoundError:
+                    pass
+                except Exception as e:
+                    print(f"⚠️ Impossibile rimuovere audio temporaneo {file_name}: {e}")
 
     def _progress_current_block(self, state, block_type, title, next_title, next_time, current_time):
         """

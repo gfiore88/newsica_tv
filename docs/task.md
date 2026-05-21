@@ -30,3 +30,5 @@
 | 27 | /python_engineer | ✅ Done | Rename pubblico a `Newsica Podcast` in palinsesto, prompt, dashboard e documentazione |
 | 28 | /orchestrator | ✅ Done | Reso obbligatorio il protocollo "log prima delle ipotesi" per ogni debug live |
 | 29 | /streaming_expert | ✅ Done | Ripristinata diretta con restart governato da `manage.sh` e aggiunto `live-health` end-to-end |
+| 30 | /streaming_expert | ✅ Done | Recuperato `tmp/audio.wav` del podcast e mandato in onda con comando `PLAY_PODCAST_IMMEDIATE` |
+| 31 | /python_engineer | ✅ Done | Fix audio stale: al cambio fascia il Director invalida `audio.wav`/`audio_part*.wav` e verifica TTS fresco |

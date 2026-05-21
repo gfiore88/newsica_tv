@@ -82,6 +82,7 @@ def add_rubric_intro_to_script(title, character):
 
 def run_pipeline(character="news", title=None):
     print(f"\n--- 🔄 Avvio ciclo di aggiornamento news ({character}) ---")
+    generation_start = time.time()
     print("Scraping news...")
     subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "scraper.py")], check=True)
     print("Elaborazione testo (LLM)...")
@@ -90,6 +91,14 @@ def run_pipeline(character="news", title=None):
         add_rubric_intro_to_script(title, character)
     print("Sintesi vocale (TTS)...")
     subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "tts_generator.py"), character], check=True)
+    generated_files = [os.path.join(TMP_DIR, "audio.wav")]
+    generated_files.extend(
+        os.path.join(TMP_DIR, f_name)
+        for f_name in os.listdir(TMP_DIR)
+        if f_name.startswith("audio_part") and f_name.endswith(".wav")
+    )
+    if not any(os.path.exists(path) and os.path.getmtime(path) >= generation_start for path in generated_files):
+        raise RuntimeError(f"TTS non ha prodotto audio fresco per {character} ({title})")
 
 def generator_worker():
     global breaking_news_active, manual_block_override_index
@@ -419,6 +428,52 @@ def main():
                                 env["FORCE_SEVERITY"] = "95"
                                 subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")], env=env)
                             threading.Thread(target=run_forced_breaking_news).start()
+                        elif cmd.startswith("PLAY_PODCAST_IMMEDIATE"):
+                            parts = cmd.split("|", 2)
+                            podcast_file = parts[1] if len(parts) > 1 else os.path.join(TMP_DIR, "audio.wav")
+                            podcast_title = parts[2] if len(parts) > 2 else "Newsica Podcast"
+
+                            if os.path.exists(podcast_file):
+                                print(f"🎙️ [Director] Podcast immediato richiesto: {podcast_title}")
+                                apply_preventive_fade_out_and_write(fifo_fd)
+                                prev_state = get_current_state()
+                                podcast_info = {
+                                    "status": "ON_AIR",
+                                    "current_block": "podcast",
+                                    "current_title": podcast_title,
+                                    "current_segment": "podcast_immediate",
+                                    "next_block": prev_state.get("next_block", ""),
+                                    "next_start": prev_state.get("next_start", ""),
+                                    "scheduled_slot": prev_state.get("scheduled_slot"),
+                                    "breaking_news_available": False,
+                                    "last_update": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                }
+                                write_state_files(podcast_info)
+
+                                cmd_ffmpeg = [
+                                    FFMPEG_CMD,
+                                    "-hide_banner",
+                                    "-loglevel", "error",
+                                    "-i", podcast_file,
+                                    "-f", "s16le",
+                                    "-ar", str(PCM_SAMPLE_RATE),
+                                    "-ac", str(PCM_CHANNELS),
+                                    "pipe:1"
+                                ]
+                                try:
+                                    proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
+                                    while True:
+                                        chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
+                                        if not chunk_data:
+                                            break
+                                        write_fifo_chunk(fifo_fd, chunk_data)
+                                    proc.wait()
+                                except Exception as e:
+                                    print(f"⚠️ Errore podcast immediato: {e}")
+                                restore_after_interrupt(prev_state, "podcast immediato")
+                                fade_in_chunks_remaining = 20
+                            else:
+                                print(f"⚠️ Podcast immediato non trovato: {podcast_file}")
                         elif cmd.startswith("BREAKING_NEWS_READY"):
                             parts = cmd.split("|")
                             bn_file = parts[1] if len(parts) > 1 else ""
