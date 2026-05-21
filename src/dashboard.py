@@ -134,6 +134,11 @@ HTML_TEMPLATE = """
                             🟢 RIPRISTINA PALINSESTO
                         </button>
                     </div>
+                    <div class="mt-3 grid grid-cols-1 gap-3">
+                        <button id="music-gen-btn" onclick="triggerMusicGen()" class="col-span-1 bg-indigo-700/80 hover:bg-indigo-600 transition border border-indigo-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(79,70,229,0.3)]">
+                            🎵 Genera Musica AI (Background)
+                        </button>
+                    </div>
                     <div class="mt-5 pt-4 border-t border-slate-700/60">
                         <h3 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-3">Servizi</h3>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -397,6 +402,43 @@ HTML_TEMPLATE = """
             }
         }
 
+        async function triggerMusicGen() {
+            const btn = document.getElementById('music-gen-btn');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Avvio Generazione...';
+            btn.classList.add('opacity-60');
+            logMsg('Richiesta generazione Musica AI in background...');
+
+            try {
+                const res = await fetch('/api/music_gen', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.status === 'OK') {
+                    logMsg(`🎵 Musica AI avviata: controlla i log.`);
+                    btn.innerHTML = '✅ Avviata!';
+                    btn.classList.remove('opacity-60');
+                    btn.classList.add('bg-green-600/80', 'border-green-500');
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        btn.classList.remove('bg-green-600/80', 'border-green-500');
+                    }, 3000);
+                } else {
+                    logMsg(`❌ Errore avvio Musica AI: ${data.message}`);
+                    btn.innerHTML = '❌ Errore';
+                    setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; btn.classList.remove('opacity-60'); }, 3000);
+                }
+            } catch (err) {
+                logMsg(`❌ Errore fetch: ${err}`);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                btn.classList.remove('opacity-60');
+            }
+        }
+
         async function launchPodcast() {
             const topicInput = document.getElementById('podcast-topic');
             const topic = topicInput.value.trim();
@@ -587,6 +629,20 @@ def trigger_chime():
         return jsonify({"status": "ERROR", "message": f"Scrittura controllo fallita: {e}"}), 500
 
     return jsonify({"status": "OK", "text": text})
+
+@app.route('/api/music_gen', methods=['POST'])
+def trigger_music_gen():
+    """Lancia in background la generazione musicale AI."""
+    import threading
+    try:
+        # Lanciamo in un thread background così la request non si blocca
+        threading.Thread(
+            target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_generator.py")]),
+            daemon=True
+        ).start()
+        return jsonify({"status": "OK", "message": "Generazione musicale avviata in background."})
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": f"Avvio fallito: {e}"}), 500
 
 @app.route('/api/podcast', methods=['POST'])
 def trigger_podcast():

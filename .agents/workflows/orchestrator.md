@@ -89,3 +89,14 @@ Se un contenuto previsto non è pronto entro la sua deadline editoriale, il Dire
 - slittamento del contenuto al primo slot utile.
 
 La continuità dello stream ha priorità assoluta rispetto alla fedeltà rigida del palinsesto, ma ogni variazione deve essere gestita in modo editoriale e non come errore tecnico.
+
+---
+
+## Regola di Integrazione UI e Testabilità
+
+Ogni nuova funzionalità tecnica o editoriale sviluppata per NewsicaTV **DEVE** essere testabile on-demand tramite la Dashboard UI (`src/dashboard.py` o simili), senza dover attendere il suo trigger naturale nel palinsesto.
+
+L'Orchestratore e i suoi agenti subordinati (in particolare il `/python_engineer`) devono assicurarsi che:
+1. **Pulsanti di Test Dedicati**: Venga aggiunto un pulsante o un controllo nella dashboard per avviare la nuova funzionalità manualmente.
+2. **Coerenza UI**: Tutti i pulsanti della dashboard devono funzionare allo stesso modo (gestione click, feedback visivo di caricamento, gestione errori) per mantenere un'interfaccia utente solida e prevedibile.
+3. **Isolamento**: I test manuali eseguiti dalla dashboard non devono corrompere la stabilità dello stream in onda (salvo test espliciti di interruzione come le breaking news).
