@@ -15,6 +15,10 @@ import fcntl
 from datetime import datetime
 from pathlib import Path
 
+# Aggiungiamo src al path per poter importare gli agenti
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
+from newsica.agents.editorial_director import EditorialDirectorAgent
+
 # Configura logger
 logging.basicConfig(
     level=logging.INFO,
@@ -25,6 +29,7 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 ASSETS_DIR = BASE_DIR / "assets"
 AI_MUSIC_DIR = ASSETS_DIR / "ai_music"
+TMP_DIR = BASE_DIR / "tmp"
 PROMPTS_FILE = BASE_DIR / "src" / "newsica" / "editorial" / "prompts" / "music.json"
 
 MAX_TRACKS = 20  # Quanti brani mantenere in cache
@@ -70,7 +75,7 @@ def run_ace_step_generation(prompt: str, output_path: Path):
     pipeline = get_pipeline()
     
     kwargs = {
-        "audio_duration": 30.0,
+        "audio_duration": 60.0,
         "prompt": prompt,
         "lyrics": "",
         "infer_step": 60,
@@ -78,12 +83,12 @@ def run_ace_step_generation(prompt: str, output_path: Path):
         "scheduler_type": "euler",
         "cfg_type": "apg",
         "omega_scale": 10.0,
-        "manual_seeds": [42],
+        "manual_seeds": [random.randint(0, 4294967295)],
         "guidance_interval": 0.5,
         "guidance_interval_decay": 0.0,
         "min_guidance_scale": 3.0,
         "use_erg_tag": True,
-        "use_erg_lyric": True,
+        "use_erg_lyric": False,
         "use_erg_diffusion": True,
         "oss_steps": "",
         "guidance_scale_text": 0.0,
@@ -100,8 +105,8 @@ def normalize_audio(input_path: Path, output_path: Path):
     Normalizza il file audio a livelli TV broadcast (es -23 LUFS) usando FFmpeg.
     """
     logger.info(f"Normalizing audio: {input_path.name}")
-    # Esempio: usiamo ffmpeg per normalizzare (loudnorm) e abbassare il bitrate a 24000 Hz Mono
-    cmd = f'ffmpeg -y -i "{input_path}" -ar 24000 -ac 1 -af loudnorm=I=-23:TP=-2:LRA=11 "{output_path}" -nostats -loglevel error'
+    # Esempio: usiamo ffmpeg per normalizzare (loudnorm), abbassare il bitrate a 24000 Hz Mono, e fare un fadeout di 5 secondi alla fine
+    cmd = f'ffmpeg -y -i "{input_path}" -ar 24000 -ac 1 -af "loudnorm=I=-23:TP=-2:LRA=11,afade=t=out:st=55:d=5" "{output_path}" -nostats -loglevel error'
     res = os.system(cmd)
     if res != 0:
         logger.error("FFmpeg normalization failed. Saving raw instead.")
@@ -117,21 +122,43 @@ def generate_track():
         logger.info(f"Cache is full ({len(current_tracks)}/{MAX_TRACKS}). Skipping generation.")
         return False
         
-    tod = get_time_of_day()
-    prompts_data = load_prompts()
-    prompts = prompts_data.get(tod, ["Default lofi news background"])
-    prompt = random.choice(prompts)
+    time_of_day = get_time_of_day()
+    fallback_prompts = load_prompts()
+    
+    # Selezioniamo un fallback prompt statico nel caso in cui Ollama fallisca
+    if time_of_day in fallback_prompts and fallback_prompts[time_of_day]:
+        fallback_prompt = random.choice(fallback_prompts[time_of_day])
+    else:
+        fallback_prompt = "instrumental, background music, calm, clean production"
+        
+    prompt = None
+    if not prompt:
+        director = EditorialDirectorAgent()
+        prompt = director.generate_music_prompt(time_of_day, fallback_prompt)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    temp_file = ASSETS_DIR / f"temp_ai_gen_{timestamp}.wav"
+    temp_file = TMP_DIR / f"temp_ai_gen_{timestamp}.wav"
     final_file = AI_MUSIC_DIR / f"ai_track_{timestamp}.wav"
     
     try:
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
         run_ace_step_generation(prompt, temp_file)
         if temp_file.exists():
             normalize_audio(temp_file, final_file)
             logger.info(f"Successfully added {final_file.name} to library.")
+            
+            # Pulizia file temporanei
+            try:
+                temp_file.unlink(missing_ok=True)
+                json_params = temp_file.with_name(f"{temp_file.stem}_input_params.json")
+                json_params.unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp files: {e}")
+            
             return True
+        else:
+            logger.error("ACE-Step generation failed (no output file).")
+            return False
     except Exception as e:
         logger.error(f"Failed to generate AI music: {e}")
         if temp_file.exists():

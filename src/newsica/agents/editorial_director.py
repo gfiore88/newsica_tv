@@ -137,8 +137,51 @@ Esempio di struttura richiesta:
 
         except Exception as e:
             logger.error(f"❌ Errore durante la generazione LLM del palinsesto: {e}")
-            logger.info("⚠️ Uso il palinsesto di fallback precalcolato.")
+            logger.error(f"❌ (Ollama) Connessione fallita: {e}")
+            
             return self.fallback_schedule
+
+    def generate_music_prompt(self, time_of_day: str, fallback_prompt: str) -> str:
+        logger.info(f"🧠 [EditorialDirectorAgent] Invenzione di un nuovo prompt musicale per {time_of_day}...")
+        
+        system_prompt = f"""Sei un abile produttore musicale e sound designer di NewsicaTV.
+Il tuo compito è generare UN SOLO prompt testuale per un AI Music Generator (come ACE-Step).
+Il brano deve essere STRUMENTALE, di ALTA QUALITÀ (clean production), senza rumori lo-fi o crackle, ed evocare l'orario del giorno: {time_of_day}.
+
+REGOLE TASSATIVE:
+1. L'output deve essere SOLO una stringa di tag separati da virgola. Nessun preambolo, nessuna spiegazione.
+2. I tag devono essere in INGLESE.
+3. Includi SEMPRE i tag: instrumental, clean production.
+4. Non includere mai tag che sporcano l'audio (no lofi, no crackle, no distortion).
+5. Usa massimo 10 tag pertinenti che descrivono il genere, il mood, e gli strumenti.
+
+Esempio di output desiderato per "morning":
+acoustic pop, bright acoustic guitar, light percussion, instrumental, optimistic, warm, clean production, morning
+
+Inventa una combinazione nuova e interessante, diversa dall'esempio."""
+
+        payload = {
+            "model": self.model,
+            "prompt": system_prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0.8
+            }
+        }
+        
+        try:
+            response = requests.post(self.ollama_url, json=payload, timeout=20)
+            if response.status_code == 200:
+                result = response.json().get("response", "").strip()
+                if result:
+                    logger.info(f"🎵 Prompt generato da Ollama: '{result}'")
+                    return result
+            logger.warning(f"Ollama ha restituito status {response.status_code}, uso fallback.")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ (Ollama) Errore nella generazione musicale: {e}. Uso fallback.")
+            
+        return fallback_prompt
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

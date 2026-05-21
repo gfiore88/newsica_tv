@@ -640,9 +640,17 @@ def trigger_music_gen():
         if not os.path.exists(ace_step_python):
             return jsonify({"status": "ERROR", "message": "Ambiente ACE-Step non installato. Esegui manage.sh install-ace-step"}), 500
             
-        # Lanciamo in un thread background così la request non si blocca
+        env = os.environ.copy()
+        env.pop("VIRTUAL_ENV", None)
+        env.pop("PYTHONPATH", None)
+        env.pop("PYTHONHOME", None)
+        
         threading.Thread(
-            target=lambda: subprocess.run([ace_step_python, os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_generator.py")]),
+            target=lambda: subprocess.run(
+                ["bash", "-c", f"source {os.path.join(BASE_DIR, '.venv_ace_step', 'bin', 'activate')} && python {os.path.join(BASE_DIR, 'src', 'newsica', 'audio', 'ai_music_generator.py')}"],
+                env=env,
+                cwd=str(BASE_DIR)
+            ),
             daemon=True
         ).start()
         return jsonify({"status": "OK", "message": "Generazione musicale avviata in background."})
