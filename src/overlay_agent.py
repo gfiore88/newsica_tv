@@ -121,8 +121,8 @@ FONT_CLOCK = font(34, bold=True)
 
 FONT_TIMELINE_LABEL = font(14, bold=True)
 FONT_TIMELINE_TIME = font(17, bold=True)
-FONT_TIMELINE_TITLE = font(16)
-FONT_TIMELINE_TITLE_BOLD = font(16, bold=True)
+FONT_TIMELINE_TITLE = font(15)
+FONT_TIMELINE_TITLE_BOLD = font(15, bold=True)
 
 
 def text_width(draw, text, selected_font):
@@ -325,7 +325,7 @@ def draw_schedule_timeline(draw, xy, items, accent):
             title_text,
             title_font,
             slot_width,
-            max_lines=2,
+            max_lines=3,
         )
 
         line_y = y1 + 60
@@ -340,7 +340,7 @@ def draw_schedule_timeline(draw, xy, items, accent):
                 fill=text_secondary,
             )
 
-            line_y += 18
+            line_y += 16
 
 
 def render_frame():
@@ -386,7 +386,7 @@ def render_frame():
     if schedule_items:
         draw_schedule_timeline(
             draw,
-            (30, 548, 1250, 632),
+            (30, 535, 1250, 642),
             schedule_items,
             accent,
         )

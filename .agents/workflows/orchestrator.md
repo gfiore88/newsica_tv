@@ -104,6 +104,19 @@ Per ogni asset pre-prodotto deve esistere un manifest locale con almeno:
 
 La regia non deve mandare in onda asset privi di manifest valido o con manifest non coerente con lo slot corrente. In quel caso deve attendere la rigenerazione o usare un fallback di continuità coerente, senza riusare audio di un programma precedente.
 
+## Backlog: Musica Esterna a Licenza Verificata
+
+Task futuro, non implementato: studiare e integrare una fonte gratuita per scaricare brani da aggiungere a `assets/music/`.
+
+Vincoli obbligatori:
+- usare solo API/fonti gratuite e legalmente utilizzabili in una diretta YouTube;
+- preferire cataloghi con licenza esplicita e download consentito, come Jamendo, Wikimedia Commons, Internet Archive o alternative equivalenti;
+- evitare cataloghi user-uploaded senza verifica chiara dei diritti per il broadcast;
+- salvare ogni brano con un manifest locale che includa titolo, artista, fonte, URL originale, licenza, obblighi di attribuzione e data download;
+- far usare al playout solo file musicali con manifest valido.
+
+Questo task richiede ADR e aggiornamento roadmap prima dell'implementazione.
+
 ---
 
 ## Regola di Integrazione UI e Testabilità

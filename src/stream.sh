@@ -105,22 +105,9 @@ fi
 echo "🎬 Avvio dello streaming FFmpeg verso YouTube..."
 echo "📡 Destinazione: $YOUTUBE_STREAM_URL"
 
-# Comando FFmpeg complesso:
-# -f lavfi -i color=c=0x0a1128:s=1920x1080:r=30 (crea uno sfondo blu scuro continuo a 1080p)
-# -i $AUDIO_FILE (l'audio letto dallo speaker)
-# -i $LOGO_FILE (il nostro logo generato)
-#
-# Filter complex:
-# 1. Overlay del logo in alto a destra
-# 2. Creazione di un rettangolo nero semitrasparente in basso per il ticker (drawbox)
-# 3. Testo scorrevole (drawtext) che legge da ticker.txt. Lo fa scorrere calcolando t e il width.
-#
-# Poiché l'audio finisce ad un certo punto, -shortest fermerà lo stream, MA in una TV vera dovrebbe loopare.
-# Per l'MVP 1 usiamo l'audio per definire la durata dello stream di test.
-
 FFMPEG_CMD="/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"
 if [ ! -f "$FFMPEG_CMD" ]; then
-  FFMPEG_CMD="ffmpeg" # Fallback
+  FFMPEG_CMD="ffmpeg"
 fi
 
 if ! "$FFMPEG_CMD" -hide_banner -filters 2>/dev/null | grep -q " drawtext "; then
@@ -133,7 +120,8 @@ if [ "$STREAM_TEST_CARD" = "1" ]; then
   FILTER='[0:v]setsar=1,format=yuv420p[bg]; [bg]drawbox=x=0:y=0:w=iw:h=90:color=black@0.75:t=fill[top]; [top]drawtext=text='"'"'NEWSICA TV TEST - SEGNALE VIDEO ATTIVO'"'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=42:x=30:y=25[outv]'
 else
   VIDEO_INPUT_ARGS=(-re -framerate 30 -loop 1 -i "$LOGO_FILE")
-  FILTER='[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=30[bg]; [1:v]format=rgba,fps=30[overlay]; [bg][overlay]overlay=0:0:format=auto[main_v]; [main_v]drawbox=y=ih-80:color=black@0.7:width=iw:height=80:t=fill[bg_box]; [bg_box]drawtext=textfile='"$TICKER_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=40:y=h-60:x=w-mod(t*200\,w+tw):alpha=0.9[ticker]; [ticker]drawbox=x=0:y=ih-80:color=red@1:width=250:height=80:t=fill[ticker_box]; [ticker_box]drawtext=text='"'ULTIMORA'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=35:x=20:y=h-58[outv]'
+
+  FILTER='[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=30[bg]; [1:v]format=rgba,fps=30[overlay]; [bg][overlay]overlay=0:0:format=auto[main_v]; [main_v]drawbox=y=ih-44:color=black@0.72:width=iw:height=44:t=fill[bg_box]; [bg_box]drawtext=textfile='"$TICKER_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=22:y=h-32:x=w-mod(t*160\,w+tw):alpha=0.92[ticker]; [ticker]drawbox=x=0:y=ih-44:color=red@0.92:width=165:height=44:t=fill[ticker_box]; [ticker_box]drawtext=text='"'ULTIMORA'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=21:x=20:y=h-32[outv]'
 fi
 
 FFMPEG_PID=""
@@ -208,7 +196,7 @@ while true; do
   fi
   FFMPEG_PID=""
   WATCHDOG_PID=""
-    
+
   echo "⚠️ FFmpeg si è disconnesso o ha crashato. Riavvio in 5 secondi..."
   sleep 5
 done

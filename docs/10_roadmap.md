@@ -58,6 +58,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 **Obiettivo:** Aumentare il ritmo e l'affidabilità con controlli locali e archiviazione.
 - [x] **Pre-Produzione Multi-Agente (ADR 0027)**: Introdotto Content Buffer, PreparationAgent e classi Agente (Strategist, Integrator, SysAdmin) per disaccoppiare generazione e messa in onda.
 - [ ] **Riepilogo in 60 Secondi**: Bollettino orario rotante (es. "Mondo in 60 secondi", "Sport Flash") per dare la sensazione di un canale live costante.
+- [ ] **Ingestion Musica Esterna a Licenza Verificata**: Studiare e integrare una API gratuita per scaricare brani in `assets/music/`, con filtro licenze, download consentito e manifest per ogni file.
 - [ ] **Generatore Automatico di Format**: Agente che settimanalmente propone nuovi format documentati (durata, tono, jingle) da inserire in scaletta.
 - [ ] **Dashboard Locale di Controllo**: Pannello per monitorare stato stream, uso risorse, buffer news e con pulsanti di interazione ("forza breaking", "salta").
 - [ ] **Archivio Automatico Contenuti**: Salvataggio strutturato (log, script, audio) per data per mantenere traccia di tutto ciò che va in onda.

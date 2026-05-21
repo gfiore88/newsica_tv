@@ -34,3 +34,4 @@
 | 31 | /python_engineer | ✅ Done | Fix audio stale: al cambio fascia il Director invalida `audio.wav`/`audio_part*.wav` e verifica TTS fresco |
 | 32 | /orchestrator | ✅ Done | Refactor HUD locale: `overlay_agent.py` renderizza ON AIR/orologio/prossimi eventi su FIFO rawvideo per FFmpeg |
 | 33 | /orchestrator | ✅ Done | Coerenza editoriale titolo-contenuto: tema obbligatorio nei prompt e manifest di validazione asset |
+| 34 | /orchestrator | ⏳ Backlog | Studio API gratuita per ingestion musica esterna con licenze verificate e manifest locale |
