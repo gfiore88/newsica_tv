@@ -635,9 +635,14 @@ def trigger_music_gen():
     """Lancia in background la generazione musicale AI."""
     import threading
     try:
+        # Usa l'ambiente virtuale dedicato ad ACE-Step (che ha PyTorch)
+        ace_step_python = os.path.join(BASE_DIR, ".venv_ace_step", "bin", "python3")
+        if not os.path.exists(ace_step_python):
+            return jsonify({"status": "ERROR", "message": "Ambiente ACE-Step non installato. Esegui manage.sh install-ace-step"}), 500
+            
         # Lanciamo in un thread background così la request non si blocca
         threading.Thread(
-            target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_generator.py")]),
+            target=lambda: subprocess.run([ace_step_python, os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_generator.py")]),
             daemon=True
         ).start()
         return jsonify({"status": "OK", "message": "Generazione musicale avviata in background."})

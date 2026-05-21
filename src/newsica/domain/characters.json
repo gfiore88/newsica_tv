@@ -118,6 +118,23 @@
       "intro_template": "È ora di {title}, lo show podcast multi-speaker di NewsicaTV.",
       "accent": "0xf59e0b",
       "format": "podcast"
+    },
+    {
+      "id": "flash_60s",
+      "display_name": "Giornalista Flash",
+      "rubric_type": "flash",
+      "voice": "if_sara",
+      "speed": 1.15,
+      "prompt": "editorial/prompts/flash_60s.md",
+      "sources": [
+        "ansa_ultimora",
+        "sky_tg24"
+      ],
+      "jingle": "assets/jingles/jingle_flash.mp3",
+      "jingle_label": "jingle flash news",
+      "intro_template": "In diretta, il nostro {title}.",
+      "accent": "0xfff7ed",
+      "format": "single_part"
     }
   ]
 }

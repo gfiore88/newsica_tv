@@ -69,28 +69,30 @@ def run_ace_step_generation(prompt: str, output_path: Path):
     logger.info(f"Running ACE-Step generation for prompt: '{prompt}'")
     pipeline = get_pipeline()
     
-    params = (
-        30.0,            # audio_duration
-        prompt,          # prompt
-        "",              # lyrics
-        27,              # infer_step
-        3.5,             # guidance_scale
-        "euler",         # scheduler_type
-        "none",          # cfg_type
-        1.0,             # omega_scale
-        "42",            # actual_seeds
-        0.5,             # guidance_interval
-        1.0,             # guidance_interval_decay
-        1.5,             # min_guidance_scale
-        False,           # use_erg_tag
-        False,           # use_erg_lyric
-        False,           # use_erg_diffusion
-        "1",             # oss_steps
-        0.0,             # guidance_scale_text
-        0.0,             # guidance_scale_lyric
-    )
+    kwargs = {
+        "audio_duration": 30.0,
+        "prompt": prompt,
+        "lyrics": "",
+        "infer_step": 60,
+        "guidance_scale": 15.0,
+        "scheduler_type": "euler",
+        "cfg_type": "apg",
+        "omega_scale": 10.0,
+        "manual_seeds": [42],
+        "guidance_interval": 0.5,
+        "guidance_interval_decay": 0.0,
+        "min_guidance_scale": 3.0,
+        "use_erg_tag": True,
+        "use_erg_lyric": True,
+        "use_erg_diffusion": True,
+        "oss_steps": "",
+        "guidance_scale_text": 0.0,
+        "guidance_scale_lyric": 0.0,
+        "save_path": str(output_path),
+        "format": "wav"
+    }
     
-    pipeline(*params, save_path=str(output_path))
+    pipeline(**kwargs)
     logger.info(f"Generated raw file at {output_path}")
 
 def normalize_audio(input_path: Path, output_path: Path):
@@ -98,8 +100,8 @@ def normalize_audio(input_path: Path, output_path: Path):
     Normalizza il file audio a livelli TV broadcast (es -23 LUFS) usando FFmpeg.
     """
     logger.info(f"Normalizing audio: {input_path.name}")
-    # Esempio: usiamo ffmpeg per normalizzare (loudnorm)
-    cmd = f'ffmpeg -y -i "{input_path}" -af loudnorm=I=-23:TP=-2:LRA=11 "{output_path}" -nostats -loglevel error'
+    # Esempio: usiamo ffmpeg per normalizzare (loudnorm) e abbassare il bitrate a 24000 Hz Mono
+    cmd = f'ffmpeg -y -i "{input_path}" -ar 24000 -ac 1 -af loudnorm=I=-23:TP=-2:LRA=11 "{output_path}" -nostats -loglevel error'
     res = os.system(cmd)
     if res != 0:
         logger.error("FFmpeg normalization failed. Saving raw instead.")

@@ -5,31 +5,35 @@ from datetime import date
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 
-# Palinsesto editoriale base (Fase 2 - Content Strategist)
-DEFAULT_SCHEDULE = {
-    "00:00": {"title": "Newsica Night", "type": "music_only"},
-    "06:00": {"title": "Morning News", "type": "news"},
-    "08:00": {"title": "Sport Flash", "type": "sport"},
-    "09:00": {"title": "Wellness Time", "type": "wellness"},
-    "10:00": {"title": "Meteo Update", "type": "meteo"},
-    "12:00": {"title": "Pranzo News", "type": "news"},
-    "14:00": {"title": "Pomeriggio Sport", "type": "sport"},
-    "15:00": {"title": "Newsica Podcast", "type": "podcast"},
-    "16:00": {"title": "Pausa Wellness", "type": "wellness"},
-    "18:00": {"title": "Riepilogo Giornata", "type": "news"},
-    "20:00": {"title": "Newsica Sera", "type": "news"},
-    "21:00": {"title": "Newsica Podcast", "type": "podcast"},
-    "22:00": {"title": "Meteo Notte", "type": "meteo"}
-}
-
 def generate_schedule(target_date=None):
     os.makedirs(RUNTIME_DIR, exist_ok=True)
     if not target_date:
         target_date = date.today().isoformat()
     
     file_path = os.path.join(RUNTIME_DIR, f"schedule_{target_date}.json")
+    
+    # Import the Editorial Director Agent
+    try:
+        import sys
+        src_dir = os.path.join(BASE_DIR, "src")
+        if src_dir not in sys.path:
+            sys.path.insert(0, src_dir)
+            
+        from newsica.agents.editorial_director import EditorialDirectorAgent
+        agent = EditorialDirectorAgent()
+        schedule_data = agent.generate_dynamic_schedule()
+    except Exception as e:
+        print(f"⚠️ Errore caricamento EditorialDirectorAgent: {e}")
+        # Fallback ultra base
+        schedule_data = {
+            "00:00": {"title": "Newsica Night", "type": "music_only"},
+            "06:00": {"title": "Morning News", "type": "news"},
+            "12:00": {"title": "Pranzo News", "type": "news"},
+            "20:00": {"title": "Newsica Sera", "type": "news"}
+        }
+
     with open(file_path, "w") as f:
-        json.dump(DEFAULT_SCHEDULE, f, indent=2)
+        json.dump(schedule_data, f, indent=2)
         
     print(f"✅ Palinsesto generato per {target_date} in {file_path}")
     return file_path

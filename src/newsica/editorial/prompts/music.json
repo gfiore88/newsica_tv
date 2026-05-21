@@ -1,18 +1,18 @@
 {
   "morning": [
-    "Upbeat morning news intro, energetic, synthetic pop",
-    "Soft acoustic guitar morning vibes, optimistic"
+    "synth pop, energetic, bright, instrumental, upbeat, driving rhythm, morning vibes, news broadcast",
+    "acoustic pop, folk rock, instrumental, optimistic, warm, bright acoustic guitar, light percussion, morning"
   ],
   "afternoon": [
-    "Lo-fi hip hop, chill afternoon, relaxed beat",
-    "Corporate background music, steady, neutral"
+    "hip hop, chillout, instrumental, relaxed beat, warm vinyl crackle, smooth bass, mellow piano, afternoon",
+    "corporate pop, light electronic, instrumental, steady rhythm, neutral mood, background music, synthesizer"
   ],
   "evening": [
-    "Late night jazz lounge, smooth sax, slow tempo",
-    "Ambient electronic, deep focus, night time"
+    "smooth jazz, lounge, instrumental, slow tempo, deep double bass, soft saxophone, night time, relaxing",
+    "ambient electronic, downtempo, deep focus, instrumental, atmospheric, ethereal pads, night time"
   ],
   "breaking_news": [
-    "Intense orchestral news theme, dramatic, suspense",
-    "Fast electronic pulse, urgent, breaking news alert"
+    "orchestral soundtrack, suspense, intense, instrumental, dramatic strings, heavy brass, breaking news alert, cinematic",
+    "electronic thriller, fast pulse, urgent, instrumental, dark synthesizer, heavy beat, news flash"
   ]
 }
