@@ -48,3 +48,4 @@ logs/
 tmp/ffmpeg_progress.txt
 tmp/script.txt
 tmp/ticker.txt
+.cache/acestep/progress_estimates.json
