@@ -1209,11 +1209,17 @@ def restart_service_route():
 @app.route('/api/chat/status', methods=['GET'])
 def get_chat_status():
     video_id = ""
-    if os.path.exists(os.path.join(TMP_DIR, "live_video_id.txt")):
+    for file_name in ("live_video_id.txt", "live_video_cache.txt"):
+        file_path = os.path.join(TMP_DIR, file_name)
+        if not os.path.exists(file_path):
+            continue
         try:
-            with open(os.path.join(TMP_DIR, "live_video_id.txt"), "r") as f:
-                video_id = f.read().strip()
-        except:
+            with open(file_path, "r", encoding="utf-8") as f:
+                value = f.read().strip()
+            if len(value) == 11:
+                video_id = value
+                break
+        except Exception:
             pass
             
     # Check if chat_agent is running

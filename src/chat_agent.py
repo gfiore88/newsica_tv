@@ -15,6 +15,7 @@ TMP_DIR = os.path.join(BASE_DIR, "tmp")
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 
 LIVE_VIDEO_ID_FILE = os.path.join(TMP_DIR, "live_video_id.txt")
+LIVE_VIDEO_CACHE_FILE = os.path.join(TMP_DIR, "live_video_cache.txt")
 LATEST_CHAT_FILE = os.path.join(TMP_DIR, "latest_chat.json")
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
@@ -147,6 +148,40 @@ def get_live_video_id_embed(channel_id):
     return None
 
 
+def get_live_video_id_via_api(api_key, channel_id):
+    """
+    Usa la YouTube Data API per trovare il video live attuale del canale.
+    Questa strategia e' piu' affidabile dello scraping della pagina pubblica
+    quando il canale ha piu' live recenti con lo stesso titolo.
+    """
+    url = "https://www.googleapis.com/youtube/v3/search"
+    params = {
+        "part": "snippet",
+        "channelId": channel_id,
+        "eventType": "live",
+        "type": "video",
+        "maxResults": 1,
+        "key": api_key,
+    }
+    try:
+        print(f"🔍 [DISCOVERY] Scansione via YouTube Data API per il canale {channel_id}...")
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            items = data.get("items", [])
+            if items:
+                video_id = items[0].get("id", {}).get("videoId")
+                if video_id and len(video_id) == 11:
+                    print(f"✅ [DISCOVERY] Trovato Video Live ID via API: {video_id}")
+                    return video_id
+            print("⚠️ [DISCOVERY] Nessun video live trovato via API per il canale.")
+        else:
+            print(f"❌ [DISCOVERY] Errore search.list: {r.status_code} - {r.text}")
+    except Exception as e:
+        print(f"❌ [DISCOVERY] Errore nella ricerca API del video live: {e}")
+    return None
+
+
 def get_active_video_id():
     # 1. Controlla se c'è un override manuale scritto su file
     if os.path.exists(LIVE_VIDEO_ID_FILE):
@@ -158,32 +193,53 @@ def get_active_video_id():
         except Exception:
             pass
 
-    # 2. Usa l'auto-discovery basato sulla pagina live pubblica (più affidabile)
-    if YOUTUBE_HANDLE or YOUTUBE_CHANNEL_ID:
-        v_id = get_live_video_id_from_public_page(YOUTUBE_HANDLE, YOUTUBE_CHANNEL_ID)
+    # 2. Se disponibile, usa la YouTube Data API per trovare il video live attuale.
+    if YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID:
+        v_id = get_live_video_id_via_api(YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID)
         if v_id:
-            print(f"✅ [DISCOVERY] Trovato Video Live ID da pagina pubblica: {v_id}")
             try:
-                with open(LIVE_VIDEO_ID_FILE, "w", encoding="utf-8") as f:
+                with open(LIVE_VIDEO_CACHE_FILE, "w", encoding="utf-8") as f:
                     f.write(v_id)
             except Exception:
                 pass
             return v_id
 
-    # 3. Fallback all'auto-discovery basato su embed url
+    # 3. Usa l'auto-discovery basato sulla pagina live pubblica
+    if YOUTUBE_HANDLE or YOUTUBE_CHANNEL_ID:
+        v_id = get_live_video_id_from_public_page(YOUTUBE_HANDLE, YOUTUBE_CHANNEL_ID)
+        if v_id:
+            print(f"✅ [DISCOVERY] Trovato Video Live ID da pagina pubblica: {v_id}")
+            try:
+                with open(LIVE_VIDEO_CACHE_FILE, "w", encoding="utf-8") as f:
+                    f.write(v_id)
+            except Exception:
+                pass
+            return v_id
+
+    # 4. Fallback all'auto-discovery basato su embed url
     if YOUTUBE_CHANNEL_ID:
         print(f"🔍 [DISCOVERY] Avvio scansione embed come fallback per il canale {YOUTUBE_CHANNEL_ID}...")
         v_id = get_live_video_id_embed(YOUTUBE_CHANNEL_ID)
         if v_id:
             print(f"✅ [DISCOVERY] Trovato Video Live ID da embed: {v_id}")
             try:
-                with open(LIVE_VIDEO_ID_FILE, "w", encoding="utf-8") as f:
+                with open(LIVE_VIDEO_CACHE_FILE, "w", encoding="utf-8") as f:
                     f.write(v_id)
             except Exception:
                 pass
             return v_id
 
-    # 4. Controlla .env
+    # 5. Fallback a una cache automatica del video live precedente
+    if os.path.exists(LIVE_VIDEO_CACHE_FILE):
+        try:
+            with open(LIVE_VIDEO_CACHE_FILE, "r", encoding="utf-8") as f:
+                v_id = f.read().strip()
+                if len(v_id) == 11:
+                    return v_id
+        except Exception:
+            pass
+
+    # 6. Controlla .env
     v_id = os.getenv("YOUTUBE_LIVE_VIDEO_ID")
     if v_id and len(v_id) == 11:
         return v_id
