@@ -160,8 +160,8 @@ watch_ffmpeg_progress() {
       last_time="$current_time"
     fi
 
-    if [ "$same_count" -ge 3 ]; then
-      echo "⚠️ FFmpeg non avanza da 30 secondi (out_time_ms=$current_time). Forzo riavvio..."
+    if [ "$same_count" -ge 9 ]; then
+      echo "⚠️ FFmpeg non avanza da 90 secondi (out_time_ms=$current_time). Forzo riavvio..."
       kill "$ffmpeg_pid" 2>/dev/null || true
       return
     fi
