@@ -133,7 +133,8 @@ if [ "$STREAM_TEST_CARD" = "1" ]; then
   FILTER='[0:v]setsar=1,format=yuv420p[bg]; [bg]drawbox=x=0:y=0:w=iw:h=90:color=black@0.75:t=fill[top]; [top]drawtext=text='"'"'NEWSICA TV TEST - SEGNALE VIDEO ATTIVO'"'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=42:x=30:y=25[outv]'
 else
   # Carichiamo il logo di sfondo a 1 FPS anziché a 25 FPS per risparmiare calcoli di scale/pad pesanti.
-  VIDEO_INPUT_ARGS=(-re -framerate 1 -loop 1 -i "$LOGO_FILE")
+  # Rimuoviamo -re per evitare colli di bottiglia nel demuxer di FFmpeg, la velocità è garantita in tempo reale dalle pipe live.
+  VIDEO_INPUT_ARGS=(-framerate 1 -loop 1 -i "$LOGO_FILE")
 
   # Rimuoviamo format=rgba,fps=25 dall'overlay in ingresso: la FIFO e' gia' in RGBA,
   # e il filtro overlay ripete l'ultimo frame automaticamente (repeatlast=1).
