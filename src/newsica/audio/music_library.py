@@ -4,6 +4,7 @@ import random
 from pathlib import Path
 
 from newsica.config.paths import ASSETS_DIR, MUSIC_DIR
+from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, read_music_mode
 
 AI_MUSIC_DIR = ASSETS_DIR / "ai_music"
 SUPPORTED_AUDIO_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg")
@@ -31,12 +32,24 @@ class MusicLibrary:
             if path.is_file() and path.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS
         ]
 
+    def get_counts(self):
+        self.refresh()
+        return {
+            source: len(tracks)
+            for source, tracks in self._tracks_by_source.items()
+        }
+
     def get_random_track(self, exclude=None):
         self.refresh()
 
+        mode = read_music_mode()
+        source_items = self._tracks_by_source.items()
+        if mode == MUSIC_MODE_AI_ONLY:
+            source_items = [("ai", self._tracks_by_source.get("ai", []))]
+
         available_sources = [
             source
-            for source, tracks in self._tracks_by_source.items()
+            for source, tracks in source_items
             if any(str(path) != exclude for path in tracks)
         ]
         if not available_sources:
@@ -54,4 +67,3 @@ class MusicLibrary:
         track = random.choice(candidates)
         self._last_source = source
         return str(track)
-

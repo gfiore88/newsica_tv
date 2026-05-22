@@ -1,9 +1,11 @@
 from newsica.config.paths import TMP_DIR
 from newsica.sources.registry import (
     NEWS_PREFERRED_SOURCES,
+    NEWS_ROTATION_LIMIT,
     NEWS_SOURCES,
     RSS_FEEDS,
     SPORT_PREFERRED_SOURCES,
+    SPORT_ROTATION_LIMIT,
     SPORT_SOURCES,
     WELLNESS_SOURCES,
     max_items_for_source,
@@ -40,14 +42,14 @@ def collect_news_items():
     all_news.extend(select_rotating_items(
         news_pool,
         "news",
-        limit=6,
+        limit=NEWS_ROTATION_LIMIT,
         recent_file=RECENT_NEWS_FILE,
         preferred_sources=NEWS_PREFERRED_SOURCES,
     ))
     all_news.extend(select_rotating_items(
         sport_pool,
         "sport",
-        limit=3,
+        limit=SPORT_ROTATION_LIMIT,
         recent_file=RECENT_NEWS_FILE,
         preferred_sources=SPORT_PREFERRED_SOURCES,
     ))
@@ -61,4 +63,3 @@ def collect_news_items():
         all_news.append(weather)
 
     return all_news
-

@@ -104,6 +104,50 @@ Per ogni asset pre-prodotto deve esistere un manifest locale con almeno:
 
 La regia non deve mandare in onda asset privi di manifest valido o con manifest non coerente con lo slot corrente. In quel caso deve attendere la rigenerazione o usare un fallback di continuità coerente, senza riusare audio di un programma precedente.
 
+## Regola di Diversità Fonti News
+
+Le rubriche news non devono dipendere da un solo feed generalista o da una sola agenzia. Il pool editoriale deve includere fonti e sezioni diverse per cronaca, politica, esteri/mondo, economia, cultura, tecnologia/innovazione e breaking/ultimora.
+
+Quando si aggiunge una fonte:
+- verificare che il feed sia raggiungibile e gratuito;
+- inserirla nel registry sorgenti e nel character/source JSON appropriato;
+- aggiornare la rotazione per evitare che una sola fonte domini il copione;
+- mantenere una memoria anti-ripetizione tra le fonti;
+- documentare la scelta con ADR se cambia il mix editoriale stabile.
+
+## Regola Format Meteo Breve
+
+Il meteo è un bollettino breve, non uno show lungo. Il suo spazio editoriale deve durare circa 3-5 minuti di parlato: situazione nazionale, Nord, Centro, Sud/Isole, temperature e chiusura.
+
+La fascia meteo può durare fino a circa 30 minuti nel palinsesto, ma dopo il bollettino la regia deve passare a rotazione musicale fino al programma successivo. Il prompt meteo non deve generare parti multiple o `[MUSIC_BREAK]`.
+
+Il DirectorAgent deve trattare il meteo come `single_part`: jingle di ingresso, bollettino, eventuale stacco di uscita, poi musica fino alla deadline dello slot.
+
+## Regola Segnale Orario Non Interrompente
+
+Il segnale orario non deve più essere legato al minuto `:00`, perché le fasce di palinsesto partono ogni ora e lo slot principale ha priorità.
+
+La regola stabile è:
+- massimo un segnale orario per ora;
+- minuto casuale per ogni ora, evitando inizio e fine fascia;
+- nessun segnale orario può interrompere speaker, podcast, news, meteo parlato, breaking news o qualunque contenuto vocale;
+- il Director può mandarlo solo come overlay sopra una canzone già in onda;
+- se al minuto scelto sta parlando uno speaker, il segnale viene saltato e non recuperato forzando l'interruzione.
+
+La dashboard può generare manualmente il segnale, ma il Director deve comunque rispettare la regola anti-interruzione: test manuale non significa autorizzazione a coprire una voce.
+
+## Regola Modalità Rotazione Musicale
+
+La Dashboard deve permettere alla regia di scegliere la politica musicale senza modificare codice o riavviare lo stream.
+
+Modalità supportate:
+- `mixed`: rotazione tra `assets/music/` e `assets/ai_music/`, alternando le fonti quando entrambe sono disponibili;
+- `ai_only`: usa esclusivamente brani presenti in `assets/ai_music/`.
+
+La preferenza deve essere salvata in `runtime/music-mode.json` e letta dal playout a ogni nuova scelta brano, così il cambio diventa effettivo dal brano successivo senza interrompere quello in onda.
+
+Se `ai_only` è attiva ma non esistono brani AI validi, la UI deve avvisare chiaramente: la regia non deve pescare automaticamente da `assets/music/`, perché violerebbe la scelta esplicita "solo Musica AI".
+
 ## Backlog: Musica Esterna a Licenza Verificata
 
 Task futuro, non implementato: studiare e integrare una fonte gratuita per scaricare brani da aggiungere a `assets/music/`.

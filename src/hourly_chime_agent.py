@@ -1,13 +1,14 @@
 """
 hourly_chime_agent.py — Rintocco Orario NewsicaTV
-Genera ogni ora in punto un annuncio TTS "Sono le X in punto su NewsicaTV"
-e lo invia al director come interrupt prioritario (analogo alla Breaking News).
+Genera un annuncio TTS una volta all'ora, a un minuto casuale stabile,
+e lo invia al director come overlay musicale non interrompente.
 """
 
 import os
 import sys
 import time
 import datetime
+import random
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
@@ -23,6 +24,9 @@ KOKORO_VOICES = os.path.join(BASE_DIR, "voices-v1.0.bin")
 # Voce istituzionale — stessa dell'anchor news
 CHIME_VOICE = "if_sara"
 CHIME_SPEED = 0.95
+CHIME_GENERATION_LEAD_SECONDS = 8
+CHIME_MINUTE_MIN = 7
+CHIME_MINUTE_MAX = 53
 
 HOUR_WORDS = {
     0: "mezzanotte",
@@ -86,9 +90,6 @@ CHIME_TEMPLATES = [
     "Sono le {ora} in punto, buon ascolto da NewsicaTV.",
 ]
 
-import random
-
-
 def build_chime_text(hour: int) -> str:
     ora = HOUR_WORDS.get(hour, f"{hour}")
     template = random.choice(CHIME_TEMPLATES)
@@ -143,26 +144,39 @@ def generate_chime_audio(text: str, output_file=CHIME_AUDIO_FILE) -> bool:
         return False
 
 
-def send_chime_command():
+def send_chime_command(target_time=None):
     """Scrive il comando HOURLY_CHIME_READY nel file di controllo del director."""
     try:
+        suffix = ""
+        if target_time:
+            suffix = f"|soft|{target_time.isoformat(timespec='seconds')}"
         with open(CONTROL_FILE, "w") as f:
-            f.write(f"HOURLY_CHIME_READY|{CHIME_AUDIO_FILE}")
+            f.write(f"HOURLY_CHIME_READY|{CHIME_AUDIO_FILE}{suffix}")
         print(f"📡 Comando HOURLY_CHIME_READY inviato al director.")
     except Exception as e:
         print(f"❌ Errore invio comando chime: {e}")
 
 
-def seconds_to_next_hour() -> float:
-    """Calcola i secondi mancanti alla prossima ora intera, con 3s di anticipo
-    per compensare il tempo di generazione TTS."""
-    now = datetime.datetime.now()
-    next_hour = (now + datetime.timedelta(hours=1)).replace(
-        minute=0, second=0, microsecond=0
-    )
-    delta = (next_hour - now).total_seconds()
-    # Inizia la generazione TTS ~8 secondi prima dell'ora per essere pronti
-    return max(0.0, delta - 8.0)
+def choose_chime_minute(hour_start: datetime.datetime) -> int:
+    """Sceglie un minuto stabile per quella specifica ora locale."""
+    seed = int(hour_start.strftime("%Y%m%d%H"))
+    return random.Random(seed).randint(CHIME_MINUTE_MIN, CHIME_MINUTE_MAX)
+
+
+def next_random_chime_time(now=None) -> datetime.datetime:
+    """Restituisce il prossimo target random, evitando l'inizio/fine fascia."""
+    now = now or datetime.datetime.now()
+    hour_start = now.replace(minute=0, second=0, microsecond=0)
+
+    for _ in range(3):
+        minute = choose_chime_minute(hour_start)
+        target = hour_start.replace(minute=minute, second=0, microsecond=0)
+        if target > now + datetime.timedelta(seconds=CHIME_GENERATION_LEAD_SECONDS):
+            return target
+        hour_start += datetime.timedelta(hours=1)
+
+    minute = choose_chime_minute(hour_start)
+    return hour_start.replace(minute=minute, second=0, microsecond=0)
 
 
 def run():
@@ -171,48 +185,30 @@ def run():
     os.makedirs(RUNTIME_DIR, exist_ok=True)
 
     while True:
-        wait = seconds_to_next_hour()
-        print(f"🔔 Prossimo rintocco tra {wait:.0f} secondi.")
+        target_time = next_random_chime_time()
+        generation_time = target_time - datetime.timedelta(seconds=CHIME_GENERATION_LEAD_SECONDS)
+        wait = max(0.0, (generation_time - datetime.datetime.now()).total_seconds())
+        print(
+            f"🔔 Prossimo segnale orario alle {target_time.strftime('%H:%M')} "
+            f"(generazione tra {wait:.0f} secondi)."
+        )
         time.sleep(wait)
 
-        # Ora siamo ~8 secondi prima del rintocco: verifichiamo se deve essere saltato
-        now = datetime.datetime.now()
-        nearest_hour = (now + datetime.timedelta(minutes=30)).replace(minute=0, second=0, microsecond=0)
-        target_hour = nearest_hour.hour
-        target_hour_str = nearest_hour.strftime("%H:00")
-        
-        try:
-            from schedule_generator import get_current_schedule
-            schedule_data = get_current_schedule()
-            if target_hour_str in schedule_data:
-                print(f"🔔 Rintocco delle {target_hour_str} annullato: coincide con l'inizio del blocco '{schedule_data[target_hour_str]['title']}'.")
-                # Attende 90 secondi per superare l'inizio dell'ora e passa al ciclo successivo
-                time.sleep(90)
-                continue
-        except Exception as e:
-            print(f"⚠️ Errore controllo palinsesto nel chime agent: {e}")
-
-        text = build_chime_text(target_hour)
+        text = build_exact_chime_text(target_time)
 
         ok = generate_chime_audio(text)
         if not ok:
-            # Aspetta qualche secondo e riprova al prossimo minuto
             time.sleep(60)
             continue
 
-        # Attendiamo il momento esatto (ore precise ±1s)
-        now = datetime.datetime.now()
-        on_the_hour = now.replace(minute=0, second=0, microsecond=0)
-        if now > on_the_hour:
-            on_the_hour += datetime.timedelta(hours=1)
-        remaining = (on_the_hour - datetime.datetime.now()).total_seconds()
+        remaining = (target_time - datetime.datetime.now()).total_seconds()
         if remaining > 0:
             time.sleep(remaining)
 
-        send_chime_command()
+        send_chime_command(target_time)
 
-        # Evita di ritriggerare subito dopo (attendiamo 90s)
-        time.sleep(90)
+        # Evita retrigger nello stesso minuto dopo restart/ritardi locali.
+        time.sleep(75)
 
 
 if __name__ == "__main__":

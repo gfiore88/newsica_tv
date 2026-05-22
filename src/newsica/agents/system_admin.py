@@ -9,6 +9,8 @@ RUNTIME_DIR = BASE_DIR / "runtime"
 ASSETS_DIR = RUNTIME_DIR / "assets"
 
 class SystemAdminAgent:
+    STALE_PREPARING_SECONDS = 30 * 60
+
     def __init__(self):
         self._ensure_asset_dirs()
         
@@ -49,6 +51,18 @@ class SystemAdminAgent:
         if ready_dir.exists():
             return None, "L'asset è già pronto."
             
+        if preparing_dir.exists():
+            age = time.time() - preparing_dir.stat().st_mtime
+            is_empty = not any(preparing_dir.iterdir())
+            if age > self.STALE_PREPARING_SECONDS or (is_empty and age > 5 * 60):
+                stale_dir = ASSETS_DIR / "archive" / f"{slot_id}_preparing_stale_{int(time.time())}"
+                if stale_dir.exists():
+                    shutil.rmtree(stale_dir)
+                preparing_dir.rename(stale_dir)
+                print(f"♻️ [SystemAdminAgent] Preparazione stale per {slot_time}. Archivio e rigenero.")
+            else:
+                return None, "L'asset è già in preparazione."
+
         if preparing_dir.exists():
             return None, "L'asset è già in preparazione."
             

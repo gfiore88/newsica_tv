@@ -3,8 +3,10 @@ import os
 import queue
 import subprocess
 import time
+from pathlib import Path
 
 from newsica.audio.music_library import MusicLibrary
+from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, read_music_mode
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 
 
@@ -106,6 +108,36 @@ class AudioPlayout:
             "pipe:1",
         ]
 
+    def _ensure_music_allowed_by_mode(self, music_file):
+        if not music_file:
+            return None
+
+        mode = read_music_mode()
+        if mode != MUSIC_MODE_AI_ONLY:
+            return music_file
+
+        try:
+            music_path = Path(music_file).resolve()
+            ai_music_dir = self.music_library.ai_music_dir.resolve()
+            if music_path.is_relative_to(ai_music_dir):
+                return music_file
+        except Exception:
+            pass
+
+        replacement = self.get_random_music(exclude=self.last_music_file)
+        if replacement:
+            print(
+                "🎵 Modalità Solo Musica AI: sostituisco brano non AI "
+                f"({os.path.basename(str(music_file))}) con {os.path.basename(str(replacement))}."
+            )
+            return replacement
+
+        print(
+            "⚠️ Modalità Solo Musica AI attiva, ma nessun brano valido "
+            "trovato in assets/ai_music."
+        )
+        return None
+
     def queue_pcm_from_file(self, audio_file, block_info=None, is_breaking_news=False):
         if block_info:
             self.audio_queue.put({"type": "metadata", "state": block_info})
@@ -164,6 +196,10 @@ class AudioPlayout:
         return not self.is_interrupted()
 
     def mix_and_queue(self, music_file, voice_file, block_info=None):
+        music_file = self._ensure_music_allowed_by_mode(music_file)
+        if not music_file:
+            return self.queue_pcm_from_file(voice_file, block_info)
+
         print(f"Mixaggio in corso: Voce + {os.path.basename(music_file)}")
 
         if block_info:
@@ -227,13 +263,24 @@ class AudioPlayout:
         if not music_file:
             time.sleep(1)
             return
+        music_file = self._ensure_music_allowed_by_mode(music_file)
+        if not music_file:
+            time.sleep(1)
+            return
         self.last_music_file = music_file
 
         print(f"🎵 Brano musicale di riempimento: {os.path.basename(music_file)}")
         process = subprocess.Popen(self._music_decode_command(music_file), stdout=subprocess.PIPE)
         self.current_process = process
 
-        while datetime.datetime.now() < deadline:
+        import numpy as np
+        fade_duration = 2.5
+        
+        while True:
+            now = datetime.datetime.now()
+            if now >= deadline:
+                break
+                
             if self.is_interrupted():
                 process.terminate()
                 break
@@ -241,6 +288,14 @@ class AudioPlayout:
             data = process.stdout.read(PCM_CHUNK_BYTES)
             if not data:
                 break
+                
+            time_left = (deadline - now).total_seconds()
+            if time_left < fade_duration:
+                # Applica fade-out lineare sugli ultimi secondi
+                factor = max(0.0, time_left / fade_duration)
+                samples = np.frombuffer(data, dtype=np.int16).copy()
+                data = (samples * factor).astype(np.int16).tobytes()
+
             if not self.queue_item({"type": "audio", "data": data}):
                 process.terminate()
                 break
@@ -256,6 +311,10 @@ class AudioPlayout:
 
         if not music_file:
             music_file = self.get_random_music(exclude=self.last_music_file)
+        if not music_file:
+            time.sleep(1)
+            return
+        music_file = self._ensure_music_allowed_by_mode(music_file)
         if not music_file:
             time.sleep(1)
             return
@@ -281,4 +340,3 @@ class AudioPlayout:
             process.terminate()
         process.wait()
         self.current_process = None
-

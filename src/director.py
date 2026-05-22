@@ -148,6 +148,11 @@ def generator_worker():
                     print("🚀 [Director] Tempo residuo lungo: trigger background AI Music Gen...")
                     threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_generator.py")]), daemon=True).start()
                 
+            elif action == "PLAY_MUSIC_DEADLINE":
+                music_file = action_info["file"]
+                deadline_str = action_info["deadline"]
+                deadline = datetime.datetime.fromisoformat(deadline_str)
+                playout.queue_music_track(deadline)
 
             elif action == "TRIGGER_NEXT_BLOCK":
                 manual_block_override_index = None
@@ -208,6 +213,79 @@ def write_fifo_chunk(fifo_fd, data, blocking=True):
                 return False
             time.sleep(0.02)
     return True
+
+def apply_display_metadata(metadata_item):
+    _DISPLAY_FIELDS = {
+        "current_block", "current_title", "next_block",
+        "next_start", "breaking_news_available", "last_update",
+    }
+    existing_state = get_current_state()
+    for field in _DISPLAY_FIELDS:
+        if field in metadata_item["state"]:
+            existing_state[field] = metadata_item["state"][field]
+    write_state_files(existing_state)
+
+def is_music_safe_for_chime(state):
+    if not state or state.get("status") != "ON_AIR":
+        return False
+    return (
+        state.get("current_block") == "music_only"
+        or state.get("current_segment") == "music_rotation_until_deadline"
+    )
+
+def get_next_audio_chunk_for_overlay(silence):
+    while True:
+        try:
+            item = audio_queue.get_nowait()
+        except queue.Empty:
+            return silence
+
+        try:
+            if isinstance(item, dict) and item.get("type") == "metadata":
+                apply_display_metadata(item)
+                continue
+
+            return item["data"] if isinstance(item, dict) else item
+        finally:
+            audio_queue.task_done()
+
+def mix_pcm_chunks(base_data, overlay_data, base_volume=0.78, overlay_volume=1.0):
+    import numpy as np
+
+    if len(base_data) < len(overlay_data):
+        base_data = base_data + (b"\x00" * (len(overlay_data) - len(base_data)))
+    elif len(base_data) > len(overlay_data):
+        base_data = base_data[:len(overlay_data)]
+
+    base = np.frombuffer(base_data, dtype=np.int16).astype(np.float32)
+    overlay = np.frombuffer(overlay_data, dtype=np.int16).astype(np.float32)
+    mixed = (base * base_volume) + (overlay * overlay_volume)
+    return np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
+
+def overlay_chime_on_music(fifo_fd, chime_file, silence):
+    cmd_ffmpeg = [
+        FFMPEG_CMD,
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", chime_file,
+        "-f", "s16le",
+        "-ar", str(PCM_SAMPLE_RATE),
+        "-ac", str(PCM_CHANNELS),
+        "pipe:1"
+    ]
+    proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
+    chunks = 0
+    try:
+        while True:
+            chime_chunk = proc.stdout.read(PCM_CHUNK_BYTES)
+            if not chime_chunk:
+                break
+            music_chunk = get_next_audio_chunk_for_overlay(silence[:len(chime_chunk)])
+            write_fifo_chunk(fifo_fd, mix_pcm_chunks(music_chunk, chime_chunk))
+            chunks += 1
+    finally:
+        proc.wait()
+    print(f"🔔 Segnale orario mixato sopra la musica ({chunks} chunks).")
 
 def restore_after_interrupt(prev_state, label):
     state = prev_state if prev_state and prev_state.get("current_block") not in {"chime", "breaking_news"} else get_current_state()
@@ -332,56 +410,24 @@ def main():
                         elif cmd.startswith("HOURLY_CHIME_READY"):
                             parts = cmd.split("|")
                             chime_file = parts[1] if len(parts) > 1 else CHIME_AUDIO_FILE
-                            force_chime = len(parts) > 2 and parts[2] == "force"
-                            
-                            if not force_chime:
-                                try:
-                                    now = datetime.datetime.now()
-                                    nearest_hour = (now + datetime.timedelta(minutes=30)).replace(minute=0, second=0, microsecond=0)
-                                    current_hour_str = nearest_hour.strftime("%H:00")
-                                    from schedule_generator import get_current_schedule
-                                    schedule_data = get_current_schedule()
-                                    if current_hour_str in schedule_data:
-                                        continue
-                                except Exception as e:
-                                    print(f"⚠️ Errore controllo chime: {e}")
 
                             if os.path.exists(chime_file):
-                                apply_preventive_fade_out_and_write(fifo_fd)
-                                chime_info = {
-                                    "status": "ON_AIR",
-                                    "current_block": "chime",
-                                    "current_title": "SEGNALE ORARIO",
-                                    "next_block": "",
-                                    "next_start": "",
-                                    "breaking_news_available": False,
-                                    "last_update": time.strftime("%Y-%m-%dT%H:%M:%S")
-                                }
-                                prev_state = get_current_state()
-                                write_state_files(chime_info)
+                                current_state = get_current_state()
+                                if not is_music_safe_for_chime(current_state):
+                                    block = current_state.get("current_block", "unknown")
+                                    segment = current_state.get("current_segment", "unknown")
+                                    print(
+                                        "🔕 Segnale orario saltato: "
+                                        f"non interrompo speaker o contenuto parlato ({block}/{segment})."
+                                    )
+                                    continue
 
-                                cmd_ffmpeg = [
-                                    FFMPEG_CMD,
-                                    "-hide_banner",
-                                    "-loglevel", "error",
-                                    "-i", chime_file,
-                                    "-f", "s16le",
-                                    "-ar", str(PCM_SAMPLE_RATE),
-                                    "-ac", str(PCM_CHANNELS),
-                                    "pipe:1"
-                                ]
                                 try:
-                                    proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
-                                    while True:
-                                        chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
-                                        if not chunk_data:
-                                            break
-                                        write_fifo_chunk(fifo_fd, chunk_data)
-                                    proc.wait()
+                                    overlay_chime_on_music(fifo_fd, chime_file, silence)
                                 except Exception as e:
                                     print(f"⚠️ Errore chime: {e}")
-                                restore_after_interrupt(prev_state, "chime")
-                                fade_in_chunks_remaining = 20
+                            else:
+                                print(f"⚠️ File segnale orario non trovato: {chime_file}")
                         elif cmd == "TRIGGER_BREAKING_NEWS":
                             threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")])).start()
                         elif cmd == "TRIGGER_SPECIAL_BROADCAST_TEST":

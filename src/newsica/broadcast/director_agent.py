@@ -2,8 +2,18 @@ import os
 import json
 import datetime
 import random
+import wave
 from newsica.config.paths import TMP_DIR, RUNTIME_DIR, ASSETS_DIR
 from newsica.utils.audit_logger import log_decision
+
+def get_audio_duration(file_path):
+    if not os.path.exists(file_path):
+        return 0.0
+    try:
+        with wave.open(file_path, 'r') as w:
+            return w.getnframes() / float(w.getframerate())
+    except Exception:
+        return 0.0
 from newsica.broadcast.scheduler import (
     get_current_block_info,
     get_next_block_info_for_key,
@@ -181,6 +191,20 @@ class DirectorAgent:
                 pass
 
         if current_segment == "intro" or current_segment == "init":
+            voice_duration = 15.0
+            if is_multipart and num_parts > 0:
+                for i in range(1, num_parts + 1):
+                    voice_duration += get_audio_duration(os.path.join(ready_dir, f"audio_part{i}.wav"))
+            else:
+                voice_duration += get_audio_duration(voice_file)
+                
+            deadline = schedule_deadline(next_time)
+            slot_duration = (deadline - datetime.datetime.now()).total_seconds()
+            music_total_time = max(0.0, slot_duration - voice_duration)
+            num_music_blocks = num_parts if is_multipart else 1
+            state["break_target_duration"] = music_total_time / num_music_blocks
+            write_state_files(state)
+
             # Passiamo alla messa in onda del copione (singolo o multipart)
             if is_multipart and num_parts > 0:
                 # Iniziamo la prima parte del multi-part
@@ -205,7 +229,7 @@ class DirectorAgent:
                 music_file = self._select_non_repeated_music()
                 if music_file:
                     add_music_track(music_file)
-                state["current_segment"] = "voice_single"
+                state["current_segment"] = "meteo_brief_playing" if block_type == "meteo" else "voice_single"
                 write_state_files(state)
                 return {
                     "action": "PLAY_VOICE_MIX",
@@ -231,6 +255,16 @@ class DirectorAgent:
                     "trigger_ai_music_gen": False
                 }
             return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
+
+        elif current_segment == "meteo_brief_playing":
+            state["current_segment"] = "music_rotation_until_deadline"
+            write_state_files(state)
+            return {
+                "action": "PLAY_JINGLE",
+                "file": self.classic_jingle,
+                "label": "stacco_uscita_meteo",
+                "next_segment": "music_rotation_until_deadline"
+            }
 
         elif current_segment == "evening_podcast_generate":
             return {
@@ -284,17 +318,20 @@ class DirectorAgent:
                 next_part_idx = current_part_idx + 1
                 next_part_file = os.path.join(ready_dir, f"audio_part{next_part_idx}.wav")
                 
-                # Prima di mandare in onda la prossima parte, riproduciamo 1 brano intermedio di stacco
+                # Prima di mandare in onda la prossima parte, riproduciamo 1 o più brani intermedi di stacco
                 # Per non saltare il sequenziamento, creiamo uno stato intermedio di stacco musicale
                 state["current_segment"] = f"music_stacco_{current_part_idx}_to_{next_part_idx}"
+                break_duration = state.get("break_target_duration", 180.0)
+                state["stacco_deadline"] = (datetime.datetime.now() + datetime.timedelta(seconds=break_duration)).isoformat()
                 write_state_files(state)
                 
                 music_file = self._select_non_repeated_music()
                 if music_file:
                     add_music_track(music_file)
                     return {
-                        "action": "PLAY_MUSIC",
+                        "action": "PLAY_MUSIC_DEADLINE",
                         "file": music_file,
+                        "deadline": state["stacco_deadline"],
                         "label": "stacco_musicale_rubrica"
                     }
             
@@ -309,6 +346,23 @@ class DirectorAgent:
             }
 
         elif current_segment.startswith("music_stacco_"):
+            # Controllo se il tempo di stacco è terminato
+            stacco_deadline_str = state.get("stacco_deadline")
+            if stacco_deadline_str:
+                stacco_deadline = datetime.datetime.fromisoformat(stacco_deadline_str)
+                if datetime.datetime.now() < stacco_deadline:
+                    # Riempiamo ancora di musica
+                    music_file = self._select_non_repeated_music()
+                    if music_file:
+                        add_music_track(music_file)
+                        return {
+                            "action": "PLAY_MUSIC_DEADLINE",
+                            "file": music_file,
+                            "deadline": stacco_deadline_str,
+                            "label": "stacco_musicale_rubrica"
+                        }
+                    return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
+
             # Rientriamo dallo stacco musicale alla parte successiva del parlato
             parts = current_segment.split("_")
             next_part_idx = int(parts[-1])
@@ -405,10 +459,27 @@ class DirectorAgent:
         scheduled_slot = state.get("scheduled_slot", "").replace(":", "")
         ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot)
         voice_file = os.path.join(ready_dir, "audio.wav")
+        manifest_file = os.path.join(ready_dir, "manifest.json")
+        has_valid_audio = os.path.exists(voice_file)
+
+        if os.path.exists(ready_dir):
+            try:
+                with open(manifest_file, "r", encoding="utf-8") as f:
+                    manifest = json.load(f)
+                if manifest.get("character") != "podcast" or manifest.get("title") != title:
+                    print(
+                        f"⚠️ [DirectorAgent] Podcast pronto non coerente per {scheduled_slot}: "
+                        f"atteso podcast/{title}, trovato {manifest}."
+                    )
+                    has_valid_audio = False
+            except Exception:
+                print(f"⚠️ [DirectorAgent] Podcast pronto senza manifest valido per {scheduled_slot}. Attendo rigenerazione.")
+                has_valid_audio = False
         
-        if current_segment == "intro" or current_segment == "init":
-            if os.path.exists(voice_file):
+        if current_segment in {"intro", "init", "music_rotation_until_deadline"}:
+            if has_valid_audio and not state.get("podcast_played"):
                 state["current_segment"] = "podcast_playing"
+                state["podcast_played"] = True
                 write_state_files(state)
                 return {
                     "action": "PLAY_VOICE",
@@ -418,6 +489,7 @@ class DirectorAgent:
                     "segment": "Completo"
                 }
             # Se l'audio non è pronto, inneschiamo un fallback musicale.
+            print(f"⚠️ [DirectorAgent] Podcast non pronto per slot {scheduled_slot}. Uso musica finché l'asset non arriva.")
             state["current_segment"] = "music_rotation_until_deadline"
             write_state_files(state)
             

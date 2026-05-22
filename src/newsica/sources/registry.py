@@ -10,6 +10,13 @@ RSS_FEEDS = {
     "ansa_salute_benessere": "https://www.ansa.it/canale_saluteebenessere/notizie/saluteebenessere_rss.xml",
     "ansa_lifestyle": "https://www.ansa.it/canale_lifestyle/notizie/lifestyle_rss.xml",
     "sky_tg24": "https://tg24.sky.it/rss/tg24.xml",
+    "agi_cronaca": "https://www.agi.it/cronaca/rss",
+    "agi_politica": "https://www.agi.it/politica/rss",
+    "agi_estero": "https://www.agi.it/estero/rss",
+    "agi_economia": "https://www.agi.it/economia/rss",
+    "agi_innovazione": "https://www.agi.it/innovazione/rss",
+    "agi_cultura": "https://www.agi.it/cultura/rss",
+    "agi_sport": "https://www.agi.it/sport/rss",
 }
 
 NEWS_SOURCES = {
@@ -21,16 +28,32 @@ NEWS_SOURCES = {
     "ansa_cultura",
     "ansa_tecnologia",
     "sky_tg24",
+    "agi_cronaca",
+    "agi_politica",
+    "agi_estero",
+    "agi_economia",
+    "agi_innovazione",
+    "agi_cultura",
 }
 
-SPORT_SOURCES = {"ansa_sport"}
+SPORT_SOURCES = {"ansa_sport", "agi_sport"}
 WELLNESS_SOURCES = {"ansa_salute_benessere", "ansa_lifestyle"}
 
-NEWS_PREFERRED_SOURCES = ["ansa_ultimora", "ansa_mondo", "sky_tg24"]
-SPORT_PREFERRED_SOURCES = ["ansa_sport"]
+NEWS_PREFERRED_SOURCES = [
+    "ansa_ultimora",
+    "ansa_cronaca",
+    "ansa_politica",
+    "ansa_mondo",
+    "agi_cronaca",
+    "agi_politica",
+    "agi_estero",
+    "sky_tg24",
+]
+SPORT_PREFERRED_SOURCES = ["ansa_sport", "agi_sport"]
 WELLNESS_PREFERRED_SOURCES = ("ansa_lifestyle", "ansa_salute_benessere")
+NEWS_ROTATION_LIMIT = 10
+SPORT_ROTATION_LIMIT = 4
 
 
 def max_items_for_source(source):
     return 12 if source in NEWS_SOURCES else 8
-

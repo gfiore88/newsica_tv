@@ -6,6 +6,13 @@ import subprocess
 import time
 from schedule_generator import get_current_schedule, generate_schedule
 from newsica.audio.settings import resolve_ffmpeg_cmd
+from newsica.audio.music_library import MusicLibrary
+from newsica.audio.music_mode import (
+    MUSIC_MODE_AI_ONLY,
+    MUSIC_MODE_MIXED,
+    read_music_mode,
+    write_music_mode,
+)
 
 app = Flask(__name__)
 
@@ -139,6 +146,20 @@ HTML_TEMPLATE = """
                         <button id="music-gen-btn" onclick="triggerMusicGen()" class="col-span-1 bg-indigo-700/80 hover:bg-indigo-600 transition border border-indigo-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(79,70,229,0.3)]">
                             🎵 Genera Musica AI (Background)
                         </button>
+                    </div>
+                    <div class="mt-4 p-3 rounded-lg border border-slate-700 bg-slate-950/30">
+                        <div class="flex items-center justify-between gap-3 mb-3">
+                            <h3 class="text-xs uppercase tracking-widest text-slate-400 font-semibold">Rotazione Musica</h3>
+                            <span id="music-mode-counts" class="text-[11px] text-slate-500">--</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="music-mode-mixed" onclick="setMusicMode('mixed')" class="music-mode-btn px-3 py-2 rounded-md border text-xs font-bold transition">
+                                MIX CARTELLA + AI
+                            </button>
+                            <button id="music-mode-ai_only" onclick="setMusicMode('ai_only')" class="music-mode-btn px-3 py-2 rounded-md border text-xs font-bold transition">
+                                SOLO MUSICA AI
+                            </button>
+                        </div>
                     </div>
                     <div class="mt-5 pt-4 border-t border-slate-700/60">
                         <h3 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-3">Servizi</h3>
@@ -306,7 +327,7 @@ HTML_TEMPLATE = """
                     if (data.lines && data.lines.length > 0) {
                         // Colora i tag in base al livello
                         let html = data.lines.join('<br>');
-                        html = html.replace(/\[(INFO|MUSIC|SCHEDULING|BREAKING|RESTORE|PLAYOUT|WARNING|ERROR)\]/g, match => {
+                        html = html.replace(/\\[(INFO|MUSIC|SCHEDULING|BREAKING|RESTORE|PLAYOUT|WARNING|ERROR)\\]/g, match => {
                             let color = 'text-blue-400';
                             if (match.includes('MUSIC')) color = 'text-pink-400 font-bold';
                             if (match.includes('SCHEDULING')) color = 'text-emerald-400 font-bold';
@@ -508,6 +529,57 @@ HTML_TEMPLATE = """
             }
         }
 
+        function renderMusicMode(data) {
+            const mode = data.mode || 'mixed';
+            const counts = data.counts || {};
+            const countsEl = document.getElementById('music-mode-counts');
+            if (countsEl) {
+                countsEl.innerText = `music ${counts.library ?? 0} · AI ${counts.ai ?? 0}`;
+            }
+
+            ['mixed', 'ai_only'].forEach((item) => {
+                const btn = document.getElementById(`music-mode-${item}`);
+                if (!btn) return;
+                const active = item === mode;
+                btn.className = active
+                    ? 'music-mode-btn px-3 py-2 rounded-md border text-xs font-bold transition bg-emerald-600/80 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.25)]'
+                    : 'music-mode-btn px-3 py-2 rounded-md border text-xs font-bold transition bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-700';
+            });
+        }
+
+        async function fetchMusicMode() {
+            try {
+                const res = await fetch('/api/music_mode');
+                if (!res.ok) return;
+                renderMusicMode(await res.json());
+            } catch (err) {
+                console.error('Errore fetch music mode:', err);
+            }
+        }
+
+        async function setMusicMode(mode) {
+            logMsg(`Aggiorno rotazione musica: ${mode === 'ai_only' ? 'solo AI' : 'mix cartella + AI'}`);
+            try {
+                const res = await fetch('/api/music_mode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode })
+                });
+                const data = await res.json();
+                if (data.status === 'OK') {
+                    renderMusicMode(data);
+                    logMsg(`🎵 Rotazione musica attiva: ${data.label}`);
+                    if (data.warning) {
+                        logMsg(`⚠️ ${data.warning}`);
+                    }
+                } else {
+                    logMsg(`❌ Errore rotazione musica: ${data.message}`);
+                }
+            } catch (err) {
+                logMsg(`❌ Errore fetch rotazione musica: ${err}`);
+            }
+        }
+
         async function launchPodcast() {
             const topicInput = document.getElementById('podcast-topic');
             const topic = topicInput.value.trim();
@@ -599,10 +671,12 @@ HTML_TEMPLATE = """
 
         setInterval(fetchState, 3000);
         setInterval(fetchAuditLog, 5000);
+        setInterval(fetchMusicMode, 15000);
         
         // Initial fetch
         fetchState();
         fetchAuditLog();
+        fetchMusicMode();
 
     </script>
 </body>
@@ -729,6 +803,43 @@ def trigger_music_gen():
         return jsonify({"status": "OK", "message": "Generazione musicale avviata in background."})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+def music_mode_payload(status="OK", warning=None):
+    mode = read_music_mode()
+    counts = MusicLibrary().get_counts()
+    label = "Solo Musica AI" if mode == MUSIC_MODE_AI_ONLY else "Mix cartella music + Musica AI"
+    payload = {
+        "status": status,
+        "mode": mode,
+        "label": label,
+        "counts": counts,
+    }
+    if warning:
+        payload["warning"] = warning
+    return payload
+
+
+@app.route("/api/music_mode", methods=["GET", "POST"])
+def api_music_mode():
+    if request.method == "POST":
+        data = request.json or {}
+        mode = data.get("mode")
+        if mode not in {MUSIC_MODE_MIXED, MUSIC_MODE_AI_ONLY}:
+            return jsonify({
+                "status": "ERROR",
+                "message": "Modalità non valida. Usa 'mixed' oppure 'ai_only'.",
+            }), 400
+
+        write_music_mode(mode)
+        counts = MusicLibrary().get_counts()
+        warning = None
+        if mode == MUSIC_MODE_AI_ONLY and counts.get("ai", 0) == 0:
+            warning = "Modalità solo AI attiva, ma assets/ai_music non contiene brani riproducibili."
+        return jsonify(music_mode_payload(warning=warning))
+
+    return jsonify(music_mode_payload())
+
 
 @app.route("/api/audit-log", methods=["GET"])
 def api_audit_log():

@@ -15,7 +15,13 @@
         "ansa_economia",
         "ansa_cultura",
         "ansa_tecnologia",
-        "sky_tg24"
+        "sky_tg24",
+        "agi_cronaca",
+        "agi_politica",
+        "agi_estero",
+        "agi_economia",
+        "agi_innovazione",
+        "agi_cultura"
       ],
       "jingle": "assets/jingles/newsicatv_jingle.mp3",
       "jingle_label": "jingle NewsicaTV",
@@ -31,7 +37,8 @@
       "speed": 1.05,
       "prompt": "editorial/prompts/sport.md",
       "sources": [
-        "ansa_sport"
+        "ansa_sport",
+        "agi_sport"
       ],
       "jingle": "assets/jingles/jingle_sport.mp3",
       "jingle_label": "jingle sport",
@@ -111,7 +118,9 @@
       "prompt": "editorial/prompts/podcast.md",
       "sources": [
         "ansa_tecnologia",
-        "ansa_cultura"
+        "ansa_cultura",
+        "agi_innovazione",
+        "agi_cultura"
       ],
       "jingle": "assets/jingles/jingle_podcast.mp3",
       "jingle_label": "jingle podcast",
@@ -128,7 +137,10 @@
       "prompt": "editorial/prompts/flash_60s.md",
       "sources": [
         "ansa_ultimora",
-        "sky_tg24"
+        "sky_tg24",
+        "agi_cronaca",
+        "agi_politica",
+        "agi_estero"
       ],
       "jingle": "assets/jingles/jingle_flash.mp3",
       "jingle_label": "jingle flash news",

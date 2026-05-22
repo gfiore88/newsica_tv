@@ -11,7 +11,7 @@ from newsica.agents.content_strategist import ContentStrategistAgent
 from newsica.agents.ai_integrator import AIIntegratorAgent
 from newsica.agents.system_admin import SystemAdminAgent
 
-def get_future_slots(hours_ahead=2):
+def get_future_slots(hours_ahead=2, current_grace_minutes=30):
     # Leggiamo lo schedule
     from schedule_generator import get_current_schedule
     schedule_data = get_current_schedule()
@@ -24,9 +24,11 @@ def get_future_slots(hours_ahead=2):
             hour, minute = map(int, slot_time.split(":"))
             slot_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             
-            # Se lo slot è passato oggi, potremmo essere a fine giornata
             if slot_dt < now:
-                if now.hour >= 22 and hour <= 2:
+                elapsed = (now - slot_dt).total_seconds()
+                if elapsed <= current_grace_minutes * 60:
+                    pass
+                elif now.hour >= 22 and hour <= 2:
                     slot_dt += datetime.timedelta(days=1)
                 else:
                     continue

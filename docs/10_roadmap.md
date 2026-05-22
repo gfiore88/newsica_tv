@@ -21,6 +21,8 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] **Protocollo Debug Live dai Log (ADR 0025)**: Ogni incidente su diretta, audio, palinsesto, overlay, RTMP o processi deve partire da `manage.sh status`, `director.log`, `stream.log`, `ffmpeg_progress.txt`, stato runtime e verifica runner prima di qualunque diagnosi o fix.
 - [x] **Live Health End-to-End**: Aggiunto `./manage.sh live-health` per verificare in un solo comando processi, log, progress FFmpeg, runner locale, connessione RTMP e player pubblico YouTube.
 - [x] **Invalidazione Audio Temporaneo (ADR 0026)**: Al cambio fascia il Director elimina `audio.wav`, `audio_part*.wav` e `is_multipart.txt` per impedire che uno slot riusi audio stale di podcast/news/meteo precedenti.
+- [x] **Recupero Preparazioni Stale (ADR 0031)**: Le cartelle `preparing` vuote o troppo vecchie non bloccano piu' la pre-produzione; gli slot correnti possono essere rigenerati entro una finestra di recupero.
+- [x] **Format Meteo Breve (ADR 0032)**: Il meteo resta un bollettino single-part da circa 3-5 minuti, seguito da rotazione musicale fino al programma successivo.
 - [x] **Fix Race Condition Startup (ADR 0023)**: Risolto deadlock tra `generator_worker` e FFmpeg: introdotto `fifo_connected_event` per bloccare il precaricamento audio finché FFmpeg non si connette; ridotto `audio_queue maxsize` da 5000 a 200 chunk (~17s di buffer sicuro).
 - [x] **Overlay Grafico Locale (ADR 0028)**: Spostata la HUD ON AIR/orologio/prossimi eventi da filtri FFmpeg monolitici a `overlay_agent.py`, che renderizza frame RGBA via Pillow su FIFO rawvideo locale.
 - [x] **Coerenza Titolo-Contenuto (ADR 0029)**: Il titolo dello slot diventa tema obbligatorio nel prompt e gli asset pronti vengono validati tramite manifest rubrica/titolo prima della messa in onda.
@@ -28,7 +30,10 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] Espressivita' speaker: prompt piu' parlati, punteggiatura naturale e velocita' TTS per personaggio.
 - [x] Agente Wellness: rubrica fitness, benessere e cura della persona con fonti dedicate e spunti sempre vari.
 - [x] Ingestion Cache & Decoupling: introdotta cache da 15 minuti su raw_news.json e disaccoppiate le responsabilità tra scraper e llm_processor.
+- [x] **Diversità Fonti News (ADR 0030)**: Aggiunti feed AGI per cronaca, politica, esteri, economia, innovazione, cultura e sport; aumentata la rotazione news e aggiornati i source dei personaggi.
 - [x] **Stabilizzazione Chime Orario**: introdotto arrotondamento all'ora più vicina per evitare collisioni sui confini temporali di inizio fascia palinsesto e risolti import linter.
+- [x] **Segnale Orario Non Interrompente (ADR 0033)**: il chime viene schedulato una volta l'ora a minuto casuale e può andare solo come overlay sopra musica, mai sopra speaker o contenuti parlati.
+- [x] **Modalità Rotazione Musica da Dashboard (ADR 0034)**: flag UI persistente per scegliere tra solo `assets/ai_music/` oppure mix `assets/music/` + `assets/ai_music/`.
 - [ ] **Lancio Ufficiale**: Diretta pubblica sul canale NewsicaTV.
 
 

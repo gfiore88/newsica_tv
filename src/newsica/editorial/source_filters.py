@@ -1,4 +1,5 @@
 from newsica.domain.characters import CharacterConfig
+from newsica.sources.registry import NEWS_SOURCES
 
 
 def filter_items_for_character(items: list[dict], character: CharacterConfig) -> list[dict]:
@@ -9,5 +10,4 @@ def filter_items_for_character(items: list[dict], character: CharacterConfig) ->
 
 
 def fallback_general_news(items: list[dict]) -> list[dict]:
-    return [item for item in items if item.get("source") == "ansa_ultimora"]
-
+    return [item for item in items if item.get("source") in NEWS_SOURCES]

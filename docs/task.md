@@ -35,3 +35,8 @@
 | 32 | /orchestrator | ✅ Done | Refactor HUD locale: `overlay_agent.py` renderizza ON AIR/orologio/prossimi eventi su FIFO rawvideo per FFmpeg |
 | 33 | /orchestrator | ✅ Done | Coerenza editoriale titolo-contenuto: tema obbligatorio nei prompt e manifest di validazione asset |
 | 34 | /orchestrator | ⏳ Backlog | Studio API gratuita per ingestion musica esterna con licenze verificate e manifest locale |
+| 35 | /content_strategist | ✅ Done | Espanso pool fonti news con feed AGI e rotazione più ampia per cronaca, politica, esteri, economia e cultura |
+| 36 | /python_engineer | ✅ Done | Fix preparazioni stale: `preparing` vuote/vecchie non bloccano podcast e recupero slot corrente |
+| 37 | /orchestrator | ✅ Done | Format meteo breve: bollettino 3-5 minuti e poi rotazione musicale fino allo slot successivo |
+| 38 | /python_engineer | ✅ Done | Segnale orario random una volta l'ora, mixato solo sopra musica e mai sopra speaker |
+| 39 | /python_engineer | ✅ Done | Flag dashboard per scegliere rotazione musica `solo AI` o `mix cartella music + AI` |

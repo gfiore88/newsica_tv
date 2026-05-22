@@ -31,9 +31,42 @@ SCHEDULE_TYPE_LABELS = {
     "music_only": "Musica",
 }
 
+SOURCE_TICKER_LABELS = {
+    "ansa_ultimora": "ULTIMORA",
+    "ansa_mondo": "MONDO",
+    "ansa_cronaca": "CRONACA",
+    "ansa_politica": "POLITICA",
+    "ansa_economia": "ECONOMIA",
+    "ansa_cultura": "CULTURA",
+    "ansa_tecnologia": "TECNOLOGIA",
+    "ansa_sport": "SPORT",
+    "ansa_salute_benessere": "SALUTE",
+    "ansa_lifestyle": "LIFESTYLE",
+    "sky_tg24": "NEWS",
+    "agi_cronaca": "CRONACA",
+    "agi_politica": "POLITICA",
+    "agi_estero": "ESTERI",
+    "agi_economia": "ECONOMIA",
+    "agi_innovazione": "TECNOLOGIA",
+    "agi_cultura": "CULTURA",
+    "agi_sport": "SPORT",
+    "meteo": "METEO",
+}
+
 
 def clean_text(text):
     return " ".join((text or "").replace("%", " percento").split())
+
+
+def ticker_label_for_source(source):
+    return SOURCE_TICKER_LABELS.get(clean_text(source).lower(), "NEWS")
+
+
+def format_ticker_news_item(news):
+    title = clean_text(news.get("title", ""))
+    if not title:
+        return ""
+    return f"{ticker_label_for_source(news.get('source', ''))}: {title}"
 
 
 def clean_schedule_title(block, max_chars=42):
@@ -131,11 +164,10 @@ def update_ticker():
                         items = []
 
                         for news in stable_news:
-                            source = clean_text(news.get("source", "NEWS")).upper()
-                            title = clean_text(news.get("title", ""))
+                            item = format_ticker_news_item(news)
 
-                            if title:
-                                items.append(f"[{source}] {title}")
+                            if item:
+                                items.append(item)
 
                         flash_text = "  •  ".join(items)
                 except Exception as e:
