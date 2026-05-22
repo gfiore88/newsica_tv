@@ -1,0 +1,9 @@
+{
+  "title": "Newsica AI Track",
+  "prompt": "Create a modern 208-second instrumental song for a web radio / web TV broadcast.\n\nMood: clean, energetic, optimistic, radio-friendly.\nTempo: 118 BPM.\nStyle: modern pop with polished synths, punchy drums, deep bass.\nProduction: streaming-ready mix, clean low end, wide stereo image.\nInstruments: electronic drums, synth bass, bright pluck synths, warm pads.\n\nStructure:\n0:00 - 0:16 short intro.\n0:16 - 0:58 main groove with drums, bass.\n0:58 - 1:19 build with rising energy.\n1:19 - 2:00 main hook with full beat.\n2:00 - 2:42 soft bridge.\n2:42 - 3:20 final hook.\n3:20 - 3:28 outro fading out smoothly.\n\nVocals:\nNo vocals. Instrumental only.\n\nLyrics:\nNo lyrics.\n\nEnding:\nThe final 8 seconds must fade out smoothly and naturally. No abrupt ending.\n\nNegative prompt:\nlow quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence",
+  "duration": 208,
+  "mode": "vocal_chops",
+  "theme": "latin/reggaeton/dembow",
+  "generated_at": "2026-05-22T17:06:21",
+  "audio_file": "ai_track_20260522_170312.wav"
+}

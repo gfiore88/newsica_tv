@@ -61,8 +61,8 @@ def build_fallback_script(character_id, filtered_news, title=None):
     elif character_id == "podcast":
         news_items = filtered_news[:3]
         lines = [
-            "[SPEAKER: Giulia] Benvenuti a Newsica Podcast. Facciamo il punto con Marco su alcuni temi emersi nelle ultime ore.",
-            "[SPEAKER: Marco] Ciao Giulia. È un buon momento per rallentare il ritmo e capire che cosa c'è dietro i titoli, senza rincorrere solo l'urgenza.",
+            "[SPEAKER: Giulia] Benvenuti a Newsica Podcast. Oggi ci prendiamo qualche minuto in più per capire meglio alcune storie emerse nelle ultime ore, andando un po' oltre il titolo secco.",
+            "[SPEAKER: Marco] Ciao Giulia. Sì, perché spesso la differenza sta proprio lì: non solo sapere che cosa è successo, ma capire il contesto, le conseguenze e il motivo per cui una notizia continua a far discutere.",
         ]
         for index, item in enumerate(news_items):
             title = clean_text(item.get("title", ""))
@@ -70,10 +70,12 @@ def build_fallback_script(character_id, filtered_news, title=None):
             if not title and not summary:
                 continue
             if index % 2 == 0:
-                lines.append(f"[SPEAKER: Giulia] Partiamo da questo: {title}. {summary}")
+                lines.append(f"[SPEAKER: Giulia] Partiamo da questo tema: {title}. {summary} È una notizia che merita attenzione non solo per il fatto in sé, ma anche per quello che racconta del clima più generale in cui si sta muovendo questa vicenda.")
+                lines.append("[SPEAKER: Marco] Ed è proprio qui che vale la pena fermarsi un momento. Quando una storia entra così nel dibattito pubblico, spesso significa che tocca abitudini, equilibri o aspettative che riguardano molte più persone di quanto sembri a un primo ascolto.")
             else:
-                lines.append(f"[SPEAKER: Marco] Il punto interessante è proprio qui: {title}. {summary}")
-        lines.append("[SPEAKER: Giulia] Per questa conversazione è tutto. Restate con noi, la serata di NewsicaTV continua.")
+                lines.append(f"[SPEAKER: Marco] Il punto interessante è proprio qui: {title}. {summary} Dietro questa notizia c'è anche una chiave di lettura più ampia, che aiuta a capire perché se ne stia parlando così tanto e che cosa potrebbe cambiare da qui in avanti.")
+                lines.append("[SPEAKER: Giulia] E infatti, quando guardiamo questi passaggi con un po' più di calma, emerge meglio il quadro complessivo. Non è solo una sequenza di aggiornamenti, ma un racconto che si costruisce pezzo dopo pezzo e che va seguito con continuità.")
+        lines.append("[SPEAKER: Giulia] Per questa conversazione è tutto. Abbiamo provato a mettere in fila i fatti con un po' più di respiro, senza fermarci alla superficie. Restate con noi, la programmazione di NewsicaTV continua.")
         return "\n".join(lines)
     else:
         opening = "Benritrovati in diretta su NewsicaTV. Ecco gli aggiornamenti di oggi."

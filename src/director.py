@@ -1,7 +1,13 @@
 import os
-import time
-import subprocess
 import sys
+from dotenv import load_dotenv
+
+# Carica le variabili dal file .env prima di qualsiasi altro modulo
+_base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_base_dir, ".env"))
+
+import subprocess
+import time
 import threading
 import queue
 import json

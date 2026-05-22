@@ -98,7 +98,7 @@ def generate_script():
         "keep_alive": "30m",
         "options": {
             "temperature": 0.4,
-            "num_predict": 700,
+            "num_predict": 1000,
         },
     }
 

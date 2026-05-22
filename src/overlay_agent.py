@@ -6,6 +6,10 @@ from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+from dotenv import load_dotenv
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 
@@ -15,11 +19,28 @@ NEXT_PROGRAM_FILE = os.path.join(TMP_DIR, "next_program.txt")
 SCHEDULE_FILE = os.path.join(TMP_DIR, "schedule_next.txt")
 STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 
-WIDTH = 1280
-HEIGHT = 720
-FPS = 30
-FRAME_INTERVAL = 1.0 / FPS
+WIDTH = int(os.getenv("STREAM_WIDTH", "1280"))
+HEIGHT = int(os.getenv("STREAM_HEIGHT", "720"))
+STREAM_FPS = int(os.getenv("STREAM_FPS", "25"))
+OVERLAY_FPS = int(os.getenv("OVERLAY_FPS", "25"))
+FRAME_INTERVAL = 1.0 / (OVERLAY_FPS + 5)
 TICKER_FILE = os.path.join(TMP_DIR, "ticker.txt")
+
+
+def env_flag(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+SHOW_MUSIC_PILL = env_flag("NEWSICA_SHOW_MUSIC_PILL", default=False)
+SHOW_ON_AIR_PANEL = env_flag("NEWSICA_SHOW_ON_AIR_PANEL", default=False)
+SHOW_CLOCK_PANEL = env_flag("NEWSICA_SHOW_CLOCK_PANEL", default=False)
+SHOW_SCHEDULE_TIMELINE = env_flag("NEWSICA_SHOW_SCHEDULE_TIMELINE", default=False)
+SHOW_TICKER = env_flag("NEWSICA_SHOW_TICKER", default=False)
+ENABLE_COLOR_TICKER = env_flag("NEWSICA_ENABLE_COLOR_TICKER", default=False)
+TICKER_ANIMATION_FPS = int(os.getenv("NEWSICA_TICKER_ANIMATION_FPS", "10"))
 
 COLORS_BY_BLOCK = {
     "breaking_news": (239, 68, 68, 230),
@@ -129,11 +150,24 @@ FONT_TIMELINE_TITLE_BOLD = font(15, bold=True)
 FONT_TICKER = font(20)
 FONT_TICKER_BOLD = font(20, bold=True)
 
+MEASURE_DRAW = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+
+ON_AIR_BOX = (30, 30, 1010, 132)
+CLOCK_BOX = (1080, 30, 1250, 132)
+MUSIC_BOX = (995, 145, 1250, 187)
+TIMELINE_BOX = (30, 535, 1250, 642)
+TICKER_BOX = (0, 676, WIDTH, HEIGHT)
+
 # Ticker caching globals
 _last_ticker_content = None
 _last_accent_color = None
 _cached_layout = None
 _cached_total_width = 0
+_cached_static_key = None
+_cached_static_frame = None
+_cached_clock_key = None
+_cached_clock_panel = None
+_cached_ticker_strip = None
 
 TAG_COLORS = {
     "ULTIMORA": (239, 68, 68, 255),          # Rosso brillante
@@ -404,6 +438,7 @@ def draw_schedule_timeline(draw, xy, items, accent):
 def get_ticker_layout(draw, ticker_text, accent):
     blocks = ticker_text.split("•")
     layout_segments = []
+    highlight_font = FONT_TICKER_BOLD if ENABLE_COLOR_TICKER else FONT_TICKER
     
     for b_idx, block in enumerate(blocks):
         block_str = block.strip()
@@ -413,7 +448,7 @@ def get_ticker_layout(draw, ticker_text, accent):
         if "In onda:" in block_str or "Tra poco:" in block_str:
             layout_segments.append({
                 "text": block_str,
-                "font": FONT_TICKER_BOLD,
+                "font": highlight_font,
                 "color": (253, 224, 71, 255) # soft gold/yellow
             })
         else:
@@ -430,16 +465,16 @@ def get_ticker_layout(draw, ticker_text, accent):
                     title = " | ".join(clean_subparts[1:])
                     
                     tag_upper = tag.upper().strip()
-                    tag_color = TAG_COLORS.get(tag_upper, accent)
+                    tag_color = TAG_COLORS.get(tag_upper, accent) if ENABLE_COLOR_TICKER else (255, 255, 255, 255)
                     
                     layout_segments.append({
                         "text": "● ",
-                        "font": FONT_TICKER_BOLD,
+                        "font": highlight_font,
                         "color": tag_color
                     })
                     layout_segments.append({
                         "text": f"{tag} ",
-                        "font": FONT_TICKER_BOLD,
+                        "font": highlight_font,
                         "color": tag_color
                     })
                     layout_segments.append({
@@ -491,14 +526,33 @@ def get_ticker_layout(draw, ticker_text, accent):
     return measured_segments, total_width
 
 
-def draw_scrolling_ticker(draw, accent):
-    global _last_ticker_content, _last_accent_color, _cached_layout, _cached_total_width
-    
-    # 1. Draw the background slate bar
-    draw.rectangle((0, 676, 1280, 720), fill=(15, 23, 42, 184))
-    
-    # 2. Read the ticker content
-    ticker_text = read_text(TICKER_FILE)
+def build_ticker_strip(layout_segments, total_width):
+    strip_height = TICKER_BOX[3] - TICKER_BOX[1]
+    strip = Image.new("RGBA", (max(1, total_width), strip_height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(strip)
+    x = 0
+    y = (strip_height - 24) // 2
+
+    for seg in layout_segments:
+        draw.text((x, y), seg["text"], font=seg["font"], fill=seg["color"])
+        x += seg["width"]
+
+    return strip
+
+
+def composite_ticker_slice(image, ticker_strip, dest_x, dest_y):
+    src_x1 = max(0, -dest_x)
+    src_x2 = min(ticker_strip.width, WIDTH - dest_x)
+    if src_x2 <= src_x1:
+        return
+
+    slice_image = ticker_strip.crop((src_x1, 0, src_x2, ticker_strip.height))
+    image.alpha_composite(slice_image, dest=(max(0, dest_x), dest_y))
+
+
+def draw_scrolling_ticker(image, accent, ticker_text):
+    global _last_ticker_content, _last_accent_color, _cached_layout, _cached_total_width, _cached_ticker_strip
+
     if not ticker_text:
         return
         
@@ -507,37 +561,137 @@ def draw_scrolling_ticker(draw, accent):
     
     # 3. Check cache invalidation
     if (ticker_text != _last_ticker_content or 
-        accent != _last_accent_color or 
-        _cached_layout is None):
+         accent != _last_accent_color or 
+         getattr(draw_scrolling_ticker, "_last_color_mode", None) != ENABLE_COLOR_TICKER or
+         _cached_layout is None):
         _last_ticker_content = ticker_text
         _last_accent_color = accent
-        _cached_layout, _cached_total_width = get_ticker_layout(draw, ticker_text, accent_text_color)
+        draw_scrolling_ticker._last_color_mode = ENABLE_COLOR_TICKER
+        _cached_layout, _cached_total_width = get_ticker_layout(MEASURE_DRAW, ticker_text, accent_text_color)
+        _cached_ticker_strip = build_ticker_strip(_cached_layout, _cached_total_width)
         
-    if not _cached_layout or _cached_total_width <= 0:
+    if not _cached_layout or _cached_total_width <= 0 or _cached_ticker_strip is None:
         return
         
     # 4. Compute scroll offset
     speed = 160
-    total_cycle = _cached_total_width + 1280
-    scroll_x = int(time.time() * speed) % total_cycle
+    total_cycle = _cached_total_width + WIDTH
+    scroll_x = int(time.monotonic() * speed) % total_cycle
     
     # Start coordinate (drawing from right to left)
-    start_x = 1280 - scroll_x
-    
-    # 5. Draw segments
-    x = start_x
-    y = 676 + (44 - 24) // 2  # Vertically centered
-    
-    for seg in _cached_layout:
-        w = seg["width"]
-        if x + w >= 0 and x < 1280:
-            draw.text((x, y), seg["text"], font=seg["font"], fill=seg["color"])
-        x += w
+    start_x = WIDTH - scroll_x
+    y = TICKER_BOX[1]
+
+    composite_ticker_slice(image, _cached_ticker_strip, start_x, y)
+    wrapped_x = start_x + total_cycle
+    if wrapped_x < WIDTH:
+        composite_ticker_slice(image, _cached_ticker_strip, wrapped_x, y)
+
+
+def build_static_overlay_frame(accent, current_program, music_visible, current_music_title, schedule_items):
+    image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+
+    if SHOW_ON_AIR_PANEL:
+        draw_on_air_panel(draw, ON_AIR_BOX, current_program, accent)
+    if SHOW_CLOCK_PANEL:
+        draw_panel(draw, CLOCK_BOX, accent=(255, 255, 255, 155))
+
+    if music_visible:
+        draw_music_pill(draw, MUSIC_BOX, current_music_title, accent)
+
+    if SHOW_SCHEDULE_TIMELINE and schedule_items:
+        draw_schedule_timeline(draw, TIMELINE_BOX, schedule_items, accent)
+
+    if SHOW_TICKER:
+        draw.rectangle(TICKER_BOX, fill=(15, 23, 42, 184))
+    return image
+
+
+def get_static_overlay_frame(accent, current_program, music_visible, current_music_title, schedule_items):
+    global _cached_static_key, _cached_static_frame
+
+    schedule_key = tuple(
+        (item.get("time", "--:--"), item.get("title", ""))
+        for item in schedule_items
+    )
+    static_key = (
+        accent,
+        current_program,
+        music_visible,
+        current_music_title if music_visible else "",
+        schedule_key,
+    )
+
+    if _cached_static_key != static_key or _cached_static_frame is None:
+        _cached_static_key = static_key
+        _cached_static_frame = build_static_overlay_frame(
+            accent,
+            current_program,
+            music_visible,
+            current_music_title,
+            schedule_items,
+        )
+
+    return _cached_static_frame.copy()
+
+
+def get_clock_panel(now):
+    global _cached_clock_key, _cached_clock_panel
+
+    if not SHOW_CLOCK_PANEL:
+        return None
+
+    clock_key = now.strftime("%H:%M:%S")
+    if _cached_clock_key != clock_key or _cached_clock_panel is None:
+        x1, y1, x2, y2 = CLOCK_BOX
+        panel = Image.new("RGBA", (x2 - x1, y2 - y1), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(panel)
+
+        draw.text(
+            (20, 12),
+            now.strftime("%H:%M"),
+            font=FONT_CLOCK,
+            fill=(255, 255, 255, 255),
+        )
+        draw.text(
+            (20, 54),
+            now.strftime("%d/%m/%Y"),
+            font=FONT_LABEL,
+            fill=(203, 213, 225, 255),
+        )
+
+        _cached_clock_key = clock_key
+        _cached_clock_panel = panel
+
+    return _cached_clock_panel
+
+
+_last_disk_read_time = 0.0
+_cached_state = {}
+_cached_program = "NEWSICA TV"
+_cached_schedule_items = []
+_cached_ticker_text = ""
 
 
 def render_frame():
+    global _last_disk_read_time, _cached_state, _cached_program, _cached_schedule_items, _cached_ticker_text
+    
     now = datetime.now()
-    state = read_state()
+    now_mono = time.monotonic()
+    
+    # Leggiamo dal disco al massimo una volta ogni 1.0 secondo
+    if now_mono - _last_disk_read_time >= 1.0:
+        _last_disk_read_time = now_mono
+        _cached_state = read_state()
+        _cached_program = read_text(PROGRAM_FILE, "NEWSICA TV")
+        _cached_schedule_items = read_schedule_items()
+        _cached_ticker_text = read_text(TICKER_FILE)
+        
+    state = _cached_state
+    current_program = _cached_program
+    schedule_items = _cached_schedule_items
+    ticker_text = _cached_ticker_text
 
     block_type = state.get("current_block") or state.get("type") or ""
 
@@ -546,58 +700,28 @@ def render_frame():
 
     accent = COLORS_BY_BLOCK.get(block_type, (56, 189, 248, 220))
 
-    current_program = read_text(PROGRAM_FILE, "NEWSICA TV")
     current_music_title = " ".join((state.get("current_music_title") or "").split())
-    schedule_items = read_schedule_items()
-
-    image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-
-    draw_on_air_panel(
-        draw,
-        (30, 30, 1010, 132),
-        current_program,
-        accent,
-    )
-
-    draw_panel(draw, (1080, 30, 1250, 132), accent=(255, 255, 255, 155))
-
-    draw.text(
-        (1100, 42),
-        now.strftime("%H:%M"),
-        font=FONT_CLOCK,
-        fill=(255, 255, 255, 255),
-    )
-
-    draw.text(
-        (1100, 84),
-        now.strftime("%d/%m/%Y"),
-        font=FONT_LABEL,
-        fill=(203, 213, 225, 255),
-    )
 
     current_segment = state.get("current_segment", "") or ""
-    if current_music_title and (
+    music_visible = SHOW_MUSIC_PILL and current_music_title and (
         block_type == "music_only"
         or current_segment == "music_rotation_until_deadline"
         or current_segment.startswith("music_")
-    ):
-        draw_music_pill(
-            draw,
-            (995, 145, 1250, 187),
-            current_music_title,
-            accent,
-        )
+    )
 
-    if schedule_items:
-        draw_schedule_timeline(
-            draw,
-            (30, 535, 1250, 642),
-            schedule_items,
-            accent,
-        )
+    image = get_static_overlay_frame(
+        accent,
+        current_program,
+        music_visible,
+        current_music_title,
+        schedule_items,
+    )
+    clock_panel = get_clock_panel(now)
+    if clock_panel is not None:
+        image.alpha_composite(clock_panel, dest=(CLOCK_BOX[0], CLOCK_BOX[1]))
 
-    draw_scrolling_ticker(draw, accent)
+    if SHOW_TICKER:
+        draw_scrolling_ticker(image, accent, ticker_text)
 
     return image
 
@@ -646,5 +770,5 @@ if __name__ == "__main__":
     if not lock:
         raise SystemExit(1)
 
-    print("Overlay Agent avviato. Scrittura frame RGBA su tmp/overlay_pipe.")
+    print(f"Overlay Agent avviato. Scrittura frame RGBA su tmp/overlay_pipe a {OVERLAY_FPS}fps (stream {STREAM_FPS}fps).")
     write_frames()

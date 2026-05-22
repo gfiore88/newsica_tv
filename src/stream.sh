@@ -74,6 +74,10 @@ ACCENT_BREAKING_FILE="tmp/accent_breaking.txt"
 CLOCK_FILE="tmp/clock.txt"
 DATE_FILE="tmp/date.txt"
 STREAM_TEST_CARD="${STREAM_TEST_CARD:-0}"
+STREAM_FPS="${STREAM_FPS:-25}"
+OVERLAY_FPS="${OVERLAY_FPS:-25}"
+STREAM_WIDTH="${STREAM_WIDTH:-1280}"
+STREAM_HEIGHT="${STREAM_HEIGHT:-720}"
 
 if [ ! -f "$PROGRAM_FILE" ]; then
   echo "NEWSICA TV" > "$PROGRAM_FILE"
@@ -110,18 +114,62 @@ if [ ! -f "$FFMPEG_CMD" ]; then
   FFMPEG_CMD="ffmpeg"
 fi
 
+STREAM_VIDEO_ENCODER="${STREAM_VIDEO_ENCODER:-auto}"
+if [ "$STREAM_VIDEO_ENCODER" = "auto" ]; then
+  if "$FFMPEG_CMD" -hide_banner -encoders 2>/dev/null | grep -q "h264_videotoolbox"; then
+    STREAM_VIDEO_ENCODER="h264_videotoolbox"
+  else
+    STREAM_VIDEO_ENCODER="libx264"
+  fi
+fi
+
 if ! "$FFMPEG_CMD" -hide_banner -filters 2>/dev/null | grep -q " drawtext "; then
   echo "❌ ERRORE: FFmpeg non include il filtro drawtext. Installa/usa ffmpeg-full per ticker e overlay testuali."
   exit 1
 fi
 
 if [ "$STREAM_TEST_CARD" = "1" ]; then
-  VIDEO_INPUT_ARGS=(-re -f lavfi -i "testsrc2=size=1280x720:rate=30")
+  VIDEO_INPUT_ARGS=(-re -f lavfi -i "testsrc2=size=${STREAM_WIDTH}x${STREAM_HEIGHT}:rate=${STREAM_FPS}")
   FILTER='[0:v]setsar=1,format=yuv420p[bg]; [bg]drawbox=x=0:y=0:w=iw:h=90:color=black@0.75:t=fill[top]; [top]drawtext=text='"'"'NEWSICA TV TEST - SEGNALE VIDEO ATTIVO'"'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=42:x=30:y=25[outv]'
 else
-  VIDEO_INPUT_ARGS=(-re -framerate 30 -loop 1 -i "$LOGO_FILE")
+  # Carichiamo il logo di sfondo a 1 FPS anziché a 25 FPS per risparmiare calcoli di scale/pad pesanti.
+  VIDEO_INPUT_ARGS=(-re -framerate 1 -loop 1 -i "$LOGO_FILE")
 
-  FILTER='[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=30[bg]; [1:v]format=rgba,fps=30[overlay]; [bg][overlay]overlay=0:0:format=auto[outv]'
+  # Rimuoviamo format=rgba,fps=25 dall'overlay in ingresso: la FIFO e' gia' in RGBA,
+  # e il filtro overlay ripete l'ultimo frame automaticamente (repeatlast=1).
+  FILTER="[0:v]scale=${STREAM_WIDTH}:${STREAM_HEIGHT}:force_original_aspect_ratio=decrease,pad=${STREAM_WIDTH}:${STREAM_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=${STREAM_FPS}[bg]; [bg][1:v]overlay=0:0:format=auto[outv]"
+fi
+
+if [ "$STREAM_VIDEO_ENCODER" = "h264_videotoolbox" ]; then
+  VIDEO_CODEC_ARGS=(
+    -c:v h264_videotoolbox
+    -realtime 1
+    -allow_sw 1
+    -constant_bit_rate true
+    -profile:v high
+    -b:v 3000k
+    -maxrate:v 3000k
+    -bufsize:v 6000k
+    -pix_fmt yuv420p
+    -r "$STREAM_FPS"
+    -g $((STREAM_FPS * 2))
+  )
+else
+  VIDEO_CODEC_ARGS=(
+    -c:v libx264
+    -preset veryfast
+    -tune stillimage
+    -b:v 3000k
+    -minrate 3000k
+    -maxrate 3000k
+    -bufsize 6000k
+    -x264-params nal-hrd=cbr:force-cfr=1:filler=1
+    -pix_fmt yuv420p
+    -r "$STREAM_FPS"
+    -g $((STREAM_FPS * 2))
+    -keyint_min $((STREAM_FPS * 2))
+    -sc_threshold 0
+  )
 fi
 
 FFMPEG_PID=""
@@ -170,20 +218,18 @@ watch_ffmpeg_progress() {
 
 while true; do
   echo "🚀 Avvio istanza FFmpeg..."
+  echo "🎥 Encoder video selezionato: $STREAM_VIDEO_ENCODER @ ${STREAM_WIDTH}x${STREAM_HEIGHT} stream=${STREAM_FPS}fps overlay=${OVERLAY_FPS}fps"
   : > "$PROGRESS_FILE"
   $FFMPEG_CMD \
     -hide_banner -stats_period 5 \
     -progress "$PROGRESS_FILE" \
     -thread_queue_size 4096 "${VIDEO_INPUT_ARGS[@]}" \
-    -thread_queue_size 128 -f rawvideo -pix_fmt rgba -s 1280x720 -r 30 -i "$OVERLAY_PIPE" \
+    -thread_queue_size 128 -f rawvideo -pix_fmt rgba -s "${STREAM_WIDTH}x${STREAM_HEIGHT}" -r "$OVERLAY_FPS" -i "$OVERLAY_PIPE" \
     -thread_queue_size 4096 -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
     -filter_complex "$FILTER" \
     -map "[outv]" -map 2:a \
-    -c:v libx264 -preset veryfast -tune stillimage \
-    -b:v 3000k -minrate 3000k -maxrate 3000k -bufsize 6000k \
-    -x264-params "nal-hrd=cbr:force-cfr=1:filler=1" \
-    -pix_fmt yuv420p -r 30 -g 60 -keyint_min 60 -sc_threshold 0 \
-    -c:a aac -b:a 128k -ar 44100 -ac 2 \
+    "${VIDEO_CODEC_ARGS[@]}" \
+    -c:a aac -b:a 128k -ar 48000 -ac 2 \
     -f flv "$YOUTUBE_STREAM_URL/$YOUTUBE_STREAM_KEY" &
 
   FFMPEG_PID=$!

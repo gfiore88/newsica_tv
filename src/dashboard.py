@@ -1,5 +1,11 @@
 from flask import Flask, jsonify, render_template_string, request
 import os
+from dotenv import load_dotenv
+
+# Carica le variabili dal file .env prima di qualsiasi altro modulo
+_base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_base_dir, ".env"))
+
 import json
 import signal
 import subprocess
@@ -882,7 +888,7 @@ def trigger_podcast():
         system_prompt = "Sei un duo di conduttori radiofonici e podcaster professionisti di NewsicaTV. Genera un copione per una rubrica stile podcast in formato dialogo a due voci Giulia e Marco."
 
     # 2. Prepara il prompt per Ollama
-    user_prompt = f"Scrivi un copione per il podcast 'Newsica Podcast' sulla seguente tematica descritta dall'utente:\n\n\"{topic}\"\n\nRispetta rigorosamente eventuali indicazioni di durata o brevità fornite dall'utente nella tematica. Se non specificato, sviluppa un dialogo naturale e ricco con un numero di parole adeguato alla durata del podcast così come richiesto. Se la durata non è definita dall'utente, sviluppa un dialogo di circa 250-350 parole. Il dialogo deve essere diviso a turni di parola tra Giulia e Marco usando esattamente i tag [SPEAKER: Giulia] e [SPEAKER: Marco] all'inizio di ogni battuta. IMPORTANTE: I dialoghi devono essere in lingua italiana, con accenti grafici corretti per la sintesi vocale (`è`, `perché`, `cioè`, `può`, `più`, `né`, `sì`, `dà`, `lì`, `là`). Per temi tecnologici preferisci `intelligenza artificiale` o `IA` a `AI`, ed espandi le sigle tecniche alla prima occorrenza."
+    user_prompt = f"Scrivi un copione per il podcast 'Newsica Podcast' sulla seguente tematica descritta dall'utente:\n\n\"{topic}\"\n\nRispetta rigorosamente eventuali indicazioni di durata o brevità fornite dall'utente nella tematica. Se non specificato, sviluppa un dialogo naturale, ricco e ben argomentato con un numero di parole adeguato alla durata del podcast così come richiesto. Se la durata non è definita dall'utente, sviluppa un dialogo di circa 450-650 parole, distribuito in un vero scambio tra i due speaker e non in poche battute sbrigative. Il dialogo deve essere diviso a turni di parola tra Giulia e Marco usando esattamente i tag [SPEAKER: Giulia] e [SPEAKER: Marco] all'inizio di ogni battuta. IMPORTANTE: I dialoghi devono essere in lingua italiana, con accenti grafici corretti per la sintesi vocale (`è`, `perché`, `cioè`, `può`, `più`, `né`, `sì`, `dà`, `lì`, `là`). Per temi tecnologici preferisci `intelligenza artificiale` o `IA` a `AI`, ed espandi le sigle tecniche alla prima occorrenza."
 
     # 3. Interroga Ollama locale
     import requests
@@ -897,7 +903,7 @@ def trigger_podcast():
         "keep_alive": "30m",
         "options": {
             "temperature": 0.5,
-            "num_predict": 600,
+            "num_predict": 900,
         },
     }
 

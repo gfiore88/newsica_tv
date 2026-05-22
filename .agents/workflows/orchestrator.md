@@ -123,6 +123,19 @@ La fascia meteo può durare fino a circa 30 minuti nel palinsesto, ma dopo il bo
 
 Il DirectorAgent deve trattare il meteo come `single_part`: jingle di ingresso, bollettino, eventuale stacco di uscita, poi musica fino alla deadline dello slot.
 
+## Regola Interventi Speaker Più Sostanziosi
+
+Le rubriche parlate `news`, `podcast`, `sport` e `wellness` non devono sembrare flash frettolosi o chiusure premature. Se una fascia ha spazio editoriale sufficiente, gli speaker devono sviluppare meglio il tema, aggiungere contesto, collegare le notizie e accompagnare l'ascoltatore con maggiore respiro narrativo.
+
+Regole operative:
+- evitare copioni compressi in poche righe quando la rubrica è strutturata in più parti;
+- preferire interventi di densità media, ben argomentati, invece di battute minime o riassunti telegrafici;
+- nelle news, ogni rientro deve approfondire almeno un fatto con contesto, conseguenze o collegamenti ad altri sviluppi;
+- nei podcast, il dialogo deve avere scambio reale, con domande, rilanci, esempi e chiusure di ragionamento, non semplici battute di appoggio;
+- la lunghezza deve restare compatibile con TTS e rotazione musicale: meglio blocchi parlati solidi ma controllati, non WAV brevissimi e non monologhi interminabili.
+
+Se il prompt di una rubrica impone un tono troppo corto rispetto al formato della fascia, l'Orchestratore deve correggere il prompt o il budget di generazione invece di accettare un output affrettato come comportamento normale.
+
 ## Regola Segnale Orario Non Interrompente
 
 Il segnale orario non deve più essere legato al minuto `:00`, perché le fasce di palinsesto partono ogni ora e lo slot principale ha priorità.
@@ -171,3 +184,56 @@ L'Orchestratore e i suoi agenti subordinati (in particolare il `/python_engineer
 1. **Pulsanti di Test Dedicati**: Venga aggiunto un pulsante o un controllo nella dashboard per avviare la nuova funzionalità manualmente.
 2. **Coerenza UI**: Tutti i pulsanti della dashboard devono funzionare allo stesso modo (gestione click, feedback visivo di caricamento, gestione errori) per mantenere un'interfaccia utente solida e prevedibile.
 3. **Isolamento**: I test manuali eseguiti dalla dashboard non devono corrompere la stabilità dello stream in onda (salvo test espliciti di interruzione come le breaking news).
+
+## Regola Overlay: Performance Senza Degrado Visivo
+
+L'overlay live di NewsicaTV non deve essere alleggerito rendendo la UI genericamente piu' povera o brutta al primo segnale di carico. La priorita' corretta e' ottimizzare il metodo di rendering, non sacrificare subito l'identita' grafica.
+
+Statement operativo:
+- mantenere il layout editoriale come contratto visivo stabile: gerarchia, posizionamento, ritmo e leggibilita' non vanno stravolti per semplici motivi di performance;
+- preferire ottimizzazioni invisibili all'utente: caching, redraw parziale, minore frequenza di aggiornamento per elementi lenti, semplificazione dei calcoli per frame, riduzione delle invalidazioni inutili;
+- gli elementi visivamente piu' costosi devono essere attivabili con feature flag separati, cosi' da poter misurare il loro impatto senza riscrivere la UI;
+- se una riduzione funzionale si rende necessaria, deve essere progressiva e reversibile: prima spegnere effetti accessori, poi varianti cromatiche avanzate, poi moduli secondari; il core layout deve essere l'ultima cosa da toccare;
+- evitare downgrade strutturali impulsivi come cambiare proporzioni, griglia o densita' informativa senza una scelta editoriale esplicita;
+- ogni intervento sull'overlay live deve essere validato sia sui log (`tmp/stream.log`, `tmp/ffmpeg_progress.txt`) sia sulla resa visiva reale dello stream.
+
+Traduzione pratica: prima si rende piu' efficiente il motore grafico, poi eventualmente si spengono optional decorativi, e solo come extrema ratio si ridisegna il layout.
+
+### Piano Tecnico Overlay
+
+Quando `tmp/stream.log` o `tmp/ffmpeg_progress.txt` mostrano stream sotto realtime, l'Orchestratore deve guidare gli agenti con questo ordine di intervento:
+
+1. **Misurare prima di cambiare**
+   - rilevare `speed`, `fps`, lag crescente e CPU dei processi `ffmpeg` e `overlay_agent.py`;
+   - distinguere tra costo del compositing, costo del rendering Python e costo di encoder.
+
+2. **Ridurre il redraw totale**
+   - evitare di ricostruire l'intero frame quando cambiano solo pochi elementi;
+   - mantenere cache separate per pannelli statici, ticker, timeline, orologio e stato musicale;
+   - aggiornare solo i layer invalidati.
+
+3. **Rallentare gli elementi lenti, non il layout**
+   - orologio e data: refresh al secondo;
+   - timeline e prossimo palinsesto: refresh solo su variazione stato/file;
+   - ticker: scroll continuo, ma layout testuale ricalcolato solo se il contenuto cambia;
+   - box informativi accessori: refresh event-driven, non per-frame.
+
+4. **Spegnere prima gli optional costosi**
+   - box titolo brano;
+   - colorazioni avanzate del ticker;
+   - glow, effetti e varianti decorative;
+   - moduli secondari non essenziali alla leggibilita' primaria.
+
+5. **Mantenere stabile il core visivo**
+   - non cambiare canvas, griglia, gerarchia dei pannelli o densita' informativa senza una scelta editoriale esplicita;
+   - evitare soluzioni rapide che sistemano i log ma peggiorano la percezione del canale.
+
+6. **Preparare modalita' degradate esplicite**
+   - introdurre preset controllati come `overlay_full`, `overlay_light`, `overlay_minimal`;
+   - ogni preset deve essere documentato, reversibile e attivabile senza patch manuali al volo.
+
+7. **Validare sempre su doppio asse**
+   - asse tecnico: `speed >= 1.0x`, assenza di lag crescente, carico CPU piu' basso;
+   - asse editoriale: overlay ancora coerente, leggibile, riconoscibile come NewsicaTV.
+
+Regola di implementazione: prima ottimizzazione strutturale, poi feature flag, poi preset degradati. Mai il contrario.

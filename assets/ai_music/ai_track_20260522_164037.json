@@ -1,0 +1,9 @@
+{
+  "title": "Skyline Shift",
+  "prompt": "Create a modern 187-second Electro Pop song for a web radio / web TV broadcast.\n\nMood: Uplifting, Energetic, Optimistic.\nTempo: 120 BPM.\nStyle: Clean, radio-ready, modern pop production with a strong rhythmic drive.\nProduction: Polished, dynamic, wide stereo image, modern reverb and delay effects.\nInstruments: Synthesizers (pads, arpeggiated sequences, leads), electronic drums (kick, snare, hi-hats), processed bass, layered vocal samples.\n\nStructure:\n0:00 - 0:14 intro: Gentle synth pads and a subtle arpeggio build anticipation.\n0:14 - 0:52 verse/groove: Driving beat enters with a pulsating bassline and simple synth chords.\n0:52 - 1:11 build/pre-chorus: Filter sweeps and increasing intensity on the drums create a build-up.\n1:11 - 1:48 chorus/drop/main hook: Catchy, repetitive vocal hook (\"Feel the rise\") layered with a powerful synth lead and a driving beat.\n1:48 - 2:25 second verse or soft bridge: Reduced instrumentation, more emphasis on the vocal hook and atmospheric pads.\n2:25 - 2:59 final chorus/drop/main hook: Full instrumentation returns, the vocal hook is more prominent, with added layers and harmonies.\n2:59 - 3:07 final chorus continues with smooth fade out.\n\nVocals: Short, catchy vocal hook (“Feel the rise”) repeated throughout the song.  Harmonized vocals in the final chorus.\n\nLyrics: (Not applicable, only vocal hook)\n\nThe final 8 seconds must fade out smoothly and naturally. No abrupt ending. No spoken outro.\n\nNegative prompt: low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence.",
+  "duration": 187,
+  "mode": "vocal_hook",
+  "theme": null,
+  "generated_at": "2026-05-22T16:43:51",
+  "audio_file": "ai_track_20260522_164037.wav"
+}
