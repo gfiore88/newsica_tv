@@ -48,7 +48,6 @@ def run_loop():
     print("🚀 [PreparationAgent] Avviato in background. Orchestrazione multi-agente in corso...")
     
     strategist = ContentStrategistAgent()
-    integrator = AIIntegratorAgent()
     sysadmin = SystemAdminAgent()
     
     while True:
@@ -75,9 +74,10 @@ def run_loop():
                         # Fase 1: Strategia e Contenuto
                         content_data = strategist.prepare_content(character, title)
                         
-                        # Fase 2: Integrazione AI (LLM -> TTS -> Audio)
-                        script_text = integrator.generate_script(content_data)
-                        audio_files = integrator.generate_audio(script_text, content_data)
+                        # Fase 2: Integrazione AI (LLM -> TTS -> Audio) - Usiamo la cartella di preparazione isolata
+                        slot_integrator = AIIntegratorAgent(work_dir=preparing_dir)
+                        script_text = slot_integrator.generate_script(content_data)
+                        audio_files = slot_integrator.generate_audio(script_text, content_data)
                         
                         if not audio_files:
                             raise RuntimeError("Nessun file audio prodotto dall'Integrator.")

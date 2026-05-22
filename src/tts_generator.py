@@ -10,7 +10,7 @@ from kokoro_onnx import Kokoro
 from newsica.audio.tts_text import prepare_text_for_tts
 from newsica.domain.characters import get_character
 
-TMP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp")
+TMP_DIR = os.getenv("NEWSICA_TMP_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp"))
 SCRIPT_FILE = os.path.join(TMP_DIR, "script.txt")
 OUTPUT_AUDIO = os.path.join(TMP_DIR, "audio.wav")
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))

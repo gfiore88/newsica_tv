@@ -76,7 +76,9 @@ class SystemAdminAgent:
         
         try:
             for f in audio_files:
-                shutil.copy(f, preparing_dir / f.name)
+                dest = preparing_dir / f.name
+                if f.resolve() != dest.resolve():
+                    shutil.copy(f, dest)
             if metadata:
                 (preparing_dir / "manifest.json").write_text(
                     json.dumps(metadata, ensure_ascii=False, indent=2),

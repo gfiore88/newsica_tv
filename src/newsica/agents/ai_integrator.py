@@ -92,10 +92,6 @@ class AIIntegratorAgent:
         script_file = self.work_dir / "script.txt"
         script_file.write_text(script_text, encoding="utf-8")
         
-        # Piuttosto che riscrivere le 200 righe di tts_generator.py e la complessità di Kokoro/Chatterbox
-        # lo invochiamo qui per non spaccare nulla che è già testato.
-        # L'architettura è salva perché l'agent nasconde l'implementazione al PreparationAgent.
-        
         # Pulizia pre-generazione in work_dir
         for f in self.work_dir.glob("audio*.wav"):
             f.unlink()
@@ -107,17 +103,36 @@ class AIIntegratorAgent:
         tts_script = BASE_DIR / "src" / "tts_generator.py"
         
         print("Sintesi vocale (TTS)...")
-        # tts_generator si aspetta che script.txt sia in TMP_DIR
-        subprocess.run([str(PYTHON_EXEC), str(tts_script), content_data["character_id"]], check=True)
+        # Inseriamo NEWSICA_TMP_DIR nell'ambiente del subprocess
+        import os
+        env = os.environ.copy()
+        env["NEWSICA_TMP_DIR"] = str(self.work_dir.resolve())
+        
+        subprocess.run([str(PYTHON_EXEC), str(tts_script), content_data["character_id"]], env=env, check=True)
         
         generated_files = []
         if (self.work_dir / "audio.wav").exists():
             generated_files.append(self.work_dir / "audio.wav")
             
-        for f in self.work_dir.glob("audio_part*.wav"):
-            generated_files.append(f)
-            
-        if (self.work_dir / "is_multipart.txt").exists():
-            generated_files.append(self.work_dir / "is_multipart.txt")
+        # Validazione rigorosa dei file per show multi-part
+        multipart_indicator = self.work_dir / "is_multipart.txt"
+        if multipart_indicator.exists():
+            try:
+                with multipart_indicator.open("r", encoding="utf-8") as f:
+                    num_parts = int(f.read().strip())
+                print(f"🕵️‍♂️ [AIIntegratorAgent] Rilevato show multi-part. Verifico l'esistenza di {num_parts} parti...")
+                for i in range(1, num_parts + 1):
+                    part_file = self.work_dir / f"audio_part{i}.wav"
+                    if not part_file.exists():
+                        raise RuntimeError(f"Errore di validazione: file multi-part '{part_file.name}' atteso ma non generato/mancante.")
+                    generated_files.append(part_file)
+                generated_files.append(multipart_indicator)
+                print(f"✅ [AIIntegratorAgent] Validazione multi-part completata! Trovate tutte le {num_parts} parti.")
+            except Exception as e:
+                print(f"❌ [AIIntegratorAgent] Errore di validazione dei file audio generati: {e}")
+                raise
+        else:
+            for f in self.work_dir.glob("audio_part*.wav"):
+                generated_files.append(f)
             
         return generated_files
