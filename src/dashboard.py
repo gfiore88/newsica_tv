@@ -366,13 +366,13 @@ HTML_TEMPLATE = """
                 document.getElementById('current-block').innerText = data.current_block || '--';
                 document.getElementById('last-update').innerText = data.last_update ? new Date(data.last_update).toLocaleTimeString() : '--';
 
-                renderSchedule(data.schedule, data.current_title);
+                renderSchedule(data.schedule, data.current_title, data.scheduled_slot);
             } catch (err) {
                 console.error(err);
             }
         }
 
-        function renderSchedule(schedule, currentTitle) {
+        function renderSchedule(schedule, currentTitle, scheduledSlot) {
             const container = document.getElementById('schedule-timeline');
             if (!schedule || schedule.length === 0) {
                 container.innerHTML = '<div class="text-slate-500 col-span-full py-4 text-center text-sm">Nessun palinsesto disponibile</div>';
@@ -389,7 +389,9 @@ HTML_TEMPLATE = """
 
             let html = '';
             schedule.forEach(item => {
-                const isActive = item.title === currentTitle;
+                const isActive = (item.title === currentTitle) || 
+                                 (currentTitle && currentTitle.startsWith(item.title)) || 
+                                 (scheduledSlot && item.time === scheduledSlot);
                 const activeClasses = isActive 
                     ? 'ring-2 ring-purple-500 bg-gradient-to-br from-slate-800/80 to-indigo-950/80 border-purple-500/50 shadow-[0_0_20px_rgba(147,51,234,0.15)] transform scale-[1.02]' 
                     : 'bg-slate-800/40 hover:bg-slate-800/70 border-slate-700 hover:border-slate-500 transition-all duration-200 cursor-pointer';
