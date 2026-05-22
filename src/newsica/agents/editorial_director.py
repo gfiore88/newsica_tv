@@ -108,7 +108,7 @@ REGOLE TASSATIVE:
 1. L'output DEVE ESSERE ESCLUSIVAMENTE codice JSON valido, senza blocchi markdown (no ```json), senza preamboli né spiegazioni.
 2. Le chiavi del JSON devono essere orari nel formato "HH:00" e coprire l'intera giornata in ordine cronologico.
 3. Le ore di inizio devono includere sempre "00:00" e spaziare fino alle "22:00" o "23:00". Fai slot di 1 o 2 ore. Non saltare troppe ore.
-4. I valori devono essere oggetti con due chiavi: "title" (titolo accattivante del programma) e "type" (categoria).
+4. I valori devono essere oggetti con le chiavi: "title" (titolo accattivante del programma), "type" (categoria) ed un'opzionale "theme" (tema musicale).
 
 FORMAT DISPONIBILI (Usa solo questi in "type"):
 - "news": Notiziario generale esteso
@@ -117,14 +117,19 @@ FORMAT DISPONIBILI (Usa solo questi in "type"):
 - "wellness": Rubrica su salute/benessere
 - "podcast": Dialogo a due voci su un tema specifico
 - "flash_60s": Bollettino rapidissimo di 60 secondi (usalo come pillola a orari sparsi per dare imprevedibilità)
-- "music_only": Solo musica in background (utile di notte o in pausa pranzo)
+- "music_only": Solo musica in background (utile di notte o in pausa pranzo o in diretta continuata)
+
+RUBRICHE TEMATICHE E COPERTURE MUSICALI:
+- Per gli show di tipo "music_only", o anche in blocchi musicali specifici, puoi organizzare delle "rubriche" tematiche inserendo una chiave opzionale "theme" nell'oggetto del programma.
+- Valori possibili per "theme": "rock", "dance/disco", "latin/reggaeton/dembow", "synthwave", "lofi chill", "pop ballad".
+- Sii creativo! Ad esempio, puoi dedicare uno slot pomeridiano o serale di musica a un tema specifico (es. "theme": "rock" con titolo "Rock & Roll Arena", "theme": "dance/disco" con titolo "Newsica Club Fever", oppure "theme": "latin/reggaeton/dembow" con titolo "Baila Newsica").
 
 LINEE GUIDA EDITORIALI PER IMPREVEDIBILITÀ:
 - Varia i titoli. Invece di "Pranzo News", inventa "Oggi alle 13", "Newsica Live", "Ultim'ora Flash".
 - Non mettere mai due "podcast" di fila.
 - Spargi 3-4 slot "flash_60s" in momenti inaspettati (es. "11:00", "16:00", "23:00").
 - Garantisci almeno un "meteo" al mattino e uno la sera.
-- Rendi ogni giorno diverso dal precedente.
+- Rendi ogni giorno diverso dal precedente, alternando rubriche tematiche e stili musicali.
 
 5. DEVI INCLUDERE OBBLIGATORIAMENTE i seguenti slot prefissati (Colonne Portanti e Appuntamenti Settimanali).
 Copiali esattamente e aggiungi il resto del palinsesto creativo attorno ad essi:
@@ -132,9 +137,11 @@ Copiali esattamente e aggiungi il resto del palinsesto creativo attorno ad essi:
 
 Esempio di struttura richiesta:
 {{
-  "00:00": {{"title": "Night Vibes", "type": "music_only"}},
+  "00:00": {{"title": "Night Vibes", "type": "music_only", "theme": "synthwave"}},
   "07:00": {{"title": "Buongiorno Newsica", "type": "news"}},
-  "09:00": {{"title": "Tech in Pillole", "type": "flash_60s"}}
+  "14:00": {{"title": "Newsica Club Fever", "type": "music_only", "theme": "dance/disco"}},
+  "17:00": {{"title": "Baila Newsica", "type": "music_only", "theme": "latin/reggaeton/dembow"}},
+  "19:00": {{"title": "Rock & Roll Arena", "type": "music_only", "theme": "rock"}}
 }}
 """
 
@@ -190,16 +197,18 @@ Esempio di struttura richiesta:
     def choose_music_mode(self) -> str:
         """
         Distribuzione consigliata per una web radio:
-        - molti brani strumentali o semi-strumentali;
-        - qualche vocal hook;
-        - poche lyrics complete, per evitare effetto playlist casuale.
+        - prevalenza preponderante di brani con testi (lyrics/vocal hooks) rispetto a strumentali.
+        - full_lyrics: 45%
+        - vocal_hook: 30%
+        - vocal_chops: 15%
+        - instrumental: 10%
         """
         return random.choices(
             population=[
-                "instrumental",
-                "vocal_hook",
                 "full_lyrics",
+                "vocal_hook",
                 "vocal_chops",
+                "instrumental",
             ],
             weights=[
                 50,
@@ -215,30 +224,108 @@ Esempio di struttura richiesta:
         time_of_day: str,
         fallback_prompt: str | None = None,
         music_mode: str | None = None,
-    ) -> str:
+        theme: str | None = None,
+    ) -> dict:
         """
-        Genera un prompt completo per ACE-Step.
-
-        Differenze rispetto alla vecchia versione:
-        - non produce più una lista di tag;
-        - produce un prompt da producer musicale;
-        - impone durata di 60 secondi;
-        - impone fade out negli ultimi 8 secondi;
-        - varia tra instrumental, vocal hook, full lyrics e vocal chops;
-        - chiede un JSON a Ollama per loggare metadati utili;
-        - restituisce solo il campo "prompt", pronto per ACE-Step.
+        Genera un prompt completo per ACE-Step, includendo una durata randomica e un tema.
         """
-        logger.info(f"🧠 [EditorialDirectorAgent] Generazione prompt musicale ACE-Step per {time_of_day}...")
+        logger.info(f"🧠 [EditorialDirectorAgent] Generazione prompt musicale ACE-Step per {time_of_day} (tema: {theme})...")
 
+        # Selezioniamo casualmente la durata del brano tra 150 e 210 secondi (2.5 - 3.5 minuti)
+        duration_seconds = random.randint(150, 210)
+        
+        # Calcoliamo la struttura del brano
+        intro_end = int(duration_seconds * 0.08)       # ~12-16s
+        verse1_end = int(duration_seconds * 0.28)      # ~42-58s
+        build_end = int(duration_seconds * 0.38)       # ~57-80s
+        chorus1_end = int(duration_seconds * 0.58)     # ~87-121s
+        verse2_end = int(duration_seconds * 0.78)      # ~117-163s
+        chorus2_end = duration_seconds - 8             # La fine del chorus 2 e inizio fade out
+
+        def format_time(sec: int) -> str:
+            return f"{sec // 60}:{sec % 60:02d}"
+
+        t_intro = f"0:00 - {format_time(intro_end)}"
+        t_verse1 = f"{format_time(intro_end)} - {format_time(verse1_end)}"
+        t_build = f"{format_time(verse1_end)} - {format_time(build_end)}"
+        t_chorus1 = f"{format_time(build_end)} - {format_time(chorus1_end)}"
+        t_verse2 = f"{format_time(chorus1_end)} - {format_time(verse2_end)}"
+        t_chorus2 = f"{format_time(verse2_end)} - {format_time(chorus2_end)}"
+        t_fade = f"{format_time(chorus2_end)} - {format_time(duration_seconds)}"
+
+        # Default fallback prompt con durata e struttura corretta
         fallback_prompt = fallback_prompt or self.fallback_music_prompt
+        # Se stiamo usando il fallback_prompt, ma con una durata diversa, aggiorniamo il suo testo per sicurezza
+        if f"{duration_seconds} seconds" not in fallback_prompt:
+            fallback_prompt = f"""
+Create a modern {duration_seconds}-second instrumental song for a web radio / web TV broadcast.
+
+Mood: clean, energetic, optimistic, radio-friendly.
+Tempo: 118 BPM.
+Style: modern pop with polished synths, punchy drums, deep bass.
+Production: streaming-ready mix, clean low end, wide stereo image.
+Instruments: electronic drums, synth bass, bright pluck synths, warm pads.
+
+Structure:
+{t_intro} short intro.
+{t_verse1} main groove with drums, bass.
+{t_build} build with rising energy.
+{t_chorus1} main hook with full beat.
+{t_verse2} soft bridge.
+{t_chorus2} final hook.
+{t_fade} outro fading out smoothly.
+
+Vocals:
+No vocals. Instrumental only.
+
+Lyrics:
+No lyrics.
+
+Ending:
+The final 8 seconds must fade out smoothly and naturally. No abrupt ending.
+
+Negative prompt:
+low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence
+""".strip()
 
         if music_mode is None:
             music_mode = self.choose_music_mode()
 
+        # Configura il set di generi musicali
+        theme_genres = {
+            "rock": ["alternative rock", "indie rock", "modern rock", "pop punk", "classic rock revival", "garage rock", "synth rock"],
+            "dance/disco": ["disco house", "dance pop", "club dance", "nu disco", "synthpop", "eurodance", "groove house"],
+            "latin/reggaeton/dembow": ["reggaeton", "dembow", "latin pop", "moombahton", "bachata pop", "urban latin fusion"],
+            "synthwave": ["synthwave", "outrun", "retrowave", "dreamwave", "dark synthwave"],
+            "lofi chill": ["lofi hip hop", "chillhop", "lofi chill", "jazzhop", "ambient lofi"],
+            "pop ballad": ["pop ballad", "piano pop", "acoustic pop", "indie pop ballad", "r&b ballad"]
+        }
+
+        genre_guideline = ""
+        genre_pool_str = ""
+        if theme and theme.lower() in theme_genres:
+            genre_pool = theme_genres[theme.lower()]
+            genre_pool_str = ", ".join(genre_pool)
+            genre_guideline = f"""
+IL PALINSESTO RICHIEDE IL TEMA: {theme.upper()}!
+Devi forzare e scegliere un genere appartenente a questo tema specifico. Scegli tra: {genre_pool_str}.
+Ispirati al sound, strumenti, ritmo e produzione tipici di {theme.upper()} (ad esempio chitarre elettriche per il rock, ritmi incalzanti 4/4 e bassi pulsanti per la dance/disco, o il classico ritmo sincopato "tresillo" e bassi dembow per reggaeton/latin).
+"""
+        else:
+            genre_pool_str = "modern pop, dance pop, electro pop, chill pop, indie pop, nu disco, funk pop, tropical pop, deep house, melodic house, afro house, synthwave, future bass, soft urban pop, modern lounge, cinematic electronic"
+            genre_guideline = f"Scegli un genere moderno e diverso ogni volta da questa lista: {genre_pool_str}."
+
+        fallback_dict = {
+            "prompt": fallback_prompt,
+            "duration": duration_seconds,
+            "mode": music_mode,
+            "title": "Newsica AI Track"
+        }
+
         system_prompt = f"""
 Sei il Music Director AI di NewsicaTV, una web radio / web TV automatizzata 24/7.
 
-Devi generare un prompt per ACE-Step per creare un brano moderno da 60 secondi, adatto a rotazione radio.
+Devi generare un prompt per ACE-Step per creare un brano moderno da {duration_seconds} secondi, adatto a rotazione radio.
 
 Rispondi SOLO con JSON valido.
 Non usare markdown.
@@ -251,7 +338,7 @@ JSON richiesto:
   "mood": "Mood del brano",
   "tempo_bpm": 120,
   "mode": "{music_mode}",
-  "duration_seconds": 60,
+  "duration_seconds": {duration_seconds},
   "fade_out_seconds": 8,
   "prompt": "Prompt completo in inglese da inviare ad ACE-Step"
 }}
@@ -259,12 +346,11 @@ JSON richiesto:
 CONTESTO:
 - Fascia oraria: {time_of_day}
 - Modalità musicale richiesta: {music_mode}
-- Durata: 60 secondi
+- Durata: {duration_seconds} secondi
 - Fade out: ultimi 8 secondi
 - Uso: rotazione radio / webTV / filler musicale / palinsesto NewsicaTV
 
-SCEGLI UN GENERE MODERNO E DIVERSO OGNI VOLTA TRA:
-modern pop, dance pop, electro pop, chill pop, indie pop, nu disco, funk pop, tropical pop, deep house, melodic house, afro house, synthwave, future bass, soft urban pop, modern lounge, cinematic electronic.
+{genre_guideline}
 
 REGOLE PER IL PROMPT:
 1. Il campo "prompt" deve essere in inglese.
@@ -275,25 +361,27 @@ REGOLE PER IL PROMPT:
    - genre
    - mood
    - tempo BPM
-   - instruments
+   - instruments (se rock usa chitarre elettriche distorte o pulite, basso, batteria reale. Se dance/disco usa synth, cassa in 4/4, claps. Se reggaeton usa percussione dembow sincopata).
    - production
    - structure temporale
    - vocals
    - lyrics se presenti
    - ending
    - negative prompt
-6. La struttura deve essere esattamente questa:
-   0:00 - 0:08 intro
-   0:08 - 0:25 verse/groove
-   0:25 - 0:38 build/pre-chorus
-   0:38 - 0:52 chorus/drop/main hook
-   0:52 - 1:00 final hook with smooth fade out
+6. La struttura DEVE ESSERE ESATTAMENTE QUESTA (usa i minuti:secondi precisi calcolati per questa canzone):
+   {t_intro} intro
+   {t_verse1} verse/groove
+   {t_build} build/pre-chorus
+   {t_chorus1} chorus/drop/main hook
+   {t_verse2} second verse or soft bridge
+   {t_chorus2} final chorus/drop/main hook
+   {t_fade} final chorus continues with smooth fade out
 7. Il finale deve sempre dire:
    "The final 8 seconds must fade out smoothly and naturally. No abrupt ending. No spoken outro."
 8. Evita:
    low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence.
 9. Deve sembrare un brano moderno da radio/web radio, non una demo amatoriale.
-10. Non generare musica troppo sperimentale, horror, noise, metal, hard rock o trap aggressiva.
+10. Non generare musica troppo sperimentale, horror, noise, metal o trap aggressiva.
 
 REGOLE PER LA FASCIA ORARIA:
 - night / late night / 00:00-05:00: chill, lounge, synthwave, deep house, soft electronic.
@@ -308,23 +396,24 @@ REGOLE PER LA MODALITÀ MUSICALE:
   Niente lyrics, niente parole cantate, niente spoken words.
   Puoi usare texture vocali non verbali solo se pulite e moderne.
 - Se mode = "vocal_hook":
-  Il brano deve includere solo un breve hook vocale catchy.
+  Il brano deve includere solo un breve hook vocale catchy (es. una o due frasi o parole chiave ripetute nel ritornello).
   Usa 1 o 2 frasi brevi, radiofoniche e ripetibili.
-  Niente strofe lunghe.
+  Niente strofe lunghe cantate.
 - Se mode = "full_lyrics":
-  Il brano deve includere lyrics originali brevi con:
-  [Verse]
+  Il brano deve includere lyrics originali complete con:
+  [Verse 1]
   [Build]
   [Chorus]
-  [Final Hook]
-  Le lyrics devono essere moderne, semplici, orecchiabili e adatte a una radio.
+  [Verse 2]
+  [Chorus]
+  Le lyrics devono essere cantate in modo moderno, semplice, orecchiabile e adatte a una radio. Scrivile per intero sotto la sezione "Lyrics:".
 - Se mode = "vocal_chops":
   Il brano deve usare vocal chops moderni come texture musicale.
   Niente parole complete comprensibili.
   Niente spoken words.
 
 FORMATO INTERNO DEL CAMPO "prompt":
-Create a modern 60-second [GENRE] song for a web radio / web TV broadcast.
+Create a modern {duration_seconds}-second [GENRE] song for a web radio / web TV broadcast.
 
 Mood: ...
 Tempo: ... BPM.
@@ -333,23 +422,19 @@ Production: ...
 Instruments: ...
 
 Structure:
-0:00 - 0:08 ...
-0:08 - 0:25 ...
-0:25 - 0:38 ...
-0:38 - 0:52 ...
-0:52 - 1:00 ...
+{t_intro} ...
+{t_verse1} ...
+{t_build} ...
+{t_chorus1} ...
+{t_verse2} ...
+{t_chorus2} ...
+{t_fade} ...
 
 Vocals:
 ...
 
 Lyrics:
 ...
-
-Ending:
-The final 8 seconds must fade out smoothly and naturally. No abrupt ending. No spoken outro.
-
-Negative prompt:
-low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence
 """
 
         payload = {
@@ -363,7 +448,7 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
         }
 
         try:
-            response = requests.post(self.ollama_url, json=payload, timeout=35)
+            response = requests.post(self.ollama_url, json=payload, timeout=45)
 
             if response.status_code == 200:
                 raw_result = response.json().get("response", "").strip()
@@ -374,11 +459,12 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
 
                 if self._is_valid_music_prompt(prompt):
                     logger.info(
-                        "🎵 Prompt ACE-Step generato: title='%s', genre='%s', mode='%s', bpm='%s'",
+                        "🎵 Prompt ACE-Step generato: title='%s', genre='%s', mode='%s', bpm='%s', duration=%s",
                         parsed.get("title"),
                         parsed.get("genre"),
                         parsed.get("mode"),
                         parsed.get("tempo_bpm"),
+                        parsed.get("duration_seconds"),
                     )
 
                     log_decision(
@@ -388,12 +474,18 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
                             f"title='{parsed.get('title')}', "
                             f"genre='{parsed.get('genre')}', "
                             f"mode='{parsed.get('mode')}', "
-                            f"bpm='{parsed.get('tempo_bpm')}'"
+                            f"bpm='{parsed.get('tempo_bpm')}', "
+                            f"duration={parsed.get('duration_seconds')}s"
                         ),
                         level="MUSIC",
                     )
 
-                    return prompt
+                    return {
+                        "prompt": prompt,
+                        "duration": parsed.get("duration_seconds", duration_seconds),
+                        "mode": parsed.get("mode", music_mode),
+                        "title": parsed.get("title", "Newsica AI Track")
+                    }
 
                 logger.warning("Prompt ACE-Step generato ma non valido o incompleto. Uso fallback.")
                 log_decision(
@@ -418,12 +510,12 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
                 level="ERROR",
             )
 
-        return fallback_prompt
+        return fallback_dict
+
 
     def _extract_json_object(self, text: str) -> str:
         """
         Estrae il primo oggetto JSON da una risposta LLM.
-        Utile quando il modello aggiunge testo extra nonostante le istruzioni.
         """
         cleaned = text.replace("```json", "").replace("```", "").strip()
 
@@ -444,9 +536,7 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
         if len(normalized) < 250:
             return False
 
-        has_duration = "60" in normalized and (
-            "second" in normalized or "seconds" in normalized
-        )
+        has_duration = any(str(sec) in normalized for sec in range(150, 211)) or "second" in normalized or "seconds" in normalized
 
         has_fade = "fade" in normalized or "fade out" in normalized
 
@@ -462,7 +552,6 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
             "ending" in normalized,
             "negative prompt" in normalized,
             "0:00" in normalized or "00:00" in normalized,
-            "1:00" in normalized or "01:00" in normalized,
         ]
 
         return sum(quality_checks) >= 4

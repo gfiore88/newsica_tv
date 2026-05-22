@@ -79,7 +79,7 @@ def get_handlers():
         _LLM_HANDLER = LLMHandler()
         lm_status, lm_ok = _LLM_HANDLER.initialize(
             checkpoint_dir=str(ace_step_path / "checkpoints"),
-            lm_model_path="acestep-5Hz-lm-0.6B",
+            lm_model_path="acestep-5Hz-lm-1.7B",
             backend="mlx", # Apple Silicon MLX native acceleration
             device="auto",
             offload_to_cpu=False,
@@ -88,7 +88,7 @@ def get_handlers():
             logger.warning(f"Failed to initialize LLM handler with MLX backend: {lm_status}. Trying fallback 'pt' backend.")
             lm_status, lm_ok = _LLM_HANDLER.initialize(
                 checkpoint_dir=str(ace_step_path / "checkpoints"),
-                lm_model_path="acestep-5Hz-lm-0.6B",
+                lm_model_path="acestep-5Hz-lm-1.7B",
                 backend="pt",
                 device="auto",
                 offload_to_cpu=False,
@@ -99,7 +99,7 @@ def get_handlers():
                 
     return _DIT_HANDLER, _LLM_HANDLER
 
-def run_ace_step_generation(prompt: str, output_path: Path):
+def run_ace_step_generation(prompt: str, output_path: Path, duration: float = 60.0):
     """
     Esecuzione reale di ACE-Step 1.5.
     """
@@ -134,8 +134,9 @@ def run_ace_step_generation(prompt: str, output_path: Path):
         caption=prompt,
         lyrics=lyrics,
         instrumental=instrumental,
-        duration=60.0,
-        inference_steps=8, # standard for turbo
+        duration=duration,
+        inference_steps=12, # Optimized for higher quality while remaining fast
+        shift=3.0,          # Recommended for turbo models in ACE-Step 1.5 docs
         seed=random.randint(0, 2**32 - 1),
         enable_normalization=True,
         normalization_db=-1.0,
@@ -171,13 +172,14 @@ def run_ace_step_generation(prompt: str, output_path: Path):
             output_path.unlink()
         generated_file_path.rename(output_path)
 
-def normalize_audio(input_path: Path, output_path: Path):
+def normalize_audio(input_path: Path, output_path: Path, duration: float = 180.0):
     """
     Normalizza il file audio a livelli TV broadcast (es -23 LUFS) usando FFmpeg.
     """
-    logger.info(f"Normalizing audio: {input_path.name}")
-    # Usiamo ffmpeg per normalizzare (loudnorm), impostare a 44100 Hz Stereo, e fare un fadeout di 5 secondi alla fine
-    cmd = f'ffmpeg -y -i "{input_path}" -ar 44100 -ac 2 -af "loudnorm=I=-14:TP=-1:LRA=11,afade=t=out:st=54:d=5" "{output_path}" -nostats -loglevel error'
+    logger.info(f"Normalizing audio: {input_path.name} with duration={duration}s")
+    # Calcolo dinamico del tempo di inizio del fadeout (st = duration - 6 per sfumare per 5 secondi terminando 1 secondo prima della fine reale)
+    st = max(0.0, duration - 6.0)
+    cmd = f'ffmpeg -y -i "{input_path}" -ar 44100 -ac 2 -af "loudnorm=I=-14:TP=-1:LRA=11,afade=t=out:st={st}:d=5" "{output_path}" -nostats -loglevel error'
     res = os.system(cmd)
     if res != 0:
         logger.error("FFmpeg normalization failed. Saving raw instead.")
@@ -211,20 +213,44 @@ def generate_track():
     else:
         fallback_prompt = "instrumental, background music, calm, clean production"
         
-    prompt = None
-    if not prompt:
-        director = EditorialDirectorAgent()
-        prompt = director.generate_music_prompt(time_of_day, fallback_prompt)
+    # Recupera il tema attivo per lo slot corrente dal palinsesto
+    theme = None
+    try:
+        from newsica.broadcast.scheduler import get_wallclock_schedule_key
+        from schedule_generator import get_current_schedule
+        schedule_data = get_current_schedule()
+        current_key = get_wallclock_schedule_key()
+        current_block = schedule_data.get(current_key, {})
+        theme = current_block.get("theme", None)
+        logger.info(f"Rilevato tema per lo slot orario '{current_key}': {theme}")
+    except Exception as e:
+        logger.warning(f"Impossibile leggere il tema dal palinsesto: {e}")
+
+    director = EditorialDirectorAgent()
+    prompt_data = director.generate_music_prompt(time_of_day, fallback_prompt, theme=theme)
     
+    if isinstance(prompt_data, dict):
+        prompt = prompt_data.get("prompt", fallback_prompt)
+        duration = prompt_data.get("duration", 180.0)
+        mode = prompt_data.get("mode", "vocal_hook")
+        title = prompt_data.get("title", "Newsica AI Track")
+    else:
+        prompt = prompt_data
+        duration = 180.0
+        mode = "instrumental"
+        title = "Newsica AI Track"
+
+    logger.info(f"Prompt selezionato per la generazione (modalità: {mode}, durata: {duration}s, titolo: '{title}')")
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     temp_file = TMP_DIR / f"temp_ai_gen_{timestamp}.wav"
     final_file = AI_MUSIC_DIR / f"ai_track_{timestamp}.wav"
     
     try:
         TMP_DIR.mkdir(parents=True, exist_ok=True)
-        run_ace_step_generation(prompt, temp_file)
+        run_ace_step_generation(prompt, temp_file, duration=duration)
         if temp_file.exists():
-            normalize_audio(temp_file, final_file)
+            normalize_audio(temp_file, final_file, duration=duration)
             logger.info(f"Successfully added {final_file.name} to library.")
             
             # Pulizia file temporanei
