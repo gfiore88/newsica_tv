@@ -183,7 +183,7 @@ while true; do
     -b:v 3000k -minrate 3000k -maxrate 3000k -bufsize 6000k \
     -x264-params "nal-hrd=cbr:force-cfr=1:filler=1" \
     -pix_fmt yuv420p -r 30 -g 60 -keyint_min 60 -sc_threshold 0 \
-    -c:a aac -b:a 128k -ar 44100 \
+    -c:a aac -b:a 128k -ar 44100 -ac 2 \
     -f flv "$YOUTUBE_STREAM_URL/$YOUTUBE_STREAM_KEY" &
 
   FFMPEG_PID=$!
