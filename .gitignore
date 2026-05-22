@@ -38,6 +38,10 @@ logs/
 .idea/
 .vscode/
 
+# CACHE
+.cache/
+.venv_ace_step/
+
 # Big Files
 *.bin
 *.onnx
