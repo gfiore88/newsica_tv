@@ -37,6 +37,29 @@ class TestEditorialDirectorMusicTitles(unittest.TestCase):
 
         self.assertEqual(recent, ["Neon Pulse", "Golden Mirage"])
 
+    def test_sanitize_schedule_replaces_thematic_news_titles(self):
+        agent = EditorialDirectorAgent()
+        schedule = {
+            "18:00": {"title": "Focus Ambiente", "type": "news"},
+            "19:00": {"title": "Rock & Roll Arena", "type": "music_only", "theme": "rock"},
+        }
+
+        sanitized = agent._sanitize_schedule(schedule)
+
+        self.assertEqual(sanitized["18:00"]["title"], "Riepilogo Giornata")
+        self.assertNotIn("theme", sanitized["18:00"])
+        self.assertEqual(sanitized["19:00"]["title"], "Rock & Roll Arena")
+
+    def test_sanitize_schedule_keeps_general_news_titles(self):
+        agent = EditorialDirectorAgent()
+        schedule = {
+            "20:00": {"title": "Newsica Sera: Il TG Principale", "type": "news"},
+        }
+
+        sanitized = agent._sanitize_schedule(schedule)
+
+        self.assertEqual(sanitized["20:00"]["title"], "Newsica Sera: Il TG Principale")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,7 @@ from newsica.sources.collector import collect_news_items
 from newsica.domain.characters import get_character
 from newsica.editorial.source_filters import filter_items_for_character, fallback_general_news
 from newsica.editorial.fallback_scripts import build_fallback_script
+from newsica.editorial.title_rules import is_general_news_title
 
 class ContentStrategistAgent:
     def __init__(self, cache_seconds=900):
@@ -49,6 +50,18 @@ class ContentStrategistAgent:
                     "concentrati su movimenti semplici da scrivania, postura, pause attive "
                     "e respirazione, senza prescrizioni mediche.\n\n"
                 )
+            if character_id == "news":
+                if is_general_news_title(title):
+                    news_text += (
+                        "Questa e' un'edizione news generalista. E' corretto costruire una scaletta mista con "
+                        "cronaca, politica, esteri, economia, cultura, tecnologia e sport, mantenendo un tono da "
+                        "telegiornale e senza trasformarla in una rubrica monotematica.\n\n"
+                    )
+                else:
+                    news_text += (
+                        "Questa e' una rubrica news tematica. Usa solo spunti coerenti con il titolo e scarta "
+                        "le notizie che portano fuori argomento. Il titolo non e' decorativo.\n\n"
+                    )
 
         news_text += "Ecco le notizie o gli spunti da rielaborare:\n\n"
         for item in news_items:

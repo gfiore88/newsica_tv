@@ -96,6 +96,11 @@ Il titolo del programma nel palinsesto è un contratto editoriale con lo spettat
 
 Ogni pipeline di generazione contenuti deve passare il titolo dello slot al prompt LLM come tema obbligatorio. Gli spunti RSS, le notizie cache e i fallback locali possono essere usati solo se supportano quel tema; non devono mai spostare la rubrica su un argomento diverso.
 
+Distinzione obbligatoria per le news:
+- se il blocco e' una normale edizione `news`, il titolo deve restare da telegiornale generalista (`Morning News`, `Pranzo News`, `Edizione Sera`, `Riepilogo Giornata`, ecc.) e il copione puo' includere un mix di cronaca, politica, esteri, economia, cultura, tecnologia e sport;
+- se il titolo suggerisce una rubrica tematica (`Focus Ambiente`, `Speciale Economia`, `Dossier Tecnologia`, ecc.), allora anche il contenuto deve restare su quel tema dall'inizio alla fine;
+- il DirectorAgent non deve usare titoli tematici per slot `news` generalisti se non esiste una reale pipeline editoriale coerente con quel focus.
+
 Per ogni asset pre-prodotto deve esistere un manifest locale con almeno:
 - orario slot;
 - tipo rubrica/personaggio;

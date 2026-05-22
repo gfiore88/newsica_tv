@@ -5,6 +5,7 @@ import logging
 import requests
 from datetime import date
 from newsica.editorial.memory import add_music_title, get_recent_music_titles
+from newsica.editorial.title_rules import is_general_news_title, normalize_title
 from newsica.utils.audit_logger import log_decision
 
 logger = logging.getLogger(__name__)
@@ -135,6 +136,45 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
 
         return False
 
+    @staticmethod
+    def _default_news_title_for_slot(slot_time: str) -> str:
+        try:
+            hour = int((slot_time or "00:00").split(":", 1)[0])
+        except Exception:
+            hour = 0
+
+        if hour < 9:
+            return "Morning News"
+        if hour < 12:
+            return "Edizione Mattina"
+        if hour < 14:
+            return "Pranzo News"
+        if hour < 18:
+            return "Edizione Pomeriggio"
+        if hour < 20:
+            return "Riepilogo Giornata"
+        return "Newsica Sera"
+
+    def _sanitize_schedule(self, schedule: dict) -> dict:
+        sanitized = {}
+        for slot_time in sorted(schedule.keys()):
+            raw_entry = schedule.get(slot_time) or {}
+            entry = dict(raw_entry) if isinstance(raw_entry, dict) else {}
+            block_type = str(entry.get("type", "music_only")).strip() or "music_only"
+            title = normalize_title(entry.get("title"))
+
+            if block_type == "news":
+                if not is_general_news_title(title):
+                    title = self._default_news_title_for_slot(slot_time)
+                entry.pop("theme", None)
+
+            if title:
+                entry["title"] = title
+            entry["type"] = block_type
+            sanitized[slot_time] = entry
+
+        return sanitized
+
     def generate_dynamic_schedule(self) -> dict:
         logger.info("🧠 [EditorialDirectorAgent] Inizio brainstorming per il palinsesto dinamico...")
 
@@ -173,6 +213,8 @@ LINEE GUIDA EDITORIALI PER IMPREVEDIBILITÀ:
 - Spargi 3-4 slot "flash_60s" in momenti inaspettati (es. "11:00", "16:00", "23:00").
 - Garantisci almeno un "meteo" al mattino e uno la sera.
 - Rendi ogni giorno diverso dal precedente, alternando rubriche tematiche e stili musicali.
+- Gli slot di tipo "news" sono edizioni generaliste, non rubriche monotematiche: i loro titoli devono suonare come un notiziario generale e non come focus verticali. Quindi NO titoli come "Focus Ambiente", "Affari e Mercati" o "Interviste Esclusive" per type "news".
+- Se vuoi un titolo fortemente tematico, usalo solo quando il formato supporta davvero quel focus (ad esempio "wellness", "podcast" o altri format dedicati), non per le edizioni news normali.
 
 5. DEVI INCLUDERE OBBLIGATORIAMENTE i seguenti slot prefissati (Colonne Portanti e Appuntamenti Settimanali).
 Copiali esattamente e aggiungi il resto del palinsesto creativo attorno ad essi:
@@ -218,6 +260,7 @@ Esempio di struttura richiesta:
                 k: parsed_schedule[k]
                 for k in sorted(parsed_schedule.keys())
             }
+            sorted_schedule = self._sanitize_schedule(sorted_schedule)
 
             log_decision(
                 "EditorialDirector",

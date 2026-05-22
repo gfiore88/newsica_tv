@@ -47,6 +47,7 @@ SERVICES = {
             r"src/overlay_agent\.py",
             r"src/hourly_chime_agent\.py",
             r"src/breaking_news_agent\.py",
+            r"src/chat_agent\.py",
         ],
         "command": [PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "director.py")],
         "log": os.path.join(TMP_DIR, "director.log"),
@@ -56,6 +57,12 @@ SERVICES = {
         "patterns": [r"src/stream\.sh", r"ffmpeg.*rtmp://a\.rtmp\.youtube\.com/live2"],
         "command": ["bash", os.path.join(BASE_DIR, "src", "stream.sh")],
         "log": os.path.join(TMP_DIR, "stream.log"),
+    },
+    "chat_agent": {
+        "label": "YouTube Chat",
+        "patterns": [r"src/chat_agent\.py"],
+        "command": [PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "chat_agent.py")],
+        "log": os.path.join(TMP_DIR, "chat_agent.log"),
     },
 }
 
@@ -224,6 +231,61 @@ HTML_TEMPLATE = """
                             🚀 Genera e Manda in Onda
                         </button>
                         <div id="podcast-last-time" class="mt-2 text-[11px] text-slate-500 text-center min-h-[16px]"></div>
+                    </div>
+                </div>
+
+                <!-- Card YouTube Chat Overlay -->
+                <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-700/50">
+                            <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold flex items-center">
+                                💬 YouTube Chat Overlay
+                            </h2>
+                            <span id="chat-service-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 border border-slate-600 font-bold uppercase tracking-wider">
+                                Checking...
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+                            Gestisci l'overlay in tempo reale dei messaggi. Puoi forzare un ID video o simulare un messaggio di test.
+                        </p>
+                        
+                        <!-- Override ID Live -->
+                        <div class="space-y-2 mb-4">
+                            <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">ID Video Live Corrente</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="yt-video-id" maxlength="11"
+                                    class="flex-1 bg-slate-900/60 border border-slate-700 focus:border-red-500 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none transition"
+                                    placeholder="Es. dQw4w9WgXcQ">
+                                <button onclick="saveVideoId()" 
+                                    class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-xs font-bold transition">
+                                    Salva
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Iniezione Test -->
+                        <div class="space-y-2 p-3 rounded-lg border border-slate-700 bg-slate-950/20">
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">Simula Messaggio Chat</div>
+                            <div class="flex gap-2 mb-2">
+                                <input type="text" id="mock-author" 
+                                    class="w-1/3 bg-slate-900/60 border border-slate-700 focus:border-purple-500 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none transition"
+                                    placeholder="Autore">
+                                <select id="mock-role"
+                                    class="w-2/3 bg-slate-900/60 border border-slate-700 focus:border-purple-500 rounded-lg px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none transition">
+                                    <option value="regular">Spettatore Standard</option>
+                                    <option value="moderator">Moderatore</option>
+                                    <option value="sponsor">Sponsor</option>
+                                    <option value="owner">Canale Proprietario</option>
+                                </select>
+                            </div>
+                            <input type="text" id="mock-message" 
+                                class="w-full bg-slate-900/60 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none transition mb-2"
+                                placeholder="Messaggio per l'overlay (max 90 car)...">
+                            <button onclick="injectMockMessage()" 
+                                class="w-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs py-2 px-3 rounded-lg transition-all flex justify-center items-center shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                                🚀 Inietta nell'Overlay
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -677,14 +739,75 @@ HTML_TEMPLATE = """
             }
         }
 
+        async function fetchChatStatus() {
+            try {
+                const res = await fetch('/api/chat/status');
+                const data = await res.json();
+                const badge = document.getElementById('chat-service-badge');
+                if (data.is_running) {
+                    badge.className = "text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold uppercase tracking-wider";
+                    badge.innerText = "Attivo";
+                } else {
+                    badge.className = "text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold uppercase tracking-wider";
+                    badge.innerText = "Spento";
+                }
+                const input = document.getElementById('yt-video-id');
+                if (document.activeElement !== input) {
+                    input.value = data.video_id || "";
+                }
+            } catch (e) {
+                console.error("Errore fetch chat status", e);
+            }
+        }
+
+        async function saveVideoId() {
+            const videoId = document.getElementById('yt-video-id').value.trim();
+            try {
+                const res = await fetch('/api/chat/video_id', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video_id: videoId })
+                });
+                const data = await res.json();
+                logMsg(data.message);
+                fetchChatStatus();
+            } catch (e) {
+                logMsg("Errore salvataggio Video ID");
+            }
+        }
+
+        async function injectMockMessage() {
+            const author = document.getElementById('mock-author').value.trim() || "Spettatore";
+            const role = document.getElementById('mock-role').value;
+            const message = document.getElementById('mock-message').value.trim();
+            if (!message) {
+                alert("Inserisci un messaggio da testare!");
+                return;
+            }
+            try {
+                const res = await fetch('/api/chat/mock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ author, role, message })
+                });
+                const data = await res.json();
+                logMsg(data.message);
+                document.getElementById('mock-message').value = "";
+            } catch (e) {
+                logMsg("Errore iniezione messaggio test");
+            }
+        }
+
         setInterval(fetchState, 3000);
         setInterval(fetchAuditLog, 5000);
         setInterval(fetchMusicMode, 15000);
+        setInterval(fetchChatStatus, 3000);
         
         // Initial fetch
         fetchState();
         fetchAuditLog();
         fetchMusicMode();
+        fetchChatStatus();
 
     </script>
 </body>
@@ -1082,6 +1205,72 @@ def restart_service_route():
         "message": f"{SERVICES[requested_service]['label']} riavviato",
         "restarted_pids": pids,
     })
+
+@app.route('/api/chat/status', methods=['GET'])
+def get_chat_status():
+    video_id = ""
+    if os.path.exists(os.path.join(TMP_DIR, "live_video_id.txt")):
+        try:
+            with open(os.path.join(TMP_DIR, "live_video_id.txt"), "r") as f:
+                video_id = f.read().strip()
+        except:
+            pass
+            
+    # Check if chat_agent is running
+    pids = find_pids([r"src/chat_agent\.py"])
+    is_running = len(pids) > 0
+    
+    return jsonify({
+        "status": "OK",
+        "video_id": video_id,
+        "is_running": is_running
+    })
+
+@app.route('/api/chat/video_id', methods=['POST'])
+def save_chat_video_id():
+    data = request.json or {}
+    video_id = data.get("video_id", "").strip()
+    
+    file_path = os.path.join(TMP_DIR, "live_video_id.txt")
+    if not video_id:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        message = "Auto-discovery ripristinato"
+    else:
+        if len(video_id) != 11:
+            return jsonify({"status": "INVALID", "message": "L'ID video deve essere di 11 caratteri"}), 400
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(video_id)
+        message = f"ID video salvato: {video_id}"
+        
+    return jsonify({"status": "OK", "message": message})
+
+@app.route('/api/chat/mock', methods=['POST'])
+def inject_chat_mock():
+    data = request.json or {}
+    author = data.get("author", "").strip() or "Spettatore"
+    message = data.get("message", "").strip() or "Ciao da NewsicaTV! 🚀"
+    role = data.get("role", "regular")
+    
+    is_moderator = role == "moderator"
+    is_owner = role == "owner"
+    is_sponsor = role == "sponsor"
+    
+    latest_chat_file = os.path.join(TMP_DIR, "latest_chat.json")
+    chat_data = {
+        "author": author,
+        "message": message,
+        "timestamp": time.time(),
+        "is_moderator": is_moderator,
+        "is_owner": is_owner,
+        "is_sponsor": is_sponsor
+    }
+    
+    with open(latest_chat_file, "w", encoding="utf-8") as f:
+        json.dump(chat_data, f, ensure_ascii=False, indent=2)
+        
+    return jsonify({"status": "OK", "message": f"Messaggio di {author} iniettato"})
+
 
 def check_singleton(name):
     import fcntl

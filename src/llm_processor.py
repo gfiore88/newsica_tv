@@ -8,6 +8,7 @@ from newsica.config.paths import TMP_DIR
 from newsica.domain.characters import get_character, known_character_ids
 from newsica.editorial.fallback_scripts import build_fallback_script
 from newsica.editorial.source_filters import fallback_general_news, filter_items_for_character
+from newsica.editorial.title_rules import is_general_news_title
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:12b")
@@ -60,6 +61,18 @@ def build_prompt_payload(news_items, title=None, character_id=None):
                 "concentrati su movimenti semplici da scrivania, postura, pause attive "
                 "e respirazione, senza prescrizioni mediche.\n\n"
             )
+        if character_id == "news":
+            if is_general_news_title(title):
+                news_text += (
+                    "Questa e' un'edizione news generalista. E' corretto costruire una scaletta mista con "
+                    "cronaca, politica, esteri, economia, cultura, tecnologia e sport, mantenendo un tono da "
+                    "telegiornale e senza trasformarla in una rubrica monotematica.\n\n"
+                )
+            else:
+                news_text += (
+                    "Questa e' una rubrica news tematica. Usa solo spunti coerenti con il titolo e scarta "
+                    "le notizie che portano fuori argomento. Il titolo non e' decorativo.\n\n"
+                )
 
     news_text += "Ecco le notizie o gli spunti da rielaborare:\n\n"
     for item in news_items:

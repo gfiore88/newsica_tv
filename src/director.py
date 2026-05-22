@@ -353,10 +353,11 @@ def main():
     write_state_files({"status": "OFFLINE"})
     
     threading.Thread(target=generator_worker, daemon=True).start()
-    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "preparation_agent.py")]), daemon=True).start()
-    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "ticker_agent.py")]), daemon=True).start()
-    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "overlay_agent.py")]), daemon=True).start()
-    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "hourly_chime_agent.py")]), daemon=True).start()
+    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "preparation_agent.py")]), daemon=True).start()
+    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "ticker_agent.py")]), daemon=True).start()
+    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "overlay_agent.py")]), daemon=True).start()
+    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "hourly_chime_agent.py")]), daemon=True).start()
+    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "chat_agent.py")]), daemon=True).start()
     
     silence = b'\x00' * PCM_CHUNK_BYTES
     last_schedule_key = get_wallclock_schedule_key()

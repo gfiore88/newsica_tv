@@ -157,6 +157,21 @@ CLOCK_BOX = (1080, 30, 1250, 132)
 MUSIC_BOX = (995, 145, 1250, 187)
 TIMELINE_BOX = (30, 535, 1250, 642)
 TICKER_BOX = (0, 676, WIDTH, HEIGHT)
+CHAT_BOX = (30, 370, 480, 505)
+
+# Chat state machine globals
+CHAT_STATE_IDLE = 0
+CHAT_STATE_FADE_IN = 1
+CHAT_STATE_DISPLAY = 2
+CHAT_STATE_FADE_OUT = 3
+
+_chat_state = CHAT_STATE_IDLE
+_chat_msg_data = None
+_chat_state_start_time = 0.0
+_chat_last_checked_msg_timestamp = 0.0
+_chat_opacity = 0
+_chat_last_disk_read = 0.0
+
 
 # Ticker caching globals
 _last_ticker_content = None
@@ -674,6 +689,114 @@ _cached_schedule_items = []
 _cached_ticker_text = ""
 
 
+def draw_chat_overlay(image, accent):
+    global _chat_state, _chat_state_start_time, _chat_opacity, _chat_msg_data, _chat_last_checked_msg_timestamp, _chat_last_disk_read
+    
+    now_mono = time.monotonic()
+    
+    # 1. Rilevamento nuovi messaggi
+    if now_mono - _chat_last_disk_read >= 0.5:
+        _chat_last_disk_read = now_mono
+        latest_chat_file = os.path.join(TMP_DIR, "latest_chat.json")
+        if os.path.exists(latest_chat_file):
+            try:
+                with open(latest_chat_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    msg_timestamp = data.get("timestamp", 0.0)
+                    if msg_timestamp > _chat_last_checked_msg_timestamp:
+                        _chat_last_checked_msg_timestamp = msg_timestamp
+                        _chat_msg_data = data
+                        _chat_state = CHAT_STATE_FADE_IN
+                        _chat_state_start_time = now_mono
+            except Exception:
+                pass
+                
+    # 2. Aggiornamento macchina a stati
+    if _chat_state == CHAT_STATE_IDLE:
+        _chat_opacity = 0
+        return
+        
+    elapsed = now_mono - _chat_state_start_time
+    
+    if _chat_state == CHAT_STATE_FADE_IN:
+        duration = 0.5
+        if elapsed >= duration:
+            _chat_state = CHAT_STATE_DISPLAY
+            _chat_state_start_time = now_mono
+            _chat_opacity = 235
+        else:
+            _chat_opacity = int(235 * (elapsed / duration))
+            
+    elif _chat_state == CHAT_STATE_DISPLAY:
+        duration = 6.0
+        _chat_opacity = 235
+        if elapsed >= duration:
+            _chat_state = CHAT_STATE_FADE_OUT
+            _chat_state_start_time = now_mono
+            
+    elif _chat_state == CHAT_STATE_FADE_OUT:
+        duration = 0.5
+        if elapsed >= duration:
+            _chat_state = CHAT_STATE_IDLE
+            _chat_opacity = 0
+            _chat_msg_data = None
+        else:
+            _chat_opacity = int(235 * (1.0 - (elapsed / duration)))
+            
+    # 3. Rendering della card
+    if _chat_opacity > 0 and _chat_msg_data:
+        x1, y1, x2, y2 = CHAT_BOX
+        w = x2 - x1
+        h = y2 - y1
+        
+        chat_card = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        card_draw = ImageDraw.Draw(chat_card)
+        
+        # Disegna il box glassmorphic
+        card_draw.rounded_rectangle((0, 0, w, h), radius=2, fill=(15, 23, 42, _chat_opacity))
+        card_draw.rectangle((0, 0, 6, h), fill=accent[:3] + (_chat_opacity,))
+        
+        # Disegna il badge "CHAT LIVE"
+        card_draw.text((22, 12), "CHAT LIVE", font=FONT_LABEL, fill=(244, 63, 94, _chat_opacity))
+        
+        # Scegli colore autore in base al ruolo
+        author = _chat_msg_data.get("author", "Anonimo")
+        is_mod = _chat_msg_data.get("is_moderator", False)
+        is_own = _chat_msg_data.get("is_owner", False)
+        is_spon = _chat_msg_data.get("is_sponsor", False)
+        
+        if is_own:
+            author_color = (248, 113, 113, _chat_opacity)  # Rosso chiaro
+            role_label = " (Owner)"
+        elif is_mod:
+            author_color = (74, 222, 128, _chat_opacity)   # Verde chiaro
+            role_label = " (Mod)"
+        elif is_spon:
+            author_color = (192, 132, 252, _chat_opacity)  # Viola chiaro
+            role_label = " (Sponsor)"
+        else:
+            author_color = (56, 189, 248, _chat_opacity)   # Celeste chiaro
+            role_label = ""
+            
+        author_text = f"{author}{role_label}"
+        
+        # Disegna autore
+        card_draw.text((22, 32), author_text, font=FONT_TIMELINE_LABEL, fill=author_color)
+        
+        # Messaggio wrapped
+        message = _chat_msg_data.get("message", "")
+        max_text_width = w - 44
+        lines = wrap_text_lines(card_draw, message, FONT_SMALL, max_text_width, max_lines=2)
+        
+        msg_y = 58
+        for line in lines:
+            card_draw.text((22, msg_y), line, font=FONT_SMALL, fill=(255, 255, 255, _chat_opacity))
+            msg_y += 20
+            
+        # Componi
+        image.alpha_composite(chat_card, dest=(x1, y1))
+
+
 def render_frame():
     global _last_disk_read_time, _cached_state, _cached_program, _cached_schedule_items, _cached_ticker_text
     
@@ -722,6 +845,8 @@ def render_frame():
 
     if SHOW_TICKER:
         draw_scrolling_ticker(image, accent, ticker_text)
+
+    draw_chat_overlay(image, accent)
 
     return image
 
