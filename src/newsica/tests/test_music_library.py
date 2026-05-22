@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from newsica.audio.ai_music_generator import write_track_metadata
 from newsica.audio.music_library import MusicLibrary
 from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, MUSIC_MODE_MIXED
 
@@ -45,6 +46,31 @@ class TestMusicLibraryModes(unittest.TestCase):
 
         with patch("newsica.audio.music_library.read_music_mode", return_value=MUSIC_MODE_AI_ONLY):
             self.assertIsNone(library.get_random_track())
+
+    def test_ai_only_prefers_tracks_with_metadata_sidecar(self):
+        extra_ai_track = self.ai_music_dir / "ai_track_2.wav"
+        extra_ai_track.write_bytes(b"ai-2")
+        extra_ai_track.with_suffix(".json").write_text('{"title": "Cosmic Drift"}\n', encoding="utf-8")
+        library = MusicLibrary(self.music_dir, self.ai_music_dir)
+
+        with patch("newsica.audio.music_library.read_music_mode", return_value=MUSIC_MODE_AI_ONLY):
+            selected = {Path(library.get_random_track()).name for _ in range(10)}
+
+        self.assertEqual(selected, {"ai_track_2.wav"})
+
+    def test_write_track_metadata_creates_sidecar(self):
+        write_track_metadata(
+            self.ai_track,
+            title="Cosmic Drift",
+            prompt="dreamy synthwave",
+            duration=180.0,
+            mode="instrumental",
+            theme="synthwave",
+        )
+
+        sidecar = self.ai_track.with_suffix(".json")
+        self.assertTrue(sidecar.exists())
+        self.assertIn("Cosmic Drift", sidecar.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

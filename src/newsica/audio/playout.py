@@ -1,8 +1,10 @@
 import datetime
+import json
 import os
 import queue
 import subprocess
 import time
+from functools import lru_cache
 from pathlib import Path
 
 from newsica.audio.music_library import MusicLibrary
@@ -19,6 +21,87 @@ class AudioPlayout:
         self.ffmpeg_cmd = ffmpeg_cmd or resolve_ffmpeg_cmd()
         self.current_process = None
         self.last_music_file = None
+
+    def _display_title_for_music_file(self, music_file):
+        if not music_file:
+            return ""
+
+        track_path = Path(music_file)
+        ai_sidecar_title = self._read_ai_sidecar_title(track_path)
+        if ai_sidecar_title:
+            return ai_sidecar_title
+
+        artist, title = self._read_music_tags(track_path)
+
+        if artist and title:
+            return f"{artist} - {title}"
+
+        if title:
+            return title
+
+        if track_path.parent.resolve() == self.music_library.ai_music_dir.resolve():
+            return "Newsica AI Track"
+
+        fallback_title = track_path.stem.replace("_", " ").strip()
+        return " ".join(fallback_title.split())
+
+    @staticmethod
+    @lru_cache(maxsize=256)
+    def _probe_music_tags(track_path_str):
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v", "error",
+                    "-show_entries", "format_tags=title,artist",
+                    "-of", "json",
+                    track_path_str,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+        except Exception:
+            return "", ""
+
+        if result.returncode != 0 or not result.stdout:
+            return "", ""
+
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return "", ""
+
+        tags = payload.get("format", {}).get("tags", {})
+        artist = " ".join(str(tags.get("artist", "")).split())
+        title = " ".join(str(tags.get("title", "")).split())
+        return artist, title
+
+    def _read_music_tags(self, track_path):
+        if track_path.parent.resolve() == self.music_library.ai_music_dir.resolve():
+            return "", ""
+        return self._probe_music_tags(str(track_path))
+
+    def _read_ai_sidecar_title(self, track_path):
+        try:
+            if track_path.parent.resolve() != self.music_library.ai_music_dir.resolve():
+                return ""
+        except Exception:
+            return ""
+
+        metadata_file = track_path.with_suffix(".json")
+        try:
+            payload = json.loads(metadata_file.read_text(encoding="utf-8"))
+        except Exception:
+            return ""
+
+        title = " ".join(str(payload.get("title", "")).split())
+        return title
+
+    def build_music_metadata(self, music_file, current_state=None):
+        state = dict(current_state or {})
+        state["current_music_title"] = self._display_title_for_music_file(music_file)
+        return state
 
     def is_interrupted(self):
         return self.interrupt_event.is_set() or self.is_breaking_news_active()
@@ -268,6 +351,12 @@ class AudioPlayout:
             time.sleep(1)
             return
         self.last_music_file = music_file
+        self.audio_queue.put(
+            {
+                "type": "metadata",
+                "state": self.build_music_metadata(music_file),
+            }
+        )
 
         print(f"🎵 Brano musicale di riempimento: {os.path.basename(music_file)}")
         process = subprocess.Popen(self._music_decode_command(music_file), stdout=subprocess.PIPE)
@@ -319,6 +408,12 @@ class AudioPlayout:
             time.sleep(1)
             return
         self.last_music_file = music_file
+        self.audio_queue.put(
+            {
+                "type": "metadata",
+                "state": self.build_music_metadata(music_file),
+            }
+        )
 
         print(f"🎵 Brano musicale intermedio (Full Track): {os.path.basename(music_file)}")
         process = subprocess.Popen(self._music_decode_command(music_file), stdout=subprocess.PIPE)

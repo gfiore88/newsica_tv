@@ -33,6 +33,31 @@ PROMPTS_FILE = BASE_DIR / "src" / "newsica" / "editorial" / "prompts" / "music.j
 
 MAX_TRACKS = 20  # Quanti brani mantenere in cache
 
+
+def write_track_metadata(
+    audio_file: Path,
+    *,
+    title: str,
+    prompt: str,
+    duration: float,
+    mode: str,
+    theme: str | None,
+):
+    metadata_file = audio_file.with_suffix(".json")
+    payload = {
+        "title": title,
+        "prompt": prompt,
+        "duration": duration,
+        "mode": mode,
+        "theme": theme,
+        "generated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "audio_file": audio_file.name,
+    }
+    metadata_file.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
 def get_time_of_day():
     hour = datetime.now().hour
     if 5 <= hour < 12:
@@ -201,6 +226,7 @@ def generate_track():
             logger.info(f"Cache limit reached ({len(current_tracks)}/{MAX_TRACKS}). Deleting oldest track: {oldest_track.name}")
             try:
                 oldest_track.unlink(missing_ok=True)
+                oldest_track.with_suffix(".json").unlink(missing_ok=True)
             except Exception as e:
                 logger.error(f"Failed to delete oldest track {oldest_track.name}: {e}")
         
@@ -251,6 +277,14 @@ def generate_track():
         run_ace_step_generation(prompt, temp_file, duration=duration)
         if temp_file.exists():
             normalize_audio(temp_file, final_file, duration=duration)
+            write_track_metadata(
+                final_file,
+                title=title,
+                prompt=prompt,
+                duration=duration,
+                mode=mode,
+                theme=theme,
+            )
             logger.info(f"Successfully added {final_file.name} to library.")
             
             # Pulizia file temporanei

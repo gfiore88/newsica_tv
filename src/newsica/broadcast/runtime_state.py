@@ -60,6 +60,8 @@ def write_accent_files(block_type):
 def write_state_files(state):
     state = dict(state)
     state["last_update"] = state.get("last_update") or time.strftime("%Y-%m-%dT%H:%M:%S")
+    if state.get("current_block") != "music_only" and state.get("current_segment") != "music_rotation_until_deadline":
+        state.pop("current_music_title", None)
     
     # Scrittura atomica dello stato JSON
     try:

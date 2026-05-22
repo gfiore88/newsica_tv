@@ -64,6 +64,10 @@ class MusicLibrary:
         candidates = [path for path in self._tracks_by_source[source] if str(path) != exclude]
         if not candidates:
             candidates = self._tracks_by_source[source]
+        if source == "ai":
+            candidates_with_metadata = [path for path in candidates if path.with_suffix(".json").exists()]
+            if candidates_with_metadata:
+                candidates = candidates_with_metadata
         track = random.choice(candidates)
         self._last_source = source
         return str(track)

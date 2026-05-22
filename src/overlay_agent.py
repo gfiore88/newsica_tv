@@ -257,6 +257,37 @@ def draw_on_air_panel(draw, xy, current_program, accent):
         title_y += 30
 
 
+def draw_music_pill(draw, xy, music_title, accent):
+    if not music_title:
+        return
+
+    x1, y1, x2, y2 = xy
+    pill_fill = (15, 23, 42, 230)
+    border = accent[:3] + (220,)
+    label_color = accent[:3] + (255,)
+    text_color = (255, 255, 255, 255)
+
+    draw.rounded_rectangle(xy, radius=26, fill=pill_fill, outline=border, width=2)
+
+    content_x = x1 + 18
+    max_width = (x2 - x1) - 36
+
+    draw.text(
+        (content_x, y1 + 10),
+        "IN RIPRODUZIONE",
+        font=FONT_LABEL,
+        fill=label_color,
+    )
+
+    title = ellipsize(draw, music_title, FONT_BODY, max_width)
+    draw.text(
+        (content_x, y1 + 34),
+        title,
+        font=FONT_BODY,
+        fill=text_color,
+    )
+
+
 def draw_schedule_timeline(draw, xy, items, accent):
     if not items:
         return
@@ -516,6 +547,7 @@ def render_frame():
     accent = COLORS_BY_BLOCK.get(block_type, (56, 189, 248, 220))
 
     current_program = read_text(PROGRAM_FILE, "NEWSICA TV")
+    current_music_title = " ".join((state.get("current_music_title") or "").split())
     schedule_items = read_schedule_items()
 
     image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
@@ -543,6 +575,17 @@ def render_frame():
         font=FONT_LABEL,
         fill=(203, 213, 225, 255),
     )
+
+    if current_music_title and (
+        block_type == "music_only"
+        or state.get("current_segment") == "music_rotation_until_deadline"
+    ):
+        draw_music_pill(
+            draw,
+            (905, 145, 1250, 205),
+            current_music_title,
+            accent,
+        )
 
     if schedule_items:
         draw_schedule_timeline(
