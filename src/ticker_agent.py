@@ -66,25 +66,25 @@ def format_ticker_news_item(news):
     title = clean_text(news.get("title", ""))
     if not title:
         return ""
-    return f"{ticker_label_for_source(news.get('source', ''))}: {title}"
+    tag = ticker_label_for_source(news.get('source', '')).upper()
+    return f"● {tag} | {title}"
 
 
-def clean_schedule_title(block, max_chars=42):
+
+def clean_schedule_title(block, max_chars=80):
     block_type = block.get("type", "")
     label = SCHEDULE_TYPE_LABELS.get(block_type)
-    title = (block.get("title") or label or "").strip()
+    title = (block.get("title") or "").strip()
 
-    if block_type == "flash_60s":
-        compact = "Flash News"
-    elif block_type in {"sport", "news", "meteo", "wellness", "music_only"} and label:
-        compact = label
-    elif block_type == "podcast":
-        topic = title.split(":", 1)[1].strip() if ":" in title else title
-        compact = f"Podcast: {topic}" if topic else "Podcast"
-    elif label:
-        compact = f"{label}: {title}" if title and title.lower() != label.lower() else label
+    if title:
+        if block_type == "podcast" and not title.lower().startswith("podcast"):
+            compact = f"Podcast: {title}"
+        elif block_type == "flash_60s" and not title.lower().startswith("flash"):
+            compact = f"Flash News: {title}"
+        else:
+            compact = title
     else:
-        compact = title
+        compact = label or block_type or "Trasmissione"
 
     compact = clean_text(compact)
 
@@ -93,6 +93,7 @@ def clean_schedule_title(block, max_chars=42):
         compact = compact[: max_chars - 1].rstrip() + "…"
 
     return compact
+
 
 
 def build_minimal_ticker(status_text, flash_text, next_block):
@@ -174,8 +175,14 @@ def update_ticker():
                     print(f"⚠️ Errore caricamento notizie per ticker: {e}")
 
             if not flash_text:
-                stable_flashes = [clean_text(item) for item in FLASH_NEWS[:4]]
-                flash_text = "  •  ".join(stable_flashes)
+                items = []
+                for item in FLASH_NEWS[:4]:
+                    if ":" in item:
+                        tag, text = item.split(":", 1)
+                        items.append(f"● {tag.strip().upper()} | {text.strip()}")
+                    else:
+                        items.append(clean_text(item))
+                flash_text = " | ".join(items)
 
             ticker_content = build_minimal_ticker(
                 status_text=status_text,
@@ -218,7 +225,7 @@ def update_ticker():
 
                 next_slots = []
 
-                for i in range(1, 5):
+                for i in range(0, 5):
                     idx = (current_idx + i) % len(times)
                     t = times[idx]
                     block = schedule_data[t]

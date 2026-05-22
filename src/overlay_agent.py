@@ -17,8 +17,9 @@ STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 
 WIDTH = 1280
 HEIGHT = 720
-FPS = 1
+FPS = 30
 FRAME_INTERVAL = 1.0 / FPS
+TICKER_FILE = os.path.join(TMP_DIR, "ticker.txt")
 
 COLORS_BY_BLOCK = {
     "breaking_news": (239, 68, 68, 230),
@@ -41,7 +42,7 @@ def read_text(path, default=""):
         return default
 
 
-def read_schedule_items(max_items=4):
+def read_schedule_items(max_items=5):
     try:
         with open(SCHEDULE_FILE, "r", encoding="utf-8") as f:
             raw = f.read().strip()
@@ -123,6 +124,32 @@ FONT_TIMELINE_LABEL = font(14, bold=True)
 FONT_TIMELINE_TIME = font(17, bold=True)
 FONT_TIMELINE_TITLE = font(15)
 FONT_TIMELINE_TITLE_BOLD = font(15, bold=True)
+
+FONT_TICKER = font(20)
+FONT_TICKER_BOLD = font(20, bold=True)
+
+# Ticker caching globals
+_last_ticker_content = None
+_last_accent_color = None
+_cached_layout = None
+_cached_total_width = 0
+
+TAG_COLORS = {
+    "ULTIMORA": (239, 68, 68, 255),          # Rosso brillante
+    "ULTIM'ORA": (239, 68, 68, 255),
+    "SPORT": (34, 197, 94, 255),             # Verde brillante
+    "CRONACA": (251, 146, 60, 255),          # Arancione
+    "MONDO": (56, 189, 248, 255),            # Celeste
+    "ESTERI": (56, 189, 248, 255),
+    "POLITICA": (168, 85, 247, 255),         # Viola
+    "ECONOMIA": (234, 179, 8, 255),          # Oro/Giallo
+    "CULTURA": (236, 72, 153, 255),          # Rosa
+    "TECNOLOGIA": (45, 212, 191, 255),        # Turchese/Teal
+    "SALUTE": (16, 185, 129, 255),           # Smeraldo
+    "LIFESTYLE": (244, 63, 94, 255),         # Rosa scuro/Rose
+    "NEWS": (14, 165, 233, 255),             # Blu oceano
+    "METEO": (14, 165, 233, 255),
+}
 
 
 def text_width(draw, text, selected_font):
@@ -255,7 +282,7 @@ def draw_schedule_timeline(draw, xy, items, accent):
     )
 
     timeline_start_x = x1 + 175
-    timeline_end_x = x2 - 42
+    timeline_end_x = x2 - 100
     timeline_y = y1 + 24
 
     event_count = len(items)
@@ -343,6 +370,140 @@ def draw_schedule_timeline(draw, xy, items, accent):
             line_y += 16
 
 
+def get_ticker_layout(draw, ticker_text, accent):
+    blocks = ticker_text.split("•")
+    layout_segments = []
+    
+    for b_idx, block in enumerate(blocks):
+        block_str = block.strip()
+        if not block_str:
+            continue
+            
+        if "In onda:" in block_str or "Tra poco:" in block_str:
+            layout_segments.append({
+                "text": block_str,
+                "font": FONT_TICKER_BOLD,
+                "color": (253, 224, 71, 255) # soft gold/yellow
+            })
+        else:
+            # Raggruppa gli elementi di notizie all'interno di questo blocco
+            news_parts = block_str.split("●")
+            valid_items = [p.strip() for p in news_parts if p.strip()]
+            
+            for i, item in enumerate(valid_items):
+                subparts = item.split("|")
+                clean_subparts = [sp.strip() for sp in subparts if sp.strip()]
+                
+                if len(clean_subparts) >= 2:
+                    tag = clean_subparts[0]
+                    title = " | ".join(clean_subparts[1:])
+                    
+                    tag_upper = tag.upper().strip()
+                    tag_color = TAG_COLORS.get(tag_upper, accent)
+                    
+                    layout_segments.append({
+                        "text": "● ",
+                        "font": FONT_TICKER_BOLD,
+                        "color": tag_color
+                    })
+                    layout_segments.append({
+                        "text": f"{tag} ",
+                        "font": FONT_TICKER_BOLD,
+                        "color": tag_color
+                    })
+                    layout_segments.append({
+                        "text": "| ",
+                        "font": FONT_TICKER,
+                        "color": (148, 163, 184, 255)
+                    })
+                    layout_segments.append({
+                        "text": title,
+                        "font": FONT_TICKER,
+                        "color": (255, 255, 255, 255)
+                    })
+                else:
+                    layout_segments.append({
+                        "text": item,
+                        "font": FONT_TICKER,
+                        "color": (255, 255, 255, 255)
+                    })
+                    
+                # Separatore interno alle notizie
+                if i < len(valid_items) - 1:
+                    layout_segments.append({
+                        "text": "   •   ",
+                        "font": FONT_TICKER,
+                        "color": (148, 163, 184, 180)
+                    })
+                    
+        # Separatore tra blocchi principali
+        if b_idx < len(blocks) - 1:
+            layout_segments.append({
+                "text": "   •   ",
+                "font": FONT_TICKER,
+                "color": (148, 163, 184, 180)
+            })
+            
+    # Misura le larghezze totali dei segmenti
+    total_width = 0
+    measured_segments = []
+    for seg in layout_segments:
+        w = text_width(draw, seg["text"], seg["font"])
+        measured_segments.append({
+            "text": seg["text"],
+            "font": seg["font"],
+            "color": seg["color"],
+            "width": w
+        })
+        total_width += w
+        
+    return measured_segments, total_width
+
+
+def draw_scrolling_ticker(draw, accent):
+    global _last_ticker_content, _last_accent_color, _cached_layout, _cached_total_width
+    
+    # 1. Draw the background slate bar
+    draw.rectangle((0, 676, 1280, 720), fill=(15, 23, 42, 184))
+    
+    # 2. Read the ticker content
+    ticker_text = read_text(TICKER_FILE)
+    if not ticker_text:
+        return
+        
+    # Full opacity for text accent color
+    accent_text_color = accent[:3] + (255,)
+    
+    # 3. Check cache invalidation
+    if (ticker_text != _last_ticker_content or 
+        accent != _last_accent_color or 
+        _cached_layout is None):
+        _last_ticker_content = ticker_text
+        _last_accent_color = accent
+        _cached_layout, _cached_total_width = get_ticker_layout(draw, ticker_text, accent_text_color)
+        
+    if not _cached_layout or _cached_total_width <= 0:
+        return
+        
+    # 4. Compute scroll offset
+    speed = 160
+    total_cycle = _cached_total_width + 1280
+    scroll_x = int(time.time() * speed) % total_cycle
+    
+    # Start coordinate (drawing from right to left)
+    start_x = 1280 - scroll_x
+    
+    # 5. Draw segments
+    x = start_x
+    y = 676 + (44 - 24) // 2  # Vertically centered
+    
+    for seg in _cached_layout:
+        w = seg["width"]
+        if x + w >= 0 and x < 1280:
+            draw.text((x, y), seg["text"], font=seg["font"], fill=seg["color"])
+        x += w
+
+
 def render_frame():
     now = datetime.now()
     state = read_state()
@@ -390,6 +551,8 @@ def render_frame():
             schedule_items,
             accent,
         )
+
+    draw_scrolling_ticker(draw, accent)
 
     return image
 

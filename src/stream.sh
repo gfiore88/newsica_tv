@@ -121,7 +121,7 @@ if [ "$STREAM_TEST_CARD" = "1" ]; then
 else
   VIDEO_INPUT_ARGS=(-re -framerate 30 -loop 1 -i "$LOGO_FILE")
 
-  FILTER='[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=30[bg]; [1:v]format=rgba,fps=30[overlay]; [bg][overlay]overlay=0:0:format=auto[main_v]; [main_v]drawbox=y=ih-44:color=black@0.72:width=iw:height=44:t=fill[bg_box]; [bg_box]drawtext=textfile='"$TICKER_FILE"':reload=1:fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=22:y=h-32:x=w-mod(t*160\,w+tw):alpha=0.92[ticker]; [ticker]drawbox=x=0:y=ih-44:color=red@0.92:width=165:height=44:t=fill[ticker_box]; [ticker_box]drawtext=text='"'ULTIMORA'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=21:x=20:y=h-32[outv]'
+  FILTER='[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=30[bg]; [1:v]format=rgba,fps=30[overlay]; [bg][overlay]overlay=0:0:format=auto[outv]'
 fi
 
 FFMPEG_PID=""
@@ -175,7 +175,7 @@ while true; do
     -hide_banner -stats_period 5 \
     -progress "$PROGRESS_FILE" \
     -thread_queue_size 4096 "${VIDEO_INPUT_ARGS[@]}" \
-    -thread_queue_size 128 -f rawvideo -pix_fmt rgba -s 1280x720 -r 1 -i "$OVERLAY_PIPE" \
+    -thread_queue_size 128 -f rawvideo -pix_fmt rgba -s 1280x720 -r 30 -i "$OVERLAY_PIPE" \
     -thread_queue_size 4096 -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
     -filter_complex "$FILTER" \
     -map "[outv]" -map 2:a \
