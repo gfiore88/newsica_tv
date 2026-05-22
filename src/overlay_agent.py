@@ -115,6 +115,7 @@ def font(size, bold=False):
 
 
 FONT_LABEL = font(14)
+FONT_LIVESONG = font(10)
 FONT_SMALL = font(16)
 FONT_BODY = font(20)
 FONT_TITLE = font(26, bold=True)
@@ -262,28 +263,27 @@ def draw_music_pill(draw, xy, music_title, accent):
         return
 
     x1, y1, x2, y2 = xy
-    pill_fill = (15, 23, 42, 230)
-    border = accent[:3] + (220,)
-    label_color = accent[:3] + (255,)
-    text_color = (255, 255, 255, 255)
+    panel_fill = (15, 23, 42, 205)
+    label_color = accent[:3] + (245,)
+    text_color = (226, 232, 240, 255)
 
-    draw.rounded_rectangle(xy, radius=26, fill=pill_fill, outline=border, width=2)
+    draw_panel(draw, xy, fill=panel_fill, accent=accent)
 
-    content_x = x1 + 18
-    max_width = (x2 - x1) - 36
+    content_x = x1 + 22
+    max_width = (x2 - x1) - 38
 
     draw.text(
-        (content_x, y1 + 10),
+        (content_x, y1 + 8),
         "IN RIPRODUZIONE",
-        font=FONT_LABEL,
+        font=FONT_LIVESONG,
         fill=label_color,
     )
 
-    title = ellipsize(draw, music_title, FONT_BODY, max_width)
+    title = ellipsize(draw, music_title, FONT_SMALL, max_width)
     draw.text(
-        (content_x, y1 + 34),
+        (content_x, y1 + 24),
         title,
-        font=FONT_BODY,
+        font=FONT_SMALL,
         fill=text_color,
     )
 
@@ -576,13 +576,15 @@ def render_frame():
         fill=(203, 213, 225, 255),
     )
 
+    current_segment = state.get("current_segment", "") or ""
     if current_music_title and (
         block_type == "music_only"
-        or state.get("current_segment") == "music_rotation_until_deadline"
+        or current_segment == "music_rotation_until_deadline"
+        or current_segment.startswith("music_")
     ):
         draw_music_pill(
             draw,
-            (905, 145, 1250, 205),
+            (995, 145, 1250, 187),
             current_music_title,
             accent,
         )

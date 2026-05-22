@@ -4,6 +4,7 @@ import random
 import logging
 import requests
 from datetime import date
+from newsica.editorial.memory import add_music_title, get_recent_music_titles
 from newsica.utils.audit_logger import log_decision
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,48 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
             }
 
         return appointments
+
+    @staticmethod
+    def _normalize_music_title(title: str) -> str:
+        return " ".join((title or "").strip().lower().split())
+
+    @staticmethod
+    def _music_title_tokens(title: str) -> set[str]:
+        stopwords = {
+            "the", "a", "an", "of", "and", "for", "to", "in", "on",
+            "radio", "mix", "edit", "version", "song", "track",
+        }
+        tokens = {
+            token
+            for token in EditorialDirectorAgent._normalize_music_title(title).replace("-", " ").split()
+            if len(token) > 2 and token not in stopwords
+        }
+        return tokens
+
+    def _is_music_title_too_similar(self, title: str, recent_titles: list[str]) -> bool:
+        normalized = self._normalize_music_title(title)
+        if not normalized:
+            return True
+
+        title_tokens = self._music_title_tokens(title)
+        dominant_words = {
+            "pulse", "beat", "beats", "neon", "electric", "vibes",
+            "groove", "rhythm", "dream", "dreams", "motion", "club",
+            "dance", "night", "light", "lights",
+        }
+        for recent_title in recent_titles:
+            recent_normalized = self._normalize_music_title(recent_title)
+            if normalized == recent_normalized:
+                return True
+
+            recent_tokens = self._music_title_tokens(recent_title)
+            overlap = title_tokens & recent_tokens
+            if overlap & dominant_words:
+                return True
+            if overlap and len(overlap) >= 2:
+                return True
+
+        return False
 
     def generate_dynamic_schedule(self) -> dict:
         logger.info("🧠 [EditorialDirectorAgent] Inizio brainstorming per il palinsesto dinamico...")
@@ -321,6 +364,8 @@ Ispirati al sound, strumenti, ritmo e produzione tipici di {theme.upper()} (ad e
             "mode": music_mode,
             "title": "Newsica AI Track"
         }
+        recent_music_titles = get_recent_music_titles(limit=8)
+        recent_music_titles_str = ", ".join(recent_music_titles) if recent_music_titles else "nessuno"
 
         system_prompt = f"""
 Sei il Music Director AI di NewsicaTV, una web radio / web TV automatizzata 24/7.
@@ -349,6 +394,7 @@ CONTESTO:
 - Durata: {duration_seconds} secondi
 - Fade out: ultimi 8 secondi
 - Uso: rotazione radio / webTV / filler musicale / palinsesto NewsicaTV
+- Titoli musicali recenti da evitare: {recent_music_titles_str}
 
 {genre_guideline}
 
@@ -382,6 +428,10 @@ REGOLE PER IL PROMPT:
    low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence.
 9. Deve sembrare un brano moderno da radio/web radio, non una demo amatoriale.
 10. Non generare musica troppo sperimentale, horror, noise, metal o trap aggressiva.
+11. Il campo "title" deve essere molto vario rispetto agli ultimi titoli usati.
+12. Evita tassativamente titoli troppo generici o ricorrenti come: Pulse, Beat, Vibes, Groove, Rhythm, Neon, Electric, Night, Dream, Motion, Fire, Light, Club, Dance se sono gia comparsi di recente.
+13. Non riusare la stessa parola dominante tra i titoli recenti. Se nei titoli recenti compare "Pulse", non usarla di nuovo; stessa regola per "Beat", "Neon", "Electric" e simili.
+14. Il titolo deve avere 2 o 3 parole, sembrare editoriale e distintivo, non un placeholder.
 
 REGOLE PER LA FASCIA ORARIA:
 - night / late night / 00:00-05:00: chill, lounge, synthwave, deep house, soft electronic.
@@ -458,9 +508,23 @@ Lyrics:
                 prompt = parsed.get("prompt", "").strip()
 
                 if self._is_valid_music_prompt(prompt):
+                    parsed_title = " ".join(str(parsed.get("title", "")).split())
+                    if self._is_music_title_too_similar(parsed_title, recent_music_titles):
+                        logger.warning(
+                            "Titolo musicale troppo simile ai recenti ('%s'). Uso fallback.",
+                            parsed_title,
+                        )
+                        log_decision(
+                            "EditorialDirector",
+                            f"Titolo musicale troppo simile ai recenti: '{parsed_title}'. Uso fallback.",
+                            level="WARNING",
+                        )
+                        return fallback_dict
+
+                    add_music_title(parsed_title)
                     logger.info(
                         "🎵 Prompt ACE-Step generato: title='%s', genre='%s', mode='%s', bpm='%s', duration=%s",
-                        parsed.get("title"),
+                        parsed_title,
                         parsed.get("genre"),
                         parsed.get("mode"),
                         parsed.get("tempo_bpm"),
@@ -471,7 +535,7 @@ Lyrics:
                         "EditorialDirector",
                         (
                             f"Prompt ACE-Step generato per '{time_of_day}' "
-                            f"title='{parsed.get('title')}', "
+                            f"title='{parsed_title}', "
                             f"genre='{parsed.get('genre')}', "
                             f"mode='{parsed.get('mode')}', "
                             f"bpm='{parsed.get('tempo_bpm')}', "
@@ -484,7 +548,7 @@ Lyrics:
                         "prompt": prompt,
                         "duration": parsed.get("duration_seconds", duration_seconds),
                         "mode": parsed.get("mode", music_mode),
-                        "title": parsed.get("title", "Newsica AI Track")
+                        "title": parsed_title or "Newsica AI Track"
                     }
 
                 logger.warning("Prompt ACE-Step generato ma non valido o incompleto. Uso fallback.")

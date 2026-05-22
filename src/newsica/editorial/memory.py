@@ -11,13 +11,14 @@ def load_memory():
             "recent_titles": [],
             "recent_rubrics": [],
             "recent_music_tracks": [],
+            "recent_music_titles": [],
             "last_intro_by_rubric": {}
         }
     try:
         with open(MEMORY_FILE, "r") as f:
             data = json.load(f)
             # Assicuriamoci che tutti i campi siano presenti
-            for key in ["recent_titles", "recent_rubrics", "recent_music_tracks", "last_intro_by_rubric"]:
+            for key in ["recent_titles", "recent_rubrics", "recent_music_tracks", "recent_music_titles", "last_intro_by_rubric"]:
                 if key not in data:
                     data[key] = [] if key != "last_intro_by_rubric" else {}
             return data
@@ -27,6 +28,7 @@ def load_memory():
             "recent_titles": [],
             "recent_rubrics": [],
             "recent_music_tracks": [],
+            "recent_music_titles": [],
             "last_intro_by_rubric": {}
         }
 
@@ -64,6 +66,22 @@ def add_music_track(track):
         if len(mem["recent_music_tracks"]) > 15:
             mem["recent_music_tracks"].pop(0)
         save_memory(mem)
+
+def add_music_title(title):
+    cleaned = " ".join((title or "").split())
+    if not cleaned:
+        return
+    mem = load_memory()
+    if cleaned not in mem["recent_music_titles"]:
+        mem["recent_music_titles"].append(cleaned)
+        if len(mem["recent_music_titles"]) > 20:
+            mem["recent_music_titles"].pop(0)
+        save_memory(mem)
+
+def get_recent_music_titles(limit=8):
+    mem = load_memory()
+    titles = mem.get("recent_music_titles", [])
+    return titles[-limit:]
 
 def is_title_recent(title):
     mem = load_memory()
