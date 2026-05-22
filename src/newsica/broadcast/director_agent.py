@@ -72,6 +72,18 @@ class DirectorAgent:
         Prepara il passaggio a un nuovo blocco di palinsesto.
         """
         self._clear_transient_audio()
+        
+        # Estrattore del tema del blocco orario dal palinsesto
+        theme = None
+        try:
+            from schedule_generator import get_current_schedule
+            schedule_data = get_current_schedule()
+            theme = schedule_data.get(current_time, {}).get("theme")
+            if theme:
+                print(f"🎬 [DirectorAgent] Rilevato tema per lo show '{title}': {theme}")
+        except Exception as e:
+            print(f"⚠️ Errore lettura tema dal palinsesto: {e}")
+
         new_state = {
             "status": "ON_AIR",
             "current_block": block_type,
@@ -80,6 +92,7 @@ class DirectorAgent:
             "next_block": next_title,
             "next_start": next_time,
             "scheduled_slot": current_time,
+            "theme": theme,
             "breaking_news_available": False,
             "last_update": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         }
@@ -139,9 +152,9 @@ class DirectorAgent:
             
         time_remaining = (deadline - datetime.datetime.now()).total_seconds()
         trigger_ai_music_gen = time_remaining >= 180
-        
         # Sceglie un brano musicale rispettando la memoria editoriale
-        music_file = self._select_non_repeated_music()
+        theme = state.get("theme")
+        music_file = self._select_non_repeated_music(theme=theme)
         if music_file:
             add_music_track(music_file)
             return {
@@ -210,7 +223,8 @@ class DirectorAgent:
                 # Iniziamo la prima parte del multi-part
                 next_part_file = os.path.join(ready_dir, "audio_part1.wav")
                 if os.path.exists(next_part_file):
-                    music_file = self._select_non_repeated_music()
+                    theme = state.get("theme")
+                    music_file = self._select_non_repeated_music(theme=theme)
                     if music_file:
                         add_music_track(music_file)
                     state["current_segment"] = "voice_part_1"
@@ -226,7 +240,8 @@ class DirectorAgent:
             
             # Flusso classico a parte singola
             if os.path.exists(voice_file):
-                music_file = self._select_non_repeated_music()
+                theme = state.get("theme")
+                music_file = self._select_non_repeated_music(theme=theme)
                 if music_file:
                     add_music_track(music_file)
                 state["current_segment"] = "meteo_brief_playing" if block_type == "meteo" else "voice_single"
@@ -245,7 +260,8 @@ class DirectorAgent:
             state["current_segment"] = "music_rotation_until_deadline"
             write_state_files(state)
             
-            music_file = self._select_non_repeated_music()
+            theme = state.get("theme")
+            music_file = self._select_non_repeated_music(theme=theme)
             if music_file:
                 add_music_track(music_file)
                 return {
@@ -325,7 +341,8 @@ class DirectorAgent:
                 state["stacco_deadline"] = (datetime.datetime.now() + datetime.timedelta(seconds=break_duration)).isoformat()
                 write_state_files(state)
                 
-                music_file = self._select_non_repeated_music()
+                theme = state.get("theme")
+                music_file = self._select_non_repeated_music(theme=theme)
                 if music_file:
                     add_music_track(music_file)
                     return {
@@ -352,7 +369,8 @@ class DirectorAgent:
                 stacco_deadline = datetime.datetime.fromisoformat(stacco_deadline_str)
                 if datetime.datetime.now() < stacco_deadline:
                     # Riempiamo ancora di musica
-                    music_file = self._select_non_repeated_music()
+                    theme = state.get("theme")
+                    music_file = self._select_non_repeated_music(theme=theme)
                     if music_file:
                         add_music_track(music_file)
                         return {
@@ -371,7 +389,8 @@ class DirectorAgent:
             next_part_file = os.path.join(ready_dir, f"audio_part{next_part_idx}.wav")
             
             if os.path.exists(next_part_file):
-                music_file = self._select_non_repeated_music()
+                theme = state.get("theme")
+                music_file = self._select_non_repeated_music(theme=theme)
                 if music_file:
                     add_music_track(music_file)
                 state["current_segment"] = f"voice_part_{next_part_idx}"
@@ -425,7 +444,8 @@ class DirectorAgent:
             time_remaining = (deadline - datetime.datetime.now()).total_seconds()
             trigger_ai_music_gen = time_remaining >= 180
                 
-            music_file = self._select_non_repeated_music()
+            theme = state.get("theme")
+            music_file = self._select_non_repeated_music(theme=theme)
             if music_file:
                 add_music_track(music_file)
                 return {
@@ -493,7 +513,8 @@ class DirectorAgent:
             state["current_segment"] = "music_rotation_until_deadline"
             write_state_files(state)
             
-            music_file = self._select_non_repeated_music()
+            theme = state.get("theme")
+            music_file = self._select_non_repeated_music(theme=theme)
             if music_file:
                 add_music_track(music_file)
                 return {
@@ -525,7 +546,8 @@ class DirectorAgent:
             time_remaining = (deadline - datetime.datetime.now()).total_seconds()
             trigger_ai_music_gen = time_remaining >= 180
                 
-            music_file = self._select_non_repeated_music()
+            theme = state.get("theme")
+            music_file = self._select_non_repeated_music(theme=theme)
             if music_file:
                 add_music_track(music_file)
                 return {
@@ -729,7 +751,7 @@ class DirectorAgent:
         print("⏭️ [DirectorAgent] Lo slot interrotto è quasi scaduto (<40% residuo). Salto direttamente alla programmazione successiva.")
         write_state_files({"status": "OFFLINE"})
 
-    def _select_non_repeated_music(self):
+    def _select_non_repeated_music(self, theme=None):
         """
         Seleziona un brano musicale randomico che non è presente nella memoria recente.
         """
@@ -739,11 +761,11 @@ class DirectorAgent:
             
         # Prova fino a 10 volte per trovare un brano non riprodotto di recente
         for _ in range(10):
-            music_file = self.playout.get_random_music()
+            music_file = self.playout.get_random_music(theme=theme)
             if not music_file:
                 break
             if not is_music_track_recent(music_file):
                 return music_file
                 
         # Se tutti i brani sono recenti, ne restituisce uno a caso per non interrompere l'audio
-        return self.playout.get_random_music()
+        return self.playout.get_random_music(theme=theme)

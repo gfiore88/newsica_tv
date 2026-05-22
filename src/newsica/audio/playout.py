@@ -191,35 +191,74 @@ class AudioPlayout:
             "pipe:1",
         ]
 
+    def _ai_track_matches_theme(self, music_file, theme):
+        if not music_file or not theme:
+            return False
+        try:
+            track_path = Path(music_file)
+            metadata_file = track_path.with_suffix(".json")
+            if not metadata_file.exists():
+                return False
+            with metadata_file.open("r", encoding="utf-8") as f:
+                meta = json.load(f)
+            track_theme = meta.get("theme")
+            if not track_theme:
+                return False
+            return " ".join(str(track_theme).lower().strip().split()) == " ".join(theme.lower().strip().split())
+        except Exception:
+            return False
+
     def _ensure_music_allowed_by_mode(self, music_file):
         if not music_file:
             return None
 
+        # Recuperiamo il tema dello show attivo dallo stato per decidere sul playout
+        theme = None
+        try:
+            from newsica.broadcast.runtime_state import get_current_state
+            theme = get_current_state().get("theme")
+        except Exception:
+            pass
+
         mode = read_music_mode()
+        # Se è programmato un tema, forziamo la modalità Solo AI per questo brano
+        if theme:
+            mode = MUSIC_MODE_AI_ONLY
+
         if mode != MUSIC_MODE_AI_ONLY:
             return music_file
 
+        is_valid_ai = False
         try:
             music_path = Path(music_file).resolve()
             ai_music_dir = self.music_library.ai_music_dir.resolve()
             if music_path.is_relative_to(ai_music_dir):
-                return music_file
+                is_valid_ai = True
         except Exception:
             pass
 
-        replacement = self.get_random_music(exclude=self.last_music_file)
+        # Se abbiamo un tema, dobbiamo anche verificare che la traccia AI corrisponda al tema
+        if is_valid_ai and theme:
+            if not self._ai_track_matches_theme(music_file, theme):
+                is_valid_ai = False
+
+        if is_valid_ai:
+            return music_file
+
+        replacement = self.get_random_music(exclude=self.last_music_file, theme=theme)
         if replacement:
+            label_text = f"per il tema '{theme}'" if theme else "non AI"
             print(
-                "🎵 Modalità Solo Musica AI: sostituisco brano non AI "
+                f"🎵 Sostituisco brano non conforme {label_text} "
                 f"({os.path.basename(str(music_file))}) con {os.path.basename(str(replacement))}."
             )
             return replacement
 
         print(
-            "⚠️ Modalità Solo Musica AI attiva, ma nessun brano valido "
-            "trovato in assets/ai_music."
+            f"⚠️ Modalità Solo AI attiva (tema: '{theme}'), ma nessun brano valido "
+            "trovato in assets/ai_music. Mando in onda il brano originale come estremo fallback."
         )
-        return None
+        return music_file
 
     def queue_pcm_from_file(self, audio_file, block_info=None, is_breaking_news=False):
         if block_info:
@@ -335,8 +374,14 @@ class AudioPlayout:
 
         print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
 
-    def get_random_music(self, exclude=None):
-        return self.music_library.get_random_track(exclude=exclude)
+    def get_random_music(self, exclude=None, theme=None):
+        if theme is None:
+            try:
+                from newsica.broadcast.runtime_state import get_current_state
+                theme = get_current_state().get("theme")
+            except Exception:
+                pass
+        return self.music_library.get_random_track(exclude=exclude, theme=theme)
 
     def queue_music_track(self, deadline):
         if datetime.datetime.now() >= deadline or self.is_interrupted():

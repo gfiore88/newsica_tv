@@ -39,10 +39,13 @@ class MusicLibrary:
             for source, tracks in self._tracks_by_source.items()
         }
 
-    def get_random_track(self, exclude=None):
+    def get_random_track(self, exclude=None, theme=None):
         self.refresh()
 
         mode = read_music_mode()
+        if theme:
+            mode = MUSIC_MODE_AI_ONLY
+
         source_items = self._tracks_by_source.items()
         if mode == MUSIC_MODE_AI_ONLY:
             source_items = [("ai", self._tracks_by_source.get("ai", []))]
@@ -64,10 +67,35 @@ class MusicLibrary:
         candidates = [path for path in self._tracks_by_source[source] if str(path) != exclude]
         if not candidates:
             candidates = self._tracks_by_source[source]
+
         if source == "ai":
+            if theme:
+                normalized_theme = " ".join(theme.lower().strip().split())
+                thematic_candidates = []
+                for path in candidates:
+                    metadata_file = path.with_suffix(".json")
+                    if metadata_file.exists():
+                        try:
+                            import json
+                            with open(metadata_file, "r", encoding="utf-8") as f:
+                                meta = json.load(f)
+                            track_theme = meta.get("theme")
+                            if track_theme:
+                                normalized_track_theme = " ".join(str(track_theme).lower().strip().split())
+                                if normalized_track_theme == normalized_theme:
+                                    thematic_candidates.append(path)
+                        except Exception:
+                            pass
+                if thematic_candidates:
+                    candidates = thematic_candidates
+                    print(f"🎵 Filtro musica per il tema '{theme}': trovate {len(candidates)} tracce corrispondenti.")
+                else:
+                    print(f"⚠️ Nessun brano corrispondente trovato per il tema '{theme}'. Fallback a tutte le tracce AI.")
+
             candidates_with_metadata = [path for path in candidates if path.with_suffix(".json").exists()]
             if candidates_with_metadata:
                 candidates = candidates_with_metadata
+
         track = random.choice(candidates)
         self._last_source = source
         return str(track)

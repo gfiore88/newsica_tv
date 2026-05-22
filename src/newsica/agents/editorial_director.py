@@ -40,7 +40,7 @@ class EditorialDirectorAgent:
 
         # Fallback ACE-Step più solido del vecchio prompt a tag.
         self.fallback_music_prompt = """
-Create a modern 60-second instrumental electro pop song for a web radio / web TV broadcast.
+Create a modern 60-second instrumental electro pop song.
 
 Mood: clean, energetic, optimistic, radio-friendly.
 Tempo: 118 BPM.
@@ -463,7 +463,7 @@ REGOLE PER LA MODALITÀ MUSICALE:
   Niente spoken words.
 
 FORMATO INTERNO DEL CAMPO "prompt":
-Create a modern {duration_seconds}-second [GENRE] song for a web radio / web TV broadcast.
+Create an HIGH PRODUCTION {duration_seconds}-second [GENRE] song.
 
 Mood: ...
 Tempo: ... BPM.
