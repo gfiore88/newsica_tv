@@ -435,37 +435,37 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
 
         return cleaned[start:end]
 
-def _is_valid_music_prompt(self, prompt: str) -> bool:
-    if not prompt:
-        return False
+    def _is_valid_music_prompt(self, prompt: str) -> bool:
+        if not prompt:
+            return False
 
-    normalized = prompt.lower().strip()
+        normalized = prompt.lower().strip()
 
-    if len(normalized) < 250:
-        return False
+        if len(normalized) < 250:
+            return False
 
-    has_duration = "60" in normalized and (
-        "second" in normalized or "seconds" in normalized
-    )
+        has_duration = "60" in normalized and (
+            "second" in normalized or "seconds" in normalized
+        )
 
-    has_fade = "fade" in normalized or "fade out" in normalized
+        has_fade = "fade" in normalized or "fade out" in normalized
 
-    if not has_duration or not has_fade:
-        return False
+        if not has_duration or not has_fade:
+            return False
 
-    quality_checks = [
-        "structure" in normalized,
-        "tempo" in normalized or "bpm" in normalized,
-        "production" in normalized or "mix" in normalized,
-        "instruments" in normalized,
-        "vocals" in normalized or "instrumental" in normalized,
-        "ending" in normalized,
-        "negative prompt" in normalized,
-        "0:00" in normalized or "00:00" in normalized,
-        "1:00" in normalized or "01:00" in normalized,
-    ]
+        quality_checks = [
+            "structure" in normalized,
+            "tempo" in normalized or "bpm" in normalized,
+            "production" in normalized or "mix" in normalized,
+            "instruments" in normalized,
+            "vocals" in normalized or "instrumental" in normalized,
+            "ending" in normalized,
+            "negative prompt" in normalized,
+            "0:00" in normalized or "00:00" in normalized,
+            "1:00" in normalized or "01:00" in normalized,
+        ]
 
-    return sum(quality_checks) >= 4
+        return sum(quality_checks) >= 4
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

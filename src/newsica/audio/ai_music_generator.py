@@ -48,64 +48,136 @@ def load_prompts():
     with open(PROMPTS_FILE, "r") as f:
         return json.load(f)
 
-_PIPELINE = None
+_DIT_HANDLER = None
+_LLM_HANDLER = None
 
-def get_pipeline():
-    global _PIPELINE
-    if _PIPELINE is None:
-        logger.info("Initializing ACEStepPipeline (this will download weights if missing)...")
+def get_handlers():
+    global _DIT_HANDLER, _LLM_HANDLER
+    if _DIT_HANDLER is None:
+        logger.info("Initializing ACE-Step 1.5 Handlers (this will download weights if missing)...")
         ace_step_path = BASE_DIR / ".external" / "ACE-Step"
         if str(ace_step_path) not in sys.path:
             sys.path.insert(0, str(ace_step_path))
-        from acestep.pipeline_ace_step import ACEStepPipeline
         
-        _PIPELINE = ACEStepPipeline(
-            checkpoint_dir=None, # auto download
-            dtype="float32",
-            torch_compile=False,
+        from acestep.handler import AceStepHandler
+        from acestep.llm_inference import LLMHandler
+        
+        # 1. Initialize DiT handler
+        _DIT_HANDLER = AceStepHandler()
+        dit_status, dit_ok = _DIT_HANDLER.initialize_service(
+            project_root=str(ace_step_path),
+            config_path="acestep-v15-turbo",
+            device="auto",
+            use_flash_attention=False,
+            compile_model=False,
+            offload_to_cpu=False,
         )
-    return _PIPELINE
+        if not dit_ok:
+            raise RuntimeError(f"Failed to initialize DiT handler: {dit_status}")
+            
+        # 2. Initialize LLM handler for thinking/CoT reasoning
+        _LLM_HANDLER = LLMHandler()
+        lm_status, lm_ok = _LLM_HANDLER.initialize(
+            checkpoint_dir=str(ace_step_path / "checkpoints"),
+            lm_model_path="acestep-5Hz-lm-0.6B",
+            backend="mlx", # Apple Silicon MLX native acceleration
+            device="auto",
+            offload_to_cpu=False,
+        )
+        if not lm_ok:
+            logger.warning(f"Failed to initialize LLM handler with MLX backend: {lm_status}. Trying fallback 'pt' backend.")
+            lm_status, lm_ok = _LLM_HANDLER.initialize(
+                checkpoint_dir=str(ace_step_path / "checkpoints"),
+                lm_model_path="acestep-5Hz-lm-0.6B",
+                backend="pt",
+                device="auto",
+                offload_to_cpu=False,
+            )
+            if not lm_ok:
+                logger.warning(f"Failed to initialize fallback LLM handler: {lm_status}. Generation will proceed without thinking (fallback quality).")
+                _LLM_HANDLER = None
+                
+    return _DIT_HANDLER, _LLM_HANDLER
 
 def run_ace_step_generation(prompt: str, output_path: Path):
     """
-    Esecuzione reale di ACE-Step.
+    Esecuzione reale di ACE-Step 1.5.
     """
-    logger.info(f"Running ACE-Step generation for prompt: '{prompt}'")
-    pipeline = get_pipeline()
+    logger.info(f"Running ACE-Step 1.5 generation for prompt: '{prompt}'")
+    dit_handler, llm_handler = get_handlers()
     
-    kwargs = {
-        "audio_duration": 60.0,
-        "prompt": prompt,
-        "lyrics": "",
-        "infer_step": 60,
-        "guidance_scale": 15.0,
-        "scheduler_type": "euler",
-        "cfg_type": "apg",
-        "omega_scale": 10.0,
-        "manual_seeds": [random.randint(0, 4294967295)],
-        "guidance_interval": 0.5,
-        "guidance_interval_decay": 0.0,
-        "min_guidance_scale": 3.0,
-        "use_erg_tag": True,
-        "use_erg_lyric": False,
-        "use_erg_diffusion": True,
-        "oss_steps": "",
-        "guidance_scale_text": 0.0,
-        "guidance_scale_lyric": 0.0,
-        "save_path": str(output_path),
-        "format": "wav"
-    }
+    from acestep.inference import generate_music, GenerationParams, GenerationConfig
     
-    pipeline(**kwargs)
-    logger.info(f"Generated raw file at {output_path}")
+    # Estrazione automatica delle lyrics dal prompt se presenti
+    lyrics = "[Instrumental]"
+    instrumental = True
+    prompt_lower = prompt.lower()
+    if "lyrics:" in prompt_lower:
+        idx = prompt_lower.find("lyrics:")
+        lyrics_part = prompt[idx + len("lyrics:"):].strip()
+        # Rimuoviamo eventuali sezioni successive (come Ending:, Negative prompt:)
+        for stop_word in ["ending:", "negative prompt:", "negative:"]:
+            stop_word_lower = stop_word.lower()
+            if stop_word_lower in lyrics_part.lower():
+                stop_idx = lyrics_part.lower().find(stop_word_lower)
+                lyrics_part = lyrics_part[:stop_idx].strip()
+        
+        # Se le lyrics estratte sono valide e non indicano instrumental
+        if lyrics_part and "[instrumental]" not in lyrics_part.lower() and "n/a" not in lyrics_part.lower():
+            lyrics = lyrics_part
+            instrumental = False
+            logger.info(f"Lyrics individuate nel prompt! Lunghezza: {len(lyrics)}. Disabilitato instrumental.")
+            logger.info(f"Lyrics estratte:\n{lyrics}")
+            
+    params = GenerationParams(
+        task_type="text2music",
+        caption=prompt,
+        lyrics=lyrics,
+        instrumental=instrumental,
+        duration=60.0,
+        inference_steps=8, # standard for turbo
+        seed=random.randint(0, 2**32 - 1),
+        enable_normalization=True,
+        normalization_db=-1.0,
+        thinking=(llm_handler is not None),
+    )
+    
+    config = GenerationConfig(
+        batch_size=1,
+        use_random_seed=False,
+        audio_format="wav",
+    )
+    
+    result = generate_music(
+        dit_handler=dit_handler,
+        llm_handler=llm_handler,
+        params=params,
+        config=config,
+        save_dir=str(output_path.parent),
+    )
+    
+    if not result.success:
+        raise RuntimeError(f"Generation failed: {result.error}")
+        
+    if not result.audios:
+        raise RuntimeError("Generation succeeded but no audio files were generated.")
+        
+    generated_file_path = Path(result.audios[0]["path"])
+    logger.info(f"Generated track at: {generated_file_path}")
+    
+    # Move/rename the generated file to the desired output_path
+    if generated_file_path.exists() and generated_file_path != output_path:
+        if output_path.exists():
+            output_path.unlink()
+        generated_file_path.rename(output_path)
 
 def normalize_audio(input_path: Path, output_path: Path):
     """
     Normalizza il file audio a livelli TV broadcast (es -23 LUFS) usando FFmpeg.
     """
     logger.info(f"Normalizing audio: {input_path.name}")
-    # Esempio: usiamo ffmpeg per normalizzare (loudnorm), abbassare il bitrate a 24000 Hz Mono, e fare un fadeout di 5 secondi alla fine
-    cmd = f'ffmpeg -y -i "{input_path}" -ar 24000 -ac 1 -af "loudnorm=I=-14:TP=-1:LRA=11,afade=t=out:st=54:d=5" "{output_path}" -nostats -loglevel error'
+    # Usiamo ffmpeg per normalizzare (loudnorm), impostare a 44100 Hz Stereo, e fare un fadeout di 5 secondi alla fine
+    cmd = f'ffmpeg -y -i "{input_path}" -ar 44100 -ac 2 -af "loudnorm=I=-14:TP=-1:LRA=11,afade=t=out:st=54:d=5" "{output_path}" -nostats -loglevel error'
     res = os.system(cmd)
     if res != 0:
         logger.error("FFmpeg normalization failed. Saving raw instead.")
@@ -118,8 +190,17 @@ def generate_track():
     
     current_tracks = list(AI_MUSIC_DIR.glob("*.wav"))
     if len(current_tracks) >= MAX_TRACKS:
-        logger.info(f"Cache is full ({len(current_tracks)}/{MAX_TRACKS}). Skipping generation.")
-        return False
+        # Ordina i brani per data di modifica, dal più vecchio al più recente
+        current_tracks.sort(key=lambda p: p.stat().st_mtime)
+        # Elimina i brani più vecchi per fare spazio al nuovo
+        num_to_delete = len(current_tracks) - MAX_TRACKS + 1
+        for i in range(num_to_delete):
+            oldest_track = current_tracks[i]
+            logger.info(f"Cache limit reached ({len(current_tracks)}/{MAX_TRACKS}). Deleting oldest track: {oldest_track.name}")
+            try:
+                oldest_track.unlink(missing_ok=True)
+            except Exception as e:
+                logger.error(f"Failed to delete oldest track {oldest_track.name}: {e}")
         
     time_of_day = get_time_of_day()
     fallback_prompts = load_prompts()
