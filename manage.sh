@@ -246,12 +246,78 @@ function do_live_health() {
     export $(cat "$BASE_DIR/.env" | xargs)
   fi
   local public_url="https://www.youtube.com/${YOUTUBE_HANDLE:-@gfiore88}/live"
-  local page
-  page=$(curl -L -s -A "Mozilla/5.0" "$public_url" 2>/dev/null || true)
-  if echo "$page" | rg '"isLiveNow":true|"isLiveContent":true|"text":"LIVE"' >/dev/null; then
-    echo "✅ Il canale pubblico risulta live: $public_url"
+  local public_check
+  public_check=$(PUBLIC_URL="$public_url" python3 <<'PY'
+import json
+import os
+import re
+import requests
+
+public_url = os.environ["PUBLIC_URL"]
+headers = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
+}
+cookies = {"CONSENT": "YES+cb.20210328-17-p0.it+FX+999"}
+
+def clean(value):
+    return " ".join((value or "").split())
+
+def inspect(video_id):
+    watch_url = f"https://www.youtube.com/watch?v={video_id}&ucbcb=1"
+    response = requests.get(watch_url, headers=headers, cookies=cookies, timeout=10)
+    if response.status_code != 200:
+        return False, f"HTTP {response.status_code}", ""
+    match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', response.text)
+    if not match:
+        return False, "player response non trovata", ""
+    data = json.loads(match.group(1))
+    video_details = data.get("videoDetails", {})
+    playability = data.get("playabilityStatus", {}) or {}
+    microformat = data.get("microformat", {}).get("playerMicroformatRenderer", {}) or {}
+    live_broadcast = microformat.get("liveBroadcastDetails", {}) or {}
+    title = clean(video_details.get("title"))
+    reason = clean(playability.get("reason"))
+    reason_lc = reason.lower()
+    ended_markers = ("terminat", "ended", "non è in diretta", "non e' in diretta", "not live", "offline")
+    if reason and any(marker in reason_lc for marker in ended_markers):
+        return False, reason, title
+    is_live = bool(video_details.get("isLive")) or bool(live_broadcast.get("isLiveNow")) or '"isLiveNow":true' in response.text
+    return is_live, reason, title
+
+response = requests.get(f"{public_url}?ucbcb=1", headers=headers, cookies=cookies, timeout=10)
+if response.status_code != 200:
+    print(f"ERROR|HTTP {response.status_code}")
+    raise SystemExit(0)
+
+video_ids = []
+for match in re.findall(r'"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"', response.text):
+    if match not in video_ids:
+        video_ids.append(match)
+
+reasons = []
+for video_id in video_ids[:8]:
+    is_live, reason, title = inspect(video_id)
+    if is_live:
+        print(f"LIVE|{video_id}|{title}")
+        raise SystemExit(0)
+    if reason or title:
+        reasons.append(f"{video_id}: {title or 'senza titolo'} ({reason or 'non live'})")
+
+if reasons:
+    print("OFFLINE|" + " ; ".join(reasons[:3]))
+else:
+    print("OFFLINE|nessun video live confermato")
+PY
+)
+  if [[ "$public_check" == LIVE\|* ]]; then
+    local live_video_id="${public_check#LIVE|}"
+    live_video_id="${live_video_id%%|*}"
+    echo "✅ Il canale pubblico risulta live: $public_url (video $live_video_id)"
   else
+    local public_reason="${public_check#*|}"
     echo "❌ Il player pubblico non risulta live: $public_url"
+    [ -n "$public_reason" ] && echo "   Dettaglio: $public_reason"
     echo "   Se RTMP è connesso, apri YouTube Studio e verifica che la broadcast sia avviata/agganciata allo stream corretto."
   fi
   echo ""

@@ -49,7 +49,7 @@ SERVICES = {
             r"src/breaking_news_agent\.py",
             r"src/chat_agent\.py",
         ],
-        "command": [PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "director.py")],
+        "command": ["bash", os.path.join(BASE_DIR, "src", "watchdog.sh")],
         "log": os.path.join(TMP_DIR, "director.log"),
     },
     "stream": {

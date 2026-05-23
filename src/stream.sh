@@ -46,6 +46,23 @@ release_stream_lock() {
   fi
 }
 
+wait_for_pipe() {
+  local pipe_path="$1"
+  local pipe_label="$2"
+  local waited=0
+
+  while [ ! -p "$pipe_path" ]; do
+    if [ -e "$pipe_path" ] && [ ! -p "$pipe_path" ]; then
+      echo "❌ ERRORE: $pipe_label presente ma non è una FIFO ($pipe_path). Attendo correzione..."
+    elif [ $((waited % 5)) -eq 0 ]; then
+      echo "⏳ In attesa della FIFO $pipe_label ($pipe_path)..."
+    fi
+
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
 acquire_stream_lock
 
 # Carica variabili d'ambiente
@@ -97,15 +114,6 @@ for accent_file in "$ACCENT_NEWS_FILE" "$ACCENT_SPORT_FILE" "$ACCENT_METEO_FILE"
   fi
 done
 
-if [ ! -p "$AUDIO_FILE" ]; then
-  echo "❌ ERRORE: Pipe audio non trovata ($AUDIO_FILE). Esegui prima director.py"
-  exit 1
-fi
-if [ ! -p "$OVERLAY_PIPE" ]; then
-  echo "❌ ERRORE: Pipe overlay non trovata ($OVERLAY_PIPE). Esegui prima overlay_agent.py"
-  exit 1
-fi
-
 echo "🎬 Avvio dello streaming FFmpeg verso YouTube..."
 echo "📡 Destinazione: $YOUTUBE_STREAM_URL"
 
@@ -138,7 +146,9 @@ else
 
   # Rimuoviamo format=rgba,fps=25 dall'overlay in ingresso: la FIFO e' gia' in RGBA,
   # e il filtro overlay ripete l'ultimo frame automaticamente (repeatlast=1).
-  FILTER="[0:v]scale=${STREAM_WIDTH}:${STREAM_HEIGHT}:force_original_aspect_ratio=decrease,pad=${STREAM_WIDTH}:${STREAM_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=${STREAM_FPS}[bg]; [bg][1:v]overlay=0:0:format=auto[outv]"
+  # Una grana molto leggera evita che videotoolbox collassi a bitrate troppo bassi
+  # quando la scena e' quasi statica, migliorando l'aggancio di YouTube Live.
+  FILTER="[0:v]scale=${STREAM_WIDTH}:${STREAM_HEIGHT}:force_original_aspect_ratio=decrease,pad=${STREAM_WIDTH}:${STREAM_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=${STREAM_FPS}[bg]; [bg][1:v]overlay=0:0:format=auto,noise=alls=3:allf=t[outv]"
 fi
 
 if [ "$STREAM_VIDEO_ENCODER" = "h264_videotoolbox" ]; then
@@ -159,7 +169,6 @@ else
   VIDEO_CODEC_ARGS=(
     -c:v libx264
     -preset veryfast
-    -tune stillimage
     -b:v 3000k
     -minrate 3000k
     -maxrate 3000k
@@ -218,6 +227,9 @@ watch_ffmpeg_progress() {
 }
 
 while true; do
+  wait_for_pipe "$AUDIO_FILE" "audio"
+  wait_for_pipe "$OVERLAY_PIPE" "overlay"
+
   echo "🚀 Avvio istanza FFmpeg..."
   echo "🎥 Encoder video selezionato: $STREAM_VIDEO_ENCODER @ ${STREAM_WIDTH}x${STREAM_HEIGHT} stream=${STREAM_FPS}fps overlay=${OVERLAY_FPS}fps"
   : > "$PROGRESS_FILE"

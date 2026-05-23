@@ -17,6 +17,12 @@ from pathlib import Path
 # Aggiungiamo src al path per poter importare gli agenti
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
 from newsica.agents.editorial_director import EditorialDirectorAgent
+from newsica.audio.chat_music_requests import (
+    get_next_request_by_status,
+    mark_failed,
+    mark_generating,
+    mark_ready,
+)
 
 # Configura logger
 logging.basicConfig(
@@ -42,6 +48,9 @@ def write_track_metadata(
     duration: float,
     mode: str,
     theme: str | None,
+    requested_by: str | None = None,
+    request_id: str | None = None,
+    request_text: str | None = None,
 ):
     metadata_file = audio_file.with_suffix(".json")
     payload = {
@@ -52,6 +61,9 @@ def write_track_metadata(
         "theme": theme,
         "generated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "audio_file": audio_file.name,
+        "requested_by": requested_by,
+        "request_id": request_id,
+        "request_text": request_text,
     }
     metadata_file.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -212,7 +224,16 @@ def normalize_audio(input_path: Path, output_path: Path, duration: float = 180.0
     else:
         os.remove(input_path)
 
-def generate_track():
+def _build_fallback_prompt_for_request(custom_brief: str | None) -> str:
+    if not custom_brief:
+        return "instrumental, background music, modern radio song, clean production"
+    return (
+        "Create a modern radio-ready song inspired by this listener request: "
+        f"{custom_brief}. Keep it polished, melodic and suitable for a web TV music rotation."
+    )
+
+
+def generate_track(*, theme: str | None = None, custom_brief: str | None = None, request_metadata: dict | None = None):
     AI_MUSIC_DIR.mkdir(parents=True, exist_ok=True)
     
     current_tracks = list(AI_MUSIC_DIR.glob("*.wav"))
@@ -239,21 +260,25 @@ def generate_track():
     else:
         fallback_prompt = "instrumental, background music, calm, clean production"
         
-    # Recupera il tema attivo per lo slot corrente dal palinsesto
-    theme = None
-    try:
-        from newsica.broadcast.scheduler import get_wallclock_schedule_key
-        from schedule_generator import get_current_schedule
-        schedule_data = get_current_schedule()
-        current_key = get_wallclock_schedule_key()
-        current_block = schedule_data.get(current_key, {})
-        theme = current_block.get("theme", None)
-        logger.info(f"Rilevato tema per lo slot orario '{current_key}': {theme}")
-    except Exception as e:
-        logger.warning(f"Impossibile leggere il tema dal palinsesto: {e}")
+    if theme is None:
+        try:
+            from newsica.broadcast.scheduler import get_wallclock_schedule_key
+            from schedule_generator import get_current_schedule
+            schedule_data = get_current_schedule()
+            current_key = get_wallclock_schedule_key()
+            current_block = schedule_data.get(current_key, {})
+            theme = current_block.get("theme", None)
+            logger.info(f"Rilevato tema per lo slot orario '{current_key}': {theme}")
+        except Exception as e:
+            logger.warning(f"Impossibile leggere il tema dal palinsesto: {e}")
 
     director = EditorialDirectorAgent()
-    prompt_data = director.generate_music_prompt(time_of_day, fallback_prompt, theme=theme)
+    prompt_data = director.generate_music_prompt(
+        time_of_day,
+        _build_fallback_prompt_for_request(custom_brief) if custom_brief else fallback_prompt,
+        theme=theme,
+        custom_brief=custom_brief,
+    )
     
     if isinstance(prompt_data, dict):
         prompt = prompt_data.get("prompt", fallback_prompt)
@@ -269,8 +294,11 @@ def generate_track():
     logger.info(f"Prompt selezionato per la generazione (modalità: {mode}, durata: {duration}s, titolo: '{title}')")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    request_prefix = ""
+    if request_metadata and request_metadata.get("id"):
+        request_prefix = f"request_{request_metadata['id']}_"
     temp_file = TMP_DIR / f"temp_ai_gen_{timestamp}.wav"
-    final_file = AI_MUSIC_DIR / f"ai_track_{timestamp}.wav"
+    final_file = AI_MUSIC_DIR / f"ai_track_{request_prefix}{timestamp}.wav"
     
     try:
         TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -284,6 +312,9 @@ def generate_track():
                 duration=duration,
                 mode=mode,
                 theme=theme,
+                requested_by=(request_metadata or {}).get("author"),
+                request_id=(request_metadata or {}).get("id"),
+                request_text=(request_metadata or {}).get("message"),
             )
             logger.info(f"Successfully added {final_file.name} to library.")
             
@@ -295,16 +326,48 @@ def generate_track():
             except Exception as e:
                 logger.warning(f"Failed to cleanup temp files: {e}")
             
-            return True
+            return final_file, title
         else:
             logger.error("ACE-Step generation failed (no output file).")
-            return False
+            return None, None
     except Exception as e:
         logger.error(f"Failed to generate AI music: {e}")
         if temp_file.exists():
             os.remove(temp_file)
             
-    return False
+    return None, None
+
+
+def process_chat_requests():
+    processed_any = False
+    while True:
+        request = get_next_request_by_status("pending")
+        if not request:
+            return processed_any
+
+        processed_any = True
+        mark_generating(request["id"])
+        logger.info(
+            "🎵 Processing chat music request %s from %s | theme=%s | brief=%s",
+            request.get("id"),
+            request.get("author"),
+            request.get("theme"),
+            request.get("custom_brief"),
+        )
+        try:
+            audio_file, title = generate_track(
+                theme=request.get("theme"),
+                custom_brief=request.get("custom_brief"),
+                request_metadata=request,
+            )
+            if audio_file:
+                mark_ready(request["id"], audio_path=str(audio_file), title=title)
+                logger.info("✅ Chat music request %s ready: %s", request["id"], audio_file.name)
+            else:
+                mark_failed(request["id"], "generation returned no audio file")
+        except Exception as e:
+            mark_failed(request["id"], str(e))
+            logger.error("❌ Chat music request %s failed: %s", request.get("id"), e)
 
 def acquire_lock():
     """Lock basato su PID: se il processo proprietario è morto, rimuove il lock orfano."""
@@ -341,6 +404,7 @@ def release_lock():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--process-chat-requests", action="store_true")
     args = parser.parse_args()
     
     lock = acquire_lock()
@@ -348,6 +412,9 @@ if __name__ == "__main__":
         sys.exit(0)
         
     try:
-        generate_track()
+        if args.process_chat_requests:
+            process_chat_requests()
+        else:
+            generate_track()
     finally:
         release_lock()

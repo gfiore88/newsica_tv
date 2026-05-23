@@ -8,6 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from newsica.audio.music_library import MusicLibrary
+from newsica.audio.chat_music_requests import consume_next_ready_request
 from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, read_music_mode
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 
@@ -21,6 +22,24 @@ class AudioPlayout:
         self.ffmpeg_cmd = ffmpeg_cmd or resolve_ffmpeg_cmd()
         self.current_process = None
         self.last_music_file = None
+
+    def _consume_requested_track(self):
+        request = consume_next_ready_request()
+        if not request:
+            return None
+
+        audio_path = request.get("audio_path")
+        if not audio_path or not Path(audio_path).exists():
+            print(
+                f"⚠️ Richiesta musicale {request.get('id')} pronta ma senza file valido: {audio_path}"
+            )
+            return None
+
+        print(
+            f"🎵 [CHAT REQUEST] Il prossimo brano sara' una richiesta della chat: "
+            f"{os.path.basename(audio_path)}"
+        )
+        return audio_path
 
     def _display_title_for_music_file(self, music_file):
         if not music_file:
@@ -387,11 +406,12 @@ class AudioPlayout:
         if datetime.datetime.now() >= deadline or self.is_interrupted():
             return
 
-        music_file = self.get_random_music(exclude=self.last_music_file)
+        music_file = self._consume_requested_track() or self.get_random_music(exclude=self.last_music_file)
         if not music_file:
             time.sleep(1)
             return
-        music_file = self._ensure_music_allowed_by_mode(music_file)
+        if not str(Path(music_file).name).startswith("ai_track_request_"):
+            music_file = self._ensure_music_allowed_by_mode(music_file)
         if not music_file:
             time.sleep(1)
             return
@@ -443,12 +463,17 @@ class AudioPlayout:
         if self.is_interrupted():
             return
 
+        requested_track = self._consume_requested_track()
+        if requested_track:
+            music_file = requested_track
+
         if not music_file:
             music_file = self.get_random_music(exclude=self.last_music_file)
         if not music_file:
             time.sleep(1)
             return
-        music_file = self._ensure_music_allowed_by_mode(music_file)
+        if not str(Path(music_file).name).startswith("ai_track_request_"):
+            music_file = self._ensure_music_allowed_by_mode(music_file)
         if not music_file:
             time.sleep(1)
             return

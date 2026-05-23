@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -17,10 +18,20 @@ RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 LIVE_VIDEO_ID_FILE = os.path.join(TMP_DIR, "live_video_id.txt")
 LIVE_VIDEO_CACHE_FILE = os.path.join(TMP_DIR, "live_video_cache.txt")
 LATEST_CHAT_FILE = os.path.join(TMP_DIR, "latest_chat.json")
+AI_MUSIC_GENERATOR = os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_generator.py")
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "UCQOA9AoLRA8XG2g9ruogE1g")
 YOUTUBE_HANDLE = os.getenv("YOUTUBE_HANDLE", "@NewsicaTV")
+YOUTUBE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
+}
+YOUTUBE_COOKIES = {
+    "CONSENT": "YES+cb.20210328-17-p0.it+FX+999"
+}
+YOUTUBE_API_QUOTA_COOLDOWN_SECONDS = 3600
+youtube_api_quota_exceeded_until = 0.0
 
 # Filtri di Moderazione
 MAX_MSG_LENGTH = 90
@@ -32,11 +43,176 @@ PROFANITY_BLACKLIST = {
 
 user_last_message_time = {}
 
+SUPPORTED_MUSIC_THEMES = {
+    "rock": "rock",
+    "rocknroll": "rock",
+    "rock and roll": "rock",
+    "dance": "dance/disco",
+    "disco": "dance/disco",
+    "dance disco": "dance/disco",
+    "house": "dance/disco",
+    "latin": "latin/reggaeton/dembow",
+    "reggaeton": "latin/reggaeton/dembow",
+    "dembow": "latin/reggaeton/dembow",
+    "latino": "latin/reggaeton/dembow",
+    "synthwave": "synthwave",
+    "retrowave": "synthwave",
+    "lofi": "lofi chill",
+    "lo-fi": "lofi chill",
+    "chill": "lofi chill",
+    "lofi chill": "lofi chill",
+    "ballad": "pop ballad",
+    "ballata": "pop ballad",
+    "pop ballad": "pop ballad",
+}
+
+MUSIC_REQUEST_PATTERNS = (
+    "vorrei ascoltare",
+    "voglio ascoltare",
+    "mi fai ascoltare",
+    "metti un brano",
+    "metti una canzone",
+    "metti un pezzo",
+    "fammi sentire",
+    "manda un brano",
+    "riproduci un brano",
+)
+
 
 def clean_text(text):
     if not text:
         return ""
     return " ".join(text.strip().split())
+
+
+def fetch_youtube_page(url):
+    return requests.get(url, headers=YOUTUBE_HEADERS, cookies=YOUTUBE_COOKIES, timeout=10)
+
+
+def inspect_live_video(video_id):
+    url = f"https://www.youtube.com/watch?v={video_id}&ucbcb=1"
+    try:
+        response = fetch_youtube_page(url)
+        if response.status_code != 200:
+            return {"is_live": False, "reason": f"HTTP {response.status_code}"}
+
+        match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', response.text)
+        if not match:
+            return {"is_live": False, "reason": "player response non trovata"}
+
+        data = json.loads(match.group(1))
+        video_details = data.get("videoDetails", {})
+        playability = data.get("playabilityStatus", {}) or {}
+        microformat = data.get("microformat", {}).get("playerMicroformatRenderer", {}) or {}
+        live_broadcast = microformat.get("liveBroadcastDetails", {}) or {}
+
+        title = clean_text(video_details.get("title", ""))
+        reason = clean_text(playability.get("reason", ""))
+        reason_lc = reason.lower()
+        ended_markers = (
+            "terminat",
+            "ended",
+            "non è in diretta",
+            "non e' in diretta",
+            "not live",
+            "offline",
+        )
+
+        if reason and any(marker in reason_lc for marker in ended_markers):
+            return {"is_live": False, "reason": reason, "title": title}
+
+        is_live = bool(video_details.get("isLive")) or bool(live_broadcast.get("isLiveNow"))
+        if not is_live and '"isLiveNow":true' in response.text:
+            is_live = True
+
+        return {
+            "is_live": is_live,
+            "reason": reason,
+            "title": title,
+        }
+    except Exception as e:
+        return {"is_live": False, "reason": f"errore verifica watch page: {e}"}
+
+
+def pick_live_video_id(candidate_ids, source_label):
+    seen = set()
+    for video_id in candidate_ids:
+        if not video_id or len(video_id) != 11 or video_id in seen:
+            continue
+        seen.add(video_id)
+
+        info = inspect_live_video(video_id)
+        if info.get("is_live"):
+            print(f"✅ [DISCOVERY] Video live confermato da {source_label}: {video_id} ({info.get('title', 'titolo sconosciuto')})")
+            return video_id
+
+        reason = info.get("reason") or "video non live"
+        print(f"ℹ️ [DISCOVERY] Scarto Video ID {video_id} da {source_label}: {reason}")
+
+    return None
+
+
+def extract_music_request(message):
+    normalized = clean_text(message).lower()
+    if not normalized:
+        return None
+
+    if not any(trigger in normalized for trigger in MUSIC_REQUEST_PATTERNS):
+        return None
+    if not any(word in normalized for word in ("brano", "canzone", "pezzo", "musica", "track")):
+        return None
+
+    compact = normalized.replace("-", " ")
+    theme = None
+    for alias, canonical in sorted(SUPPORTED_MUSIC_THEMES.items(), key=lambda item: len(item[0]), reverse=True):
+        if alias in compact:
+            theme = canonical
+            break
+
+    custom_brief = compact
+    for trigger in MUSIC_REQUEST_PATTERNS:
+        custom_brief = custom_brief.replace(trigger, " ")
+    for token in ("un brano", "una canzone", "un pezzo", "di", "del", "della", "genre", "genere", "musica"):
+        custom_brief = custom_brief.replace(token, " ")
+    custom_brief = " ".join(custom_brief.split())
+
+    return {
+        "theme": theme,
+        "custom_brief": custom_brief[:120] if custom_brief else "",
+    }
+
+
+def trigger_music_request_generation():
+    try:
+        subprocess.Popen(
+            [sys.executable, AI_MUSIC_GENERATOR, "--process-chat-requests"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as e:
+        print(f"❌ [CHAT REQUEST] Impossibile avviare il generatore musicale: {e}")
+
+
+def maybe_enqueue_music_request(author, message):
+    intent = extract_music_request(message)
+    if not intent:
+        return None
+
+    from newsica.audio.chat_music_requests import enqueue_request
+
+    request = enqueue_request(
+        author=author,
+        message=message,
+        theme=intent.get("theme"),
+        custom_brief=intent.get("custom_brief"),
+    )
+    print(
+        f"🎵 [CHAT REQUEST] Richiesta musicale acquisita da {author}: "
+        f"theme={request.get('theme') or 'freeform'} | text='{message}'"
+    )
+    trigger_music_request_generation()
+    return request
 
 
 def is_moderated(author, message):
@@ -77,17 +253,12 @@ def get_live_video_id_from_public_page(handle=None, channel_id=None):
     else:
         return None
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
-    }
-    cookies = {
-        "CONSENT": "YES+cb.20210328-17-p0.it+FX+999"
-    }
     try:
         print(f"🔍 [DISCOVERY] Scansione della pagina live pubblica: {url}")
-        r = requests.get(url, headers=headers, cookies=cookies, timeout=10)
+        r = fetch_youtube_page(url)
         if r.status_code == 200:
+            candidate_ids = []
+
             # 1. Prova a cercare ytInitialPlayerResponse
             match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', r.text)
             if match:
@@ -95,10 +266,8 @@ def get_live_video_id_from_public_page(handle=None, channel_id=None):
                     data = json.loads(match.group(1))
                     video_details = data.get("videoDetails", {})
                     video_id = video_details.get("videoId")
-                    is_live = video_details.get("isLive", False)
-                    if video_id and is_live:
-                        print(f"✅ [DISCOVERY] Trovato Video ID {video_id} in ytInitialPlayerResponse (isLive={is_live})")
-                        return video_id
+                    if video_id:
+                        candidate_ids.append(video_id)
                 except Exception as je:
                     print(f"⚠️ [DISCOVERY] Errore parsing ytInitialPlayerResponse: {je}")
 
@@ -107,14 +276,14 @@ def get_live_video_id_from_public_page(handle=None, channel_id=None):
             if canonical_match:
                 v_match = re.search(r'v=([a-zA-Z0-9_-]{11})', canonical_match.group(1))
                 if v_match:
-                    print(f"✅ [DISCOVERY] Trovato Video ID {v_match.group(1)} in canonical link")
-                    return v_match.group(1)
+                    candidate_ids.append(v_match.group(1))
 
             # 3. Fallback: cerca videoId generico
             video_ids = re.findall(r'"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"', r.text)
             if video_ids:
-                print(f"✅ [DISCOVERY] Trovato primo Video ID {video_ids[0]} in JSON generico")
-                return video_ids[0]
+                candidate_ids.extend(video_ids[:8])
+
+            return pick_live_video_id(candidate_ids, "pagina pubblica")
     except Exception as e:
         print(f"❌ [DISCOVERY] Errore nello scraping della pagina live: {e}")
     return None
@@ -125,24 +294,24 @@ def get_live_video_id_embed(channel_id):
     Rileva l'ID del video live a costo zero usando l'embed url pubblico (fallback secondario).
     """
     url = f"https://www.youtube.com/embed/live_stream?channel={channel_id}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
-    }
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = fetch_youtube_page(url)
         if r.status_code == 200:
+            candidate_ids = []
+
             # Canonical link search
             canonical_match = re.search(r'<link rel="canonical" href="([^"]+)"', r.text)
             if canonical_match:
                 v_match = re.search(r'v=([a-zA-Z0-9_-]{11})', canonical_match.group(1))
                 if v_match:
-                    return v_match.group(1)
+                    candidate_ids.append(v_match.group(1))
             
             # JSON videoId search
             video_id_matches = re.findall(r'"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"', r.text)
             if video_id_matches:
-                return video_id_matches[0]
+                candidate_ids.extend(video_id_matches[:8])
+
+            return pick_live_video_id(candidate_ids, "embed pubblico")
     except Exception as e:
         print(f"❌ [DISCOVERY] Errore nello scraping del video live ID embed: {e}")
     return None
@@ -154,6 +323,14 @@ def get_live_video_id_via_api(api_key, channel_id):
     Questa strategia e' piu' affidabile dello scraping della pagina pubblica
     quando il canale ha piu' live recenti con lo stesso titolo.
     """
+    global youtube_api_quota_exceeded_until
+
+    now = time.time()
+    if youtube_api_quota_exceeded_until > now:
+        remaining = int(youtube_api_quota_exceeded_until - now)
+        print(f"⏸️ [DISCOVERY] YouTube API in cooldown per quota esaurita, skip per altri {remaining}s.")
+        return None
+
     url = "https://www.googleapis.com/youtube/v3/search"
     params = {
         "part": "snippet",
@@ -176,6 +353,9 @@ def get_live_video_id_via_api(api_key, channel_id):
                     return video_id
             print("⚠️ [DISCOVERY] Nessun video live trovato via API per il canale.")
         else:
+            if r.status_code == 403 and "quotaExceeded" in r.text:
+                youtube_api_quota_exceeded_until = time.time() + YOUTUBE_API_QUOTA_COOLDOWN_SECONDS
+                print(f"⏸️ [DISCOVERY] Quota YouTube API esaurita. Sospendo le chiamate API per {YOUTUBE_API_QUOTA_COOLDOWN_SECONDS}s.")
             print(f"❌ [DISCOVERY] Errore search.list: {r.status_code} - {r.text}")
     except Exception as e:
         print(f"❌ [DISCOVERY] Errore nella ricerca API del video live: {e}")
@@ -235,7 +415,15 @@ def get_active_video_id():
             with open(LIVE_VIDEO_CACHE_FILE, "r", encoding="utf-8") as f:
                 v_id = f.read().strip()
                 if len(v_id) == 11:
-                    return v_id
+                    info = inspect_live_video(v_id)
+                    if info.get("is_live"):
+                        print(f"✅ [DISCOVERY] Riutilizzo cache live confermata: {v_id}")
+                        return v_id
+                    print(f"ℹ️ [DISCOVERY] Cache live scartata ({v_id}): {info.get('reason') or 'video non live'}")
+                    try:
+                        os.remove(LIVE_VIDEO_CACHE_FILE)
+                    except OSError:
+                        pass
         except Exception:
             pass
 
@@ -352,8 +540,10 @@ def run_api_loop(api_key, chat_id):
                             # Se è il proprietario o moderatore, bypassiamo filtri di moderazione
                             if is_own or is_mod:
                                 write_latest_chat(author, message, is_moderator=is_mod, is_owner=is_own, is_sponsor=is_spon)
+                                maybe_enqueue_music_request(author, message)
                             elif not is_moderated(author, message):
                                 write_latest_chat(author, message, is_moderator=is_mod, is_owner=is_own, is_sponsor=is_spon)
+                                maybe_enqueue_music_request(author, message)
                                 
                 time.sleep(polling_interval)
             elif r.status_code == 403:
@@ -390,8 +580,10 @@ def run_pytchat_loop(video_id):
                 if message:
                     if is_own or is_mod:
                         write_latest_chat(author, message, is_moderator=is_mod, is_owner=is_own, is_sponsor=is_spon)
+                        maybe_enqueue_music_request(author, message)
                     elif not is_moderated(author, message):
                         write_latest_chat(author, message, is_moderator=is_mod, is_owner=is_own, is_sponsor=is_spon)
+                        maybe_enqueue_music_request(author, message)
             time.sleep(1)
         except Exception as e:
             print(f"❌ [PYTCHAT] Eccezione nel loop: {e}")

@@ -311,11 +311,15 @@ Esempio di struttura richiesta:
         fallback_prompt: str | None = None,
         music_mode: str | None = None,
         theme: str | None = None,
+        custom_brief: str | None = None,
     ) -> dict:
         """
         Genera un prompt completo per ACE-Step, includendo una durata randomica e un tema.
         """
-        logger.info(f"🧠 [EditorialDirectorAgent] Generazione prompt musicale ACE-Step per {time_of_day} (tema: {theme})...")
+        logger.info(
+            f"🧠 [EditorialDirectorAgent] Generazione prompt musicale ACE-Step per "
+            f"{time_of_day} (tema: {theme}, brief: {custom_brief})..."
+        )
 
         # Selezioniamo casualmente la durata del brano tra 150 e 210 secondi (2.5 - 3.5 minuti)
         duration_seconds = random.randint(150, 210)
@@ -400,6 +404,14 @@ Ispirati al sound, strumenti, ritmo e produzione tipici di {theme.upper()} (ad e
         else:
             genre_pool_str = "modern pop, dance pop, electro pop, chill pop, indie pop, nu disco, funk pop, tropical pop, deep house, melodic house, afro house, synthwave, future bass, soft urban pop, modern lounge, cinematic electronic"
             genre_guideline = f"Scegli un genere moderno e diverso ogni volta da questa lista: {genre_pool_str}."
+
+        if custom_brief:
+            genre_guideline += (
+                "\nRICHIESTA DIRETTA DALLA CHAT:\n"
+                f"- interpreta questa richiesta come vincolo creativo prioritario: {custom_brief}\n"
+                "- se la richiesta cita un genere o un mood, rispettalo nel prompt finale;\n"
+                "- mantieni comunque il risultato radiofonico, pulito e adatto a una rotazione NewsicaTV."
+            )
 
         fallback_dict = {
             "prompt": fallback_prompt,
