@@ -3,6 +3,7 @@ import json
 import random
 import logging
 import requests
+from itertools import product
 from datetime import date
 from newsica.editorial.memory import add_music_title, get_recent_music_titles
 from newsica.editorial.title_rules import is_general_news_title, normalize_title
@@ -68,6 +69,33 @@ The final 8 seconds must fade out smoothly and naturally. No abrupt ending. No s
 Negative prompt:
 low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence
 """.strip()
+        self.music_language_profiles = {
+            "default": [("italian", 55), ("english", 30), ("spanish", 15)],
+            "rock": [("italian", 50), ("english", 45), ("spanish", 5)],
+            "dance/disco": [("italian", 45), ("english", 35), ("spanish", 20)],
+            "latin/reggaeton/dembow": [("spanish", 70), ("italian", 15), ("english", 15)],
+            "synthwave": [("english", 55), ("italian", 35), ("spanish", 10)],
+            "lofi chill": [("english", 45), ("italian", 45), ("spanish", 10)],
+            "pop ballad": [("italian", 60), ("english", 30), ("spanish", 10)],
+        }
+        self.music_title_words = {
+            "italian": {
+                "first": ["Luce", "Cuore", "Battito", "Sole", "Respiro", "Strada", "Istante", "Notte", "Onda", "Voce"],
+                "second": ["Dorata", "Libero", "Segreta", "Leggera", "Viva", "Infinita", "Sospesa", "Vicina", "Nuova", "Perfetta"],
+            },
+            "english": {
+                "first": ["Midnight", "Silver", "Velvet", "Golden", "Neon", "Summer", "Ocean", "Electric", "Wild", "Endless"],
+                "second": ["Signal", "Motion", "Horizon", "Fever", "Echo", "Gravity", "Lights", "Desire", "Skyline", "Pulse"],
+            },
+            "spanish": {
+                "first": ["Luna", "Fuego", "Ritmo", "Noche", "Brisa", "Cielo", "Piel", "Ola", "Sueño", "Destino"],
+                "second": ["Dorada", "Viva", "Secreta", "Latina", "Infinita", "Suave", "Encendida", "Perfecta", "Profunda", "Bonita"],
+            },
+            "instrumental": {
+                "first": ["Signal", "Drift", "Vector", "Nova", "Aurora", "Static"],
+                "second": ["One", "Blue", "Glow", "Field", "Line", "Phase"],
+            },
+        }
 
     def get_daily_pillars(self) -> dict:
         return {
@@ -305,6 +333,279 @@ Esempio di struttura richiesta:
             k=1,
         )[0]
 
+    @staticmethod
+    def _detect_language_from_brief(custom_brief: str | None) -> str | None:
+        if not custom_brief:
+            return None
+        brief = custom_brief.lower()
+        if any(marker in brief for marker in (
+            "italiano", "italiana", "in italiano", "lingua italiana", "canzone italiana",
+        )):
+            return "italian"
+        if any(marker in brief for marker in (
+            "inglese", "english", "in english", "lingua inglese",
+        )):
+            return "english"
+        if any(marker in brief for marker in (
+            "spagnolo", "spagnola", "spanish", "español", "espanol",
+            "latina", "latino", "reggaeton", "merengue", "merengueton",
+        )):
+            return "spanish"
+        return None
+
+    @staticmethod
+    def _language_display(language: str) -> str:
+        return {
+            "italian": "Italian",
+            "english": "English",
+            "spanish": "Spanish",
+            "instrumental": "Instrumental",
+        }.get(language, language.title())
+
+    def choose_music_language(
+        self,
+        *,
+        music_mode: str,
+        theme: str | None = None,
+        time_of_day: str | None = None,
+        custom_brief: str | None = None,
+    ) -> str:
+        if music_mode == "instrumental":
+            return "instrumental"
+
+        forced_language = self._detect_language_from_brief(custom_brief)
+        if forced_language:
+            return forced_language
+
+        profile = self.music_language_profiles.get(
+            (theme or "").lower(),
+            self.music_language_profiles["default"],
+        )
+        languages = [item[0] for item in profile]
+        weights = [item[1] for item in profile]
+
+        if time_of_day == "morning":
+            weights = [
+                weight + 10 if language == "italian" else weight
+                for language, weight in zip(languages, weights)
+            ]
+        elif time_of_day == "evening":
+            weights = [
+                weight + 5 if language == "english" else weight
+                for language, weight in zip(languages, weights)
+            ]
+
+        return random.choices(languages, weights=weights, k=1)[0]
+
+    def _build_fallback_lyrics(self, music_mode: str, lyrics_language: str) -> tuple[str, str]:
+        if music_mode == "instrumental":
+            return "No vocals. Instrumental only.", "No lyrics."
+
+        templates = {
+            "italian": {
+                "hook": "Resta qui con me",
+                "lyrics": "\n".join([
+                    "[Verse 1]",
+                    "Luce sulla pelle, l'aria sa d'estate",
+                    "corriamo via da questa citta che dorme male",
+                    "",
+                    "[Build]",
+                    "sale il cuore, non si fermera",
+                    "questa notte ci portera piu in la",
+                    "",
+                    "[Chorus]",
+                    "Resta qui con me",
+                    "balla forte insieme a me",
+                    "questa luce sopra noi",
+                    "non si spegne dentro noi",
+                    "",
+                    "[Verse 2]",
+                    "sotto i neon sogniamo senza fretta",
+                    "ogni battito ci cambia la strada in modo netto",
+                    "",
+                    "[Chorus]",
+                    "Resta qui con me",
+                    "balla forte insieme a me",
+                    "questa luce sopra noi",
+                    "non si spegne dentro noi",
+                ]),
+            },
+            "english": {
+                "hook": "Stay here tonight",
+                "lyrics": "\n".join([
+                    "[Verse 1]",
+                    "City lights are moving like a wave in slow motion",
+                    "we keep the fire alive inside the commotion",
+                    "",
+                    "[Build]",
+                    "Hearts are rising, higher than before",
+                    "every second makes us want it more",
+                    "",
+                    "[Chorus]",
+                    "Stay here tonight",
+                    "hold on to the light",
+                    "we can turn this feeling on",
+                    "keep it going strong",
+                    "",
+                    "[Verse 2]",
+                    "Midnight color falling on the street below",
+                    "every little spark is telling us to go",
+                    "",
+                    "[Chorus]",
+                    "Stay here tonight",
+                    "hold on to the light",
+                    "we can turn this feeling on",
+                    "keep it going strong",
+                ]),
+            },
+            "spanish": {
+                "hook": "Baila cerca de mí",
+                "lyrics": "\n".join([
+                    "[Verse 1]",
+                    "La noche está encendida, tu cintura lo sabe",
+                    "sube la marea cuando tu cuerpo se mueve",
+                    "",
+                    "[Build]",
+                    "Sigue lento, luego dale más",
+                    "que el ritmo nos lleva sin mirar atrás",
+                    "",
+                    "[Chorus]",
+                    "Baila cerca de mí",
+                    "quédate hasta el fin",
+                    "siente el fuego en la piel",
+                    "nadie nos va a detener",
+                    "",
+                    "[Verse 2]",
+                    "Bajo las estrellas vibra la avenida",
+                    "cada vuelta tuya cambia nuestra vida",
+                    "",
+                    "[Chorus]",
+                    "Baila cerca de mí",
+                    "quédate hasta el fin",
+                    "siente el fuego en la piel",
+                    "nadie nos va a detener",
+                ]),
+            },
+        }
+        selected = templates.get(lyrics_language, templates["english"])
+        if music_mode == "vocal_hook":
+            return (
+                f"Short, memorable {self._language_display(lyrics_language)} vocal hook with clean modern delivery. "
+                f"Repeat only this phrase in the chorus: '{selected['hook']}'.",
+                selected["hook"],
+            )
+        if music_mode == "vocal_chops":
+            return (
+                f"Modern vocal chops inspired by {self._language_display(lyrics_language)} phonetics. "
+                "Use chopped syllables as texture, not full intelligible verses.",
+                "N/A (Vocal Chops)",
+            )
+        return (
+            f"Lead vocals in {self._language_display(lyrics_language)} with a modern, radio-friendly tone. "
+            "Keep the writing simple, catchy and emotionally immediate.",
+            selected["lyrics"],
+        )
+
+    def _build_localized_music_title(
+        self,
+        lyrics_language: str,
+        recent_titles: list[str],
+    ) -> str:
+        bank = self.music_title_words.get(lyrics_language, self.music_title_words["english"])
+        candidates = [f"{first} {second}" for first, second in product(bank["first"], bank["second"]) if first != second]
+        random.shuffle(candidates)
+        for candidate in candidates:
+            if not self._is_music_title_too_similar(candidate, recent_titles):
+                return candidate
+        return candidates[0] if candidates else "Newsica AI Track"
+
+    @staticmethod
+    def _extract_lyrics_block(prompt: str) -> str:
+        normalized = prompt or ""
+        lowered = normalized.lower()
+        start = lowered.find("lyrics:")
+        if start == -1:
+            return ""
+        lyrics_block = normalized[start + len("lyrics:"):]
+        for stopper in ("ending:", "negative prompt:", "negative:"):
+            stopper_idx = lyrics_block.lower().find(stopper)
+            if stopper_idx != -1:
+                lyrics_block = lyrics_block[:stopper_idx]
+                break
+        return lyrics_block.strip()
+
+    def _prompt_has_placeholder_lyrics(self, prompt: str) -> bool:
+        lyrics_block = self._extract_lyrics_block(prompt).lower()
+        if not lyrics_block:
+            return False
+        invalid_markers = (
+            "(italian lyrics",
+            "(english lyrics",
+            "(spanish lyrics",
+            "(catchy",
+            "(example:",
+            "example:",
+            "lyrics about",
+            "write lyrics",
+            "insert lyrics",
+            "placeholder",
+            "your lyrics here",
+        )
+        return any(marker in lyrics_block for marker in invalid_markers)
+
+    def _build_music_fallback_prompt(
+        self,
+        *,
+        duration_seconds: int,
+        music_mode: str,
+        lyrics_language: str,
+        t_intro: str,
+        t_verse1: str,
+        t_build: str,
+        t_chorus1: str,
+        t_verse2: str,
+        t_chorus2: str,
+        t_fade: str,
+    ) -> str:
+        vocals, lyrics = self._build_fallback_lyrics(music_mode, lyrics_language)
+        language_line = (
+            "No lyrics."
+            if lyrics_language == "instrumental"
+            else f"Lyrics language: {self._language_display(lyrics_language)}."
+        )
+        return f"""
+Create a modern {duration_seconds}-second electro pop song for a web radio / web TV broadcast.
+
+Mood: clean, energetic, optimistic, radio-friendly.
+Tempo: 118 BPM.
+Style: modern pop with polished synths, punchy drums, deep bass.
+Production: streaming-ready mix, clean low end, wide stereo image.
+Instruments: electronic drums, synth bass, bright pluck synths, warm pads.
+
+Structure:
+{t_intro} short intro.
+{t_verse1} main groove with drums, bass.
+{t_build} build with rising energy.
+{t_chorus1} main hook with full beat.
+{t_verse2} soft bridge.
+{t_chorus2} final hook.
+{t_fade} outro fading out smoothly.
+
+Vocals:
+{vocals}
+
+Lyrics:
+{lyrics}
+
+Ending:
+The final 8 seconds must fade out smoothly and naturally. No abrupt ending. No spoken outro.
+
+Negative prompt:
+low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence
+
+{language_line}
+""".strip()
+
     def generate_music_prompt(
         self,
         time_of_day: str,
@@ -342,44 +643,29 @@ Esempio di struttura richiesta:
         t_verse2 = f"{format_time(chorus1_end)} - {format_time(verse2_end)}"
         t_chorus2 = f"{format_time(verse2_end)} - {format_time(chorus2_end)}"
         t_fade = f"{format_time(chorus2_end)} - {format_time(duration_seconds)}"
-
-        # Default fallback prompt con durata e struttura corretta
-        fallback_prompt = fallback_prompt or self.fallback_music_prompt
-        # Se stiamo usando il fallback_prompt, ma con una durata diversa, aggiorniamo il suo testo per sicurezza
-        if f"{duration_seconds} seconds" not in fallback_prompt:
-            fallback_prompt = f"""
-Create a modern {duration_seconds}-second instrumental song for a web radio / web TV broadcast.
-
-Mood: clean, energetic, optimistic, radio-friendly.
-Tempo: 118 BPM.
-Style: modern pop with polished synths, punchy drums, deep bass.
-Production: streaming-ready mix, clean low end, wide stereo image.
-Instruments: electronic drums, synth bass, bright pluck synths, warm pads.
-
-Structure:
-{t_intro} short intro.
-{t_verse1} main groove with drums, bass.
-{t_build} build with rising energy.
-{t_chorus1} main hook with full beat.
-{t_verse2} soft bridge.
-{t_chorus2} final hook.
-{t_fade} outro fading out smoothly.
-
-Vocals:
-No vocals. Instrumental only.
-
-Lyrics:
-No lyrics.
-
-Ending:
-The final 8 seconds must fade out smoothly and naturally. No abrupt ending.
-
-Negative prompt:
-low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence
-""".strip()
-
         if music_mode is None:
             music_mode = self.choose_music_mode()
+        lyrics_language = self.choose_music_language(
+            music_mode=music_mode,
+            theme=theme,
+            time_of_day=time_of_day,
+            custom_brief=custom_brief,
+        )
+
+        fallback_prompt = fallback_prompt or self.fallback_music_prompt
+        if f"{duration_seconds} seconds" not in fallback_prompt or music_mode != "instrumental":
+            fallback_prompt = self._build_music_fallback_prompt(
+                duration_seconds=duration_seconds,
+                music_mode=music_mode,
+                lyrics_language=lyrics_language,
+                t_intro=t_intro,
+                t_verse1=t_verse1,
+                t_build=t_build,
+                t_chorus1=t_chorus1,
+                t_verse2=t_verse2,
+                t_chorus2=t_chorus2,
+                t_fade=t_fade,
+            )
 
         # Configura il set di generi musicali
         theme_genres = {
@@ -417,10 +703,12 @@ Ispirati al sound, strumenti, ritmo e produzione tipici di {theme.upper()} (ad e
             "prompt": fallback_prompt,
             "duration": duration_seconds,
             "mode": music_mode,
-            "title": "Newsica AI Track"
+            "title": self._build_localized_music_title(lyrics_language, recent_titles=[]),
+            "language": lyrics_language,
         }
         recent_music_titles = get_recent_music_titles(limit=8)
         recent_music_titles_str = ", ".join(recent_music_titles) if recent_music_titles else "nessuno"
+        fallback_dict["title"] = self._build_localized_music_title(lyrics_language, recent_music_titles)
 
         system_prompt = f"""
 Sei il Music Director AI di NewsicaTV, una web radio / web TV automatizzata 24/7.
@@ -434,10 +722,12 @@ Non aggiungere spiegazioni.
 JSON richiesto:
 {{
   "title": "Titolo originale breve del brano",
+  "title_language": "{lyrics_language}",
   "genre": "Genere scelto",
   "mood": "Mood del brano",
   "tempo_bpm": 120,
   "mode": "{music_mode}",
+  "lyrics_language": "{lyrics_language}",
   "duration_seconds": {duration_seconds},
   "fade_out_seconds": 8,
   "prompt": "Prompt completo in inglese da inviare ad ACE-Step"
@@ -446,6 +736,7 @@ JSON richiesto:
 CONTESTO:
 - Fascia oraria: {time_of_day}
 - Modalità musicale richiesta: {music_mode}
+- Lingua target dei testi/vocali: {self._language_display(lyrics_language)}
 - Durata: {duration_seconds} secondi
 - Fade out: ultimi 8 secondi
 - Uso: rotazione radio / webTV / filler musicale / palinsesto NewsicaTV
@@ -466,6 +757,7 @@ REGOLE PER IL PROMPT:
    - production
    - structure temporale
    - vocals
+   - target language for lyrics or vocal phrases
    - lyrics se presenti
    - ending
    - negative prompt
@@ -487,6 +779,13 @@ REGOLE PER IL PROMPT:
 12. Evita tassativamente titoli troppo generici o ricorrenti come: Pulse, Beat, Vibes, Groove, Rhythm, Neon, Electric, Night, Dream, Motion, Fire, Light, Club, Dance se sono gia comparsi di recente.
 13. Non riusare la stessa parola dominante tra i titoli recenti. Se nei titoli recenti compare "Pulse", non usarla di nuovo; stessa regola per "Beat", "Neon", "Electric" e simili.
 14. Il titolo deve avere 2 o 3 parole, sembrare editoriale e distintivo, non un placeholder.
+14b. Il titolo deve essere scritto nella stessa lingua di "lyrics_language". Se lyrics_language = italian, il titolo deve essere in italiano. Se lyrics_language = english, il titolo deve essere in inglese. Se lyrics_language = spanish, il titolo deve essere in spagnolo.
+15. Per il pubblico NewsicaTV privilegia spesso testi in italiano.
+16. L'inglese è ammesso come seconda lingua mainstream.
+17. Per latin pop / reggaeton / dembow / merengue / merengueton privilegia lo spagnolo.
+18. Anche se il campo "prompt" è in inglese, le lyrics devono essere scritte nella lingua target richiesta.
+19. Dentro la sezione "Lyrics:" inserisci solo testo finale cantabile. Vietati placeholder, note redazionali, istruzioni tra parentesi, etichette come "Example:" o spiegazioni sul tipo di lyrics da scrivere.
+20. Se mode = "full_lyrics", le lyrics devono essere complete e direttamente cantabili, non descrizioni di lyrics future.
 
 REGOLE PER LA FASCIA ORARIA:
 - night / late night / 00:00-05:00: chill, lounge, synthwave, deep house, soft electronic.
@@ -516,6 +815,12 @@ REGOLE PER LA MODALITÀ MUSICALE:
   Il brano deve usare vocal chops moderni come texture musicale.
   Niente parole complete comprensibili.
   Niente spoken words.
+
+REGOLE PER LA LINGUA TARGET:
+- Se lyrics_language = "italian", scrivi lyrics o hook in italiano naturale, contemporaneo e radiofonico.
+- Se lyrics_language = "english", scrivi lyrics o hook in inglese semplice, internazionale e radiofonico.
+- Se lyrics_language = "spanish", scrivi lyrics o hook in spagnolo moderno e popolare, specialmente per sonorità latin/reggaeton/dembow/merengue.
+- Se lyrics_language = "instrumental", niente testo cantato.
 
 FORMATO INTERNO DEL CAMPO "prompt":
 Create an HIGH PRODUCTION {duration_seconds}-second [GENRE] song.
@@ -564,24 +869,25 @@ Lyrics:
 
                 if self._is_valid_music_prompt(prompt):
                     parsed_title = " ".join(str(parsed.get("title", "")).split())
-                    if self._is_music_title_too_similar(parsed_title, recent_music_titles):
-                        logger.warning(
-                            "Titolo musicale troppo simile ai recenti ('%s'). Uso fallback.",
-                            parsed_title,
-                        )
+                    resolved_language = parsed.get("lyrics_language", lyrics_language)
+                    final_title = self._build_localized_music_title(resolved_language, recent_music_titles)
+                    if parsed_title and not self._is_music_title_too_similar(parsed_title, recent_music_titles):
                         log_decision(
                             "EditorialDirector",
-                            f"Titolo musicale troppo simile ai recenti: '{parsed_title}'. Uso fallback.",
-                            level="WARNING",
+                            (
+                                f"Titolo LLM '{parsed_title}' sostituito con titolo locale "
+                                f"'{final_title}' per garantire coerenza con la lingua '{resolved_language}'."
+                            ),
+                            level="MUSIC",
                         )
-                        return fallback_dict
 
-                    add_music_title(parsed_title)
+                    add_music_title(final_title)
                     logger.info(
-                        "🎵 Prompt ACE-Step generato: title='%s', genre='%s', mode='%s', bpm='%s', duration=%s",
-                        parsed_title,
+                        "🎵 Prompt ACE-Step generato: title='%s', genre='%s', mode='%s', language='%s', bpm='%s', duration=%s",
+                        final_title,
                         parsed.get("genre"),
                         parsed.get("mode"),
+                        resolved_language,
                         parsed.get("tempo_bpm"),
                         parsed.get("duration_seconds"),
                     )
@@ -590,9 +896,10 @@ Lyrics:
                         "EditorialDirector",
                         (
                             f"Prompt ACE-Step generato per '{time_of_day}' "
-                            f"title='{parsed_title}', "
+                            f"title='{final_title}', "
                             f"genre='{parsed.get('genre')}', "
                             f"mode='{parsed.get('mode')}', "
+                            f"language='{resolved_language}', "
                             f"bpm='{parsed.get('tempo_bpm')}', "
                             f"duration={parsed.get('duration_seconds')}s"
                         ),
@@ -603,7 +910,8 @@ Lyrics:
                         "prompt": prompt,
                         "duration": parsed.get("duration_seconds", duration_seconds),
                         "mode": parsed.get("mode", music_mode),
-                        "title": parsed_title or "Newsica AI Track"
+                        "title": final_title,
+                        "language": resolved_language,
                     }
 
                 logger.warning("Prompt ACE-Step generato ma non valido o incompleto. Uso fallback.")
@@ -660,6 +968,8 @@ Lyrics:
         has_fade = "fade" in normalized or "fade out" in normalized
 
         if not has_duration or not has_fade:
+            return False
+        if self._prompt_has_placeholder_lyrics(prompt):
             return False
 
         quality_checks = [

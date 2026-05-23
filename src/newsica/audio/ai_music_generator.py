@@ -47,6 +47,7 @@ def write_track_metadata(
     prompt: str,
     duration: float,
     mode: str,
+    language: str | None,
     theme: str | None,
     requested_by: str | None = None,
     request_id: str | None = None,
@@ -58,6 +59,7 @@ def write_track_metadata(
         "prompt": prompt,
         "duration": duration,
         "mode": mode,
+        "language": language,
         "theme": theme,
         "generated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "audio_file": audio_file.name,
@@ -285,13 +287,21 @@ def generate_track(*, theme: str | None = None, custom_brief: str | None = None,
         duration = prompt_data.get("duration", 180.0)
         mode = prompt_data.get("mode", "vocal_hook")
         title = prompt_data.get("title", "Newsica AI Track")
+        language = prompt_data.get("language", "instrumental")
     else:
         prompt = prompt_data
         duration = 180.0
         mode = "instrumental"
         title = "Newsica AI Track"
+        language = "instrumental"
 
-    logger.info(f"Prompt selezionato per la generazione (modalità: {mode}, durata: {duration}s, titolo: '{title}')")
+    logger.info(
+        "Prompt selezionato per la generazione (modalità: %s, lingua: %s, durata: %ss, titolo: '%s')",
+        mode,
+        language,
+        duration,
+        title,
+    )
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     request_prefix = ""
@@ -311,6 +321,7 @@ def generate_track(*, theme: str | None = None, custom_brief: str | None = None,
                 prompt=prompt,
                 duration=duration,
                 mode=mode,
+                language=language,
                 theme=theme,
                 requested_by=(request_metadata or {}).get("author"),
                 request_id=(request_metadata or {}).get("id"),

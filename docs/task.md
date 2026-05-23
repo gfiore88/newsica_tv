@@ -41,3 +41,5 @@
 | 38 | /python_engineer | ✅ Done | Segnale orario random una volta l'ora, mixato solo sopra musica e mai sopra speaker |
 | 39 | /python_engineer | ✅ Done | Flag dashboard per scegliere rotazione musica `solo AI` o `mix cartella music + AI` |
 | 40 | /orchestrator | ✅ Done | Refactor Musica AI: worker persistente ACE-Step con coda locale, integrazione servizi e ADR 0036 |
+| 41 | /orchestrator | ✅ Done | Policy prompt multilingua per Musica AI: preferenza italiano, supporto inglese e spagnolo latin con ADR 0037 |
+| 42 | /orchestrator | ✅ Done | Hardening prompt Musica AI: lyrics senza placeholder e titolo sempre coerente con la lingua del brano con ADR 0038 |

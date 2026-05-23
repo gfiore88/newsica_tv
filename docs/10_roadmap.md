@@ -26,6 +26,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] **Fix Race Condition Startup (ADR 0023)**: Risolto deadlock tra `generator_worker` e FFmpeg: introdotto `fifo_connected_event` per bloccare il precaricamento audio finché FFmpeg non si connette; ridotto `audio_queue maxsize` da 5000 a 200 chunk (~17s di buffer sicuro).
 - [x] **Overlay Grafico Locale (ADR 0028)**: Spostata la HUD ON AIR/orologio/prossimi eventi da filtri FFmpeg monolitici a `overlay_agent.py`, che renderizza frame RGBA via Pillow su FIFO rawvideo locale.
 - [x] **Coerenza Titolo-Contenuto (ADR 0029)**: Il titolo dello slot diventa tema obbligatorio nel prompt e gli asset pronti vengono validati tramite manifest rubrica/titolo prima della messa in onda.
+- [x] **Musica AI Multilingua Hardened (ADR 0038)**: Lyrics senza placeholder e titolo locale coerente con la lingua del brano per italiano, inglese e spagnolo.
 - [x] Rotazione agenti robusta: fallback locale per copioni news/sport/meteo quando Ollama non e' disponibile.
 - [x] Espressivita' speaker: prompt piu' parlati, punteggiatura naturale e velocita' TTS per personaggio.
 - [x] Agente Wellness: rubrica fitness, benessere e cura della persona con fonti dedicate e spunti sempre vari.
@@ -36,6 +37,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] **Modalità Rotazione Musica da Dashboard (ADR 0034)**: flag UI persistente per scegliere tra solo `assets/ai_music/` oppure mix `assets/music/` + `assets/ai_music/`.
 - [x] **Encoder Hardware Live su macOS (ADR 0035)**: `stream.sh` usa `h264_videotoolbox` quando disponibile per evitare stream sotto realtime con overlay dinamico e audio live.
 - [x] **Worker Persistente Musica AI (ADR 0036)**: la generazione ACE-Step passa da script one-shot a servizio residente con coda locale e prewarm dei modelli, per evitare bootstrap ripetuti durante la diretta H24.
+- [x] **Prompt Multilingua Musica AI (ADR 0037)**: la generazione dei brani privilegia l'italiano, mantiene l'inglese come seconda lingua e usa lo spagnolo come default forte per i blocchi latin/reggaeton/dembow.
 - [ ] **Lancio Ufficiale**: Diretta pubblica sul canale NewsicaTV.
 
 

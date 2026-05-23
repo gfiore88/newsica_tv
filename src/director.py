@@ -291,18 +291,108 @@ def overlay_chime_on_music(fifo_fd, chime_file, silence):
         "pipe:1"
     ]
     proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
+    
+    import numpy as np
+    
+    # Parametri Sidechain / Ducking
+    threshold = 0.02
+    ratio = 20.0
+    chunk_dur = 2048.0 / 24000.0  # Durata di un chunk (~85.3ms)
+    
+    # Coefficienti per Attack (~50ms) e Release (~800ms)
+    attack_coef = 1.0 - np.exp(-chunk_dur / 0.05)   # ~0.82
+    release_coef = 1.0 - np.exp(-chunk_dur / 0.8)    # ~0.10
+    
+    envelope = 0.0
+    current_gain = 0.78  # Volume base normale della musica
+    normal_gain = 0.78
+    min_gain = 0.15      # Volume minimo a cui viene abbassata la musica
+    overlay_volume = 1.3 # Boost per rendere la voce del segnale orario nitida e chiara
+    
     chunks = 0
     try:
         while True:
             chime_chunk = proc.stdout.read(PCM_CHUNK_BYTES)
             if not chime_chunk:
                 break
+                
             music_chunk = get_next_audio_chunk_for_overlay(silence[:len(chime_chunk)])
-            write_fifo_chunk(fifo_fd, mix_pcm_chunks(music_chunk, chime_chunk))
+            min_len = min(len(music_chunk), len(chime_chunk))
+            
+            if min_len > 0:
+                base = np.frombuffer(music_chunk[:min_len], dtype=np.int16).astype(np.float32)
+                overlay = np.frombuffer(chime_chunk[:min_len], dtype=np.int16).astype(np.float32)
+                
+                # Calcola il picco della voce normalizzato in [0, 1]
+                voice_peak = np.max(np.abs(overlay)) / 32768.0
+                
+                # Aggiorna l'inviluppo con l'inseguitore
+                if voice_peak > envelope:
+                    envelope += attack_coef * (voice_peak - envelope)
+                else:
+                    envelope += release_coef * (voice_peak - envelope)
+                    
+                # Calcola il gain di sidechain basato sull'inviluppo
+                if envelope > threshold:
+                    env_clamped = max(envelope, 1e-5)
+                    input_db = 20.0 * np.log10(env_clamped)
+                    thresh_db = 20.0 * np.log10(threshold)
+                    over_db = input_db - thresh_db
+                    attenuation_db = over_db * (1.0 - 1.0 / ratio)
+                    target_gain_factor = 10.0 ** (-attenuation_db / 20.0)
+                    target_gain = min_gain + (normal_gain - min_gain) * target_gain_factor
+                    target_gain = min(target_gain, normal_gain)
+                else:
+                    target_gain = normal_gain
+                    
+                # Rampa lineare di gain all'interno del chunk per evitare pop/click
+                gains = np.linspace(current_gain, target_gain, len(base), dtype=np.float32)
+                current_gain = target_gain
+                
+                # Mix dei segnali
+                mixed = (base * gains) + (overlay * overlay_volume)
+                mixed_bytes = np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
+                
+                write_fifo_chunk(fifo_fd, mixed_bytes)
+            else:
+                write_fifo_chunk(fifo_fd, music_chunk)
+                
             chunks += 1
+            
+        # --- Fase di rilascio post-chime ---
+        # Riporta gradualmente la musica al volume originale se il file vocale è finito
+        # ma l'inviluppo era ancora attivo (es. musica ancora parzialmente attenuata).
+        while current_gain < (normal_gain - 0.01):
+            music_chunk = get_next_audio_chunk_for_overlay(silence)
+            base = np.frombuffer(music_chunk, dtype=np.int16).astype(np.float32)
+            
+            # La voce è ora totalmente silenziosa
+            voice_peak = 0.0
+            envelope += release_coef * (voice_peak - envelope)
+            
+            if envelope > threshold:
+                env_clamped = max(envelope, 1e-5)
+                input_db = 20.0 * np.log10(env_clamped)
+                thresh_db = 20.0 * np.log10(threshold)
+                over_db = input_db - thresh_db
+                attenuation_db = over_db * (1.0 - 1.0 / ratio)
+                target_gain_factor = 10.0 ** (-attenuation_db / 20.0)
+                target_gain = min_gain + (normal_gain - min_gain) * target_gain_factor
+                target_gain = min(target_gain, normal_gain)
+            else:
+                target_gain = normal_gain
+                
+            gains = np.linspace(current_gain, target_gain, len(base), dtype=np.float32)
+            current_gain = target_gain
+            
+            mixed = base * gains
+            mixed_bytes = np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
+            write_fifo_chunk(fifo_fd, mixed_bytes)
+            chunks += 1
+            
     finally:
         proc.wait()
-    print(f"🔔 Segnale orario mixato sopra la musica ({chunks} chunks).")
+    print(f"🔔 Segnale orario mixato sopra la musica ({chunks} chunks con sidechain).")
 
 def restore_after_interrupt(prev_state, label):
     state = prev_state if prev_state and prev_state.get("current_block") not in {"chime", "breaking_news"} else get_current_state()
