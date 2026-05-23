@@ -42,7 +42,7 @@ class DirectorAgent:
         # Carica percorsi jingle
         self.classic_jingle = str(CLASSIC_JINGLE_FILE)
         
-    def decide_next_action(self):
+    def decide_next_action(self, manual_block_override_index=None):
         """
         Analizza lo stato corrente e il palinsesto per determinare l'azione immediata.
         Restituisce un dizionario contenente l'azione e i relativi parametri.
@@ -53,19 +53,27 @@ class DirectorAgent:
         
         # 1. Se siamo in SPECIAL_BROADCAST, gestiamo la copertura speciale
         if status == "SPECIAL_BROADCAST":
-            return self._handle_special_broadcast(state)
+            res = self._handle_special_broadcast(state)
+            if isinstance(res, dict):
+                _, _, _, _, _, active_idx = get_current_block_info(manual_block_override_index)
+                res["active_idx"] = active_idx
+            return res
             
         # 2. Leggiamo il blocco programmato dal palinsesto
-        block_type, title, next_title, next_time, current_time, active_idx = get_current_block_info()
+        block_type, title, next_title, next_time, current_time, active_idx = get_current_block_info(manual_block_override_index)
         
         # Se lo stato attuale è OFFLINE o non coincide con il blocco corrente, inizializziamo la transizione
         if status == "OFFLINE" or state.get("scheduled_slot") != current_time:
             print(f"🎬 [DirectorAgent] Inizializzazione fascia palinsesto: {current_time} ({title})")
             log_decision("DirectorAgent", f"Inizializzazione fascia palinsesto: {current_time} ({title})", level="PLAYOUT")
-            return self._initialize_scheduled_block(block_type, title, next_title, next_time, current_time)
+            res = self._initialize_scheduled_block(block_type, title, next_title, next_time, current_time)
+        else:
+            # 3. Gestiamo la progressione interna del blocco attivo
+            res = self._progress_current_block(state, block_type, title, next_title, next_time, current_time)
             
-        # 3. Gestiamo la progressione interna del blocco attivo
-        return self._progress_current_block(state, block_type, title, next_title, next_time, current_time)
+        if isinstance(res, dict):
+            res["active_idx"] = active_idx
+        return res
 
     def _initialize_scheduled_block(self, block_type, title, next_title, next_time, current_time):
         """
@@ -146,6 +154,14 @@ class DirectorAgent:
         """
         Fascia puramente musicale: riproduce brani a ciclo continuo fino alla deadline.
         """
+        # Check if this is a past manual override block
+        current_slot = state.get("scheduled_slot")
+        wallclock_slot = get_wallclock_schedule_key()
+        if current_slot and wallclock_slot and current_slot != wallclock_slot:
+            if current_slot < wallclock_slot:
+                print(f"⏰ [DirectorAgent] Past override music slot completed. Returning to normal schedule.")
+                return {"action": "TRIGGER_NEXT_BLOCK"}
+
         deadline = schedule_deadline(next_time)
         if datetime.datetime.now() >= deadline:
             return {"action": "TRIGGER_NEXT_BLOCK"}
@@ -434,6 +450,14 @@ class DirectorAgent:
                     "next_segment": "evening_podcast_generate"
                 }
 
+            # Check if this is a past manual override block
+            current_slot = state.get("scheduled_slot")
+            wallclock_slot = get_wallclock_schedule_key()
+            if current_slot and wallclock_slot and current_slot != wallclock_slot:
+                if current_slot < wallclock_slot:
+                    print(f"⏰ [DirectorAgent] Past override slot '{title}' completed. Returning to normal schedule.")
+                    return {"action": "TRIGGER_NEXT_BLOCK"}
+
             state["current_segment"] = "music_rotation_until_deadline"
             write_state_files(state)
             
@@ -539,6 +563,14 @@ class DirectorAgent:
             state["current_segment"] = "music_rotation_until_deadline"
             write_state_files(state)
             
+            # Check if this is a past manual override block
+            current_slot = state.get("scheduled_slot")
+            wallclock_slot = get_wallclock_schedule_key()
+            if current_slot and wallclock_slot and current_slot != wallclock_slot:
+                if current_slot < wallclock_slot:
+                    print(f"⏰ [DirectorAgent] Past override slot '{title}' completed. Returning to normal schedule.")
+                    return {"action": "TRIGGER_NEXT_BLOCK"}
+
             deadline = schedule_deadline(next_time)
             if datetime.datetime.now() >= deadline:
                 return {"action": "TRIGGER_NEXT_BLOCK"}

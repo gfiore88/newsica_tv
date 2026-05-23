@@ -80,7 +80,7 @@ _singleton_lock = None
 
 
 def generator_worker():
-    global breaking_news_active, manual_block_override_index
+    global breaking_news_active, manual_block_override_index, current_active_index
     print("🤖 Thread Generatore (DirectorAgent Event Loop) avviato.")
     
     # Aspetta che la FIFO sia aperta da FFmpeg prima di pre-caricare audio.
@@ -96,7 +96,9 @@ def generator_worker():
                 time.sleep(1)
                 
             schedule_interrupt_event.clear()
-            action_info = director_agent.decide_next_action()
+            action_info = director_agent.decide_next_action(manual_block_override_index)
+            if action_info and "active_idx" in action_info:
+                current_active_index = action_info["active_idx"]
             action = action_info.get("action")
             
             if action == "PLAY_JINGLE":
