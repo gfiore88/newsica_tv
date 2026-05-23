@@ -18,6 +18,7 @@ from newsica.audio.ai_music_runtime import launch_ai_music_worker
 from newsica.audio.playout import AudioPlayout
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 from newsica.domain.characters import get_character
+from newsica.broadcast import scheduler
 from newsica.broadcast.scheduler import (
     get_current_block_info,
     get_next_block_info_for_key,
@@ -75,6 +76,7 @@ playout = AudioPlayout(
 )
 FFMPEG_CMD = resolve_ffmpeg_cmd()
 director_agent = DirectorAgent(playout)
+_singleton_lock = None
 
 
 def generator_worker():
