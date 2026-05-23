@@ -172,6 +172,17 @@ _chat_last_checked_msg_timestamp = 0.0
 _chat_opacity = 0
 _chat_last_disk_read = 0.0
 
+# Request state machine globals
+REQUEST_STATE_IDLE = 0
+REQUEST_STATE_FADE_IN = 1
+REQUEST_STATE_DISPLAY = 2
+REQUEST_STATE_FADE_OUT = 3
+
+_request_state = REQUEST_STATE_IDLE
+_request_start_time = 0.0
+_request_opacity = 0
+_last_seen_request = (None, None)
+
 
 # Ticker caching globals
 _last_ticker_content = None
@@ -797,6 +808,85 @@ def draw_chat_overlay(image, accent):
         image.alpha_composite(chat_card, dest=(x1, y1))
 
 
+def draw_request_overlay(image, accent, state):
+    global _request_state, _request_start_time, _request_opacity, _last_seen_request
+    
+    requested_by = state.get("requested_by", "")
+    requested_title = state.get("requested_title", "")
+    
+    if not requested_by or not requested_title:
+        if _request_state != REQUEST_STATE_IDLE and _request_state != REQUEST_STATE_FADE_OUT:
+            _request_state = REQUEST_STATE_FADE_OUT
+            _request_start_time = time.monotonic()
+    else:
+        current_req = (requested_by, requested_title)
+        if current_req != _last_seen_request:
+            _last_seen_request = current_req
+            _request_state = REQUEST_STATE_FADE_IN
+            _request_start_time = time.monotonic()
+            
+    if _request_state == REQUEST_STATE_IDLE:
+        _request_opacity = 0
+        return
+        
+    now_mono = time.monotonic()
+    elapsed = now_mono - _request_start_time
+    
+    if _request_state == REQUEST_STATE_FADE_IN:
+        duration = 0.8
+        if elapsed >= duration:
+            _request_state = REQUEST_STATE_DISPLAY
+            _request_start_time = now_mono
+            _request_opacity = 240
+        else:
+            _request_opacity = int(240 * (elapsed / duration))
+            
+    elif _request_state == REQUEST_STATE_DISPLAY:
+        duration = 12.0
+        _request_opacity = 240
+        if elapsed >= duration:
+            _request_state = REQUEST_STATE_FADE_OUT
+            _request_start_time = now_mono
+            
+    elif _request_state == REQUEST_STATE_FADE_OUT:
+        duration = 0.8
+        if elapsed >= duration:
+            _request_state = REQUEST_STATE_IDLE
+            _request_opacity = 0
+        else:
+            _request_opacity = int(240 * (1.0 - (elapsed / duration)))
+            
+    if _request_opacity > 0:
+        CARD_WIDTH = 750
+        CARD_HEIGHT = 130
+        x1 = (WIDTH - CARD_WIDTH) // 2
+        y1 = 260
+        
+        card = Image.new("RGBA", (CARD_WIDTH, CARD_HEIGHT), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(card)
+        
+        draw.rounded_rectangle((0, 0, CARD_WIDTH, CARD_HEIGHT), radius=6, fill=(15, 23, 42, _request_opacity))
+        
+        # Bordo accent magenta/rosa brillante
+        stripe_color = (236, 72, 153, _request_opacity)
+        draw.rounded_rectangle((0, 0, 8, CARD_HEIGHT), radius=6, fill=stripe_color)
+        
+        # Label "NEWSICA TI ASCOLTA!"
+        draw.text((25, 15), "NEWSICA TI ASCOLTA!", font=FONT_TIMELINE_LABEL, fill=(244, 63, 94, _request_opacity))
+        
+        # Testo principale wrapped
+        main_text = f"Questo brano \"{requested_title}\" è stato richiesto da {requested_by}"
+        max_text_width = CARD_WIDTH - 50
+        lines = wrap_text_lines(draw, main_text, FONT_BODY, max_text_width, max_lines=2)
+        
+        text_y = 42
+        for line in lines:
+            draw.text((25, text_y), line, font=FONT_BODY, fill=(255, 255, 255, _request_opacity))
+            text_y += 28
+            
+        image.alpha_composite(card, dest=(x1, y1))
+
+
 def render_frame():
     global _last_disk_read_time, _cached_state, _cached_program, _cached_schedule_items, _cached_ticker_text
     
@@ -847,6 +937,7 @@ def render_frame():
         draw_scrolling_ticker(image, accent, ticker_text)
 
     draw_chat_overlay(image, accent)
+    draw_request_overlay(image, accent, state)
 
     return image
 

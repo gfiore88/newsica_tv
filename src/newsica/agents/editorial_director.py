@@ -22,6 +22,7 @@ class EditorialDirectorAgent:
     def __init__(self):
         self.ollama_url = "http://localhost:11434/api/generate"
         self.model = os.getenv("OLLAMA_MODEL", "gemma3:12b")
+        self.ollama_timeout = int(os.getenv("OLLAMA_TIMEOUT", "120"))
 
         # Palinsesto di emergenza in caso di crash dell'LLM.
         self.fallback_schedule = {
@@ -272,7 +273,7 @@ Esempio di struttura richiesta:
         }
 
         try:
-            res = requests.post(self.ollama_url, json=payload, timeout=60)
+            res = requests.post(self.ollama_url, json=payload, timeout=self.ollama_timeout)
             res.raise_for_status()
 
             response_text = res.json().get("response", "").strip()
@@ -858,7 +859,7 @@ Lyrics:
         }
 
         try:
-            response = requests.post(self.ollama_url, json=payload, timeout=45)
+            response = requests.post(self.ollama_url, json=payload, timeout=self.ollama_timeout)
 
             if response.status_code == 200:
                 raw_result = response.json().get("response", "").strip()
@@ -870,13 +871,21 @@ Lyrics:
                 if self._is_valid_music_prompt(prompt):
                     parsed_title = " ".join(str(parsed.get("title", "")).split())
                     resolved_language = parsed.get("lyrics_language", lyrics_language)
-                    final_title = self._build_localized_music_title(resolved_language, recent_music_titles)
+                    
                     if parsed_title and not self._is_music_title_too_similar(parsed_title, recent_music_titles):
+                        final_title = parsed_title
+                        log_decision(
+                            "EditorialDirector",
+                            f"Uso il titolo originale generato dall'LLM: '{final_title}' (coerente con lingua '{resolved_language}').",
+                            level="MUSIC",
+                        )
+                    else:
+                        final_title = self._build_localized_music_title(resolved_language, recent_music_titles)
                         log_decision(
                             "EditorialDirector",
                             (
-                                f"Titolo LLM '{parsed_title}' sostituito con titolo locale "
-                                f"'{final_title}' per garantire coerenza con la lingua '{resolved_language}'."
+                                f"Titolo LLM '{parsed_title}' assente, troppo simile o non valido. "
+                                f"Sostituito con titolo locale '{final_title}' per garantire coerenza con la lingua '{resolved_language}'."
                             ),
                             level="MUSIC",
                         )

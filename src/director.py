@@ -236,7 +236,7 @@ def apply_display_metadata(metadata_item):
     _DISPLAY_FIELDS = {
         "current_block", "current_title", "next_block",
         "next_start", "breaking_news_available", "last_update",
-        "current_music_title",
+        "current_music_title", "requested_by", "requested_title",
     }
     existing_state = get_current_state()
     for field in _DISPLAY_FIELDS:
@@ -666,7 +666,7 @@ def main():
                         _DISPLAY_FIELDS = {
                             "current_block", "current_title", "next_block",
                             "next_start", "breaking_news_available", "last_update",
-                            "current_music_title",
+                            "current_music_title", "requested_by", "requested_title",
                         }
                         existing_state = get_current_state()
                         for _field in _DISPLAY_FIELDS:

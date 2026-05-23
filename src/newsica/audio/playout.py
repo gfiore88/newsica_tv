@@ -11,6 +11,86 @@ from newsica.audio.music_library import MusicLibrary
 from newsica.audio.chat_music_requests import consume_next_ready_request
 from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, read_music_mode
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
+from newsica.config.paths import BASE_DIR, TMP_DIR
+
+import numpy as np
+
+class PlayoutSidechainDucker:
+    def __init__(self, sample_rate=24000):
+        self.threshold = 0.02
+        self.ratio = 20.0
+        chunk_dur = 2048.0 / float(sample_rate)
+        
+        self.attack_coef = 1.0 - np.exp(-chunk_dur / 0.05)
+        self.release_coef = 1.0 - np.exp(-chunk_dur / 0.8)
+        
+        self.envelope = 0.0
+        self.current_gain = 1.0      # Guadagno normale della traccia musicale
+        self.normal_gain = 1.0
+        self.min_gain = 0.15         # Abbassa la musica al 15% del volume
+        self.overlay_volume = 1.3    # Boost della voce dell'annuncio per chiarezza
+
+    def mix(self, base_chunk, voice_chunk):
+        min_len = min(len(base_chunk), len(voice_chunk))
+        if min_len == 0:
+            return base_chunk
+            
+        base = np.frombuffer(base_chunk[:min_len], dtype=np.int16).astype(np.float32)
+        overlay = np.frombuffer(voice_chunk[:min_len], dtype=np.int16).astype(np.float32)
+        
+        # Calcola il picco
+        voice_peak = np.max(np.abs(overlay)) / 32768.0
+        
+        # Aggiorna l'inviluppo
+        if voice_peak > self.envelope:
+            self.envelope += self.attack_coef * (voice_peak - self.envelope)
+        else:
+            self.envelope += self.release_coef * (voice_peak - self.envelope)
+            
+        # Calcola il gain di sidechain basato sulla compressione
+        if self.envelope > self.threshold:
+            env_clamped = max(self.envelope, 1e-5)
+            input_db = 20.0 * np.log10(env_clamped)
+            thresh_db = 20.0 * np.log10(self.threshold)
+            over_db = input_db - thresh_db
+            attenuation_db = over_db * (1.0 - 1.0 / self.ratio)
+            target_gain_factor = 10.0 ** (-attenuation_db / 20.0)
+            target_gain = self.min_gain + (self.normal_gain - self.min_gain) * target_gain_factor
+            target_gain = min(target_gain, self.normal_gain)
+        else:
+            target_gain = self.normal_gain
+            
+        gains = np.linspace(self.current_gain, target_gain, len(base), dtype=np.float32)
+        self.current_gain = target_gain
+        
+        mixed = (base * gains) + (overlay * self.overlay_volume)
+        return np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
+
+def _generate_request_announcement(author, title, output_file):
+    try:
+        from kokoro_onnx import Kokoro
+        import soundfile as sf
+        
+        onnx_path = BASE_DIR / "kokoro-v1.0.onnx"
+        voices_path = BASE_DIR / "voices-v1.0.bin"
+        
+        # Pulisce i caratteri speciali per la sintesi vocale
+        clean_title = title.replace('"', '').replace("'", "").strip()
+        clean_author = author.replace('"', '').replace("'", "").strip()
+        
+        text = f"Newsica ti ascolta! Questo brano, {clean_title}, è stato richiesto da {clean_author}."
+        print(f"🎙️ Generazione annuncio richiesta chat TTS: \"{text}\"")
+        
+        kokoro = Kokoro(str(onnx_path), str(voices_path))
+        samples, sample_rate = kokoro.create(
+            text, voice="if_sara", speed=0.95, lang="it"
+        )
+        sf.write(output_file, samples, sample_rate)
+        print(f"✅ Annuncio richiesta generato con successo: {output_file}")
+        return True
+    except Exception as e:
+        print(f"❌ Errore durante la generazione dell'annuncio richiesta TTS: {e}")
+        return False
 
 
 class AudioPlayout:
@@ -406,7 +486,25 @@ class AudioPlayout:
         if datetime.datetime.now() >= deadline or self.is_interrupted():
             return
 
-        music_file = self._consume_requested_track() or self.get_random_music(exclude=self.last_music_file)
+        request = consume_next_ready_request()
+        music_file = None
+        is_requested = False
+        if request:
+            music_file = request.get("audio_path")
+            if music_file and Path(music_file).exists():
+                is_requested = True
+                print(
+                    f"🎵 [CHAT REQUEST] Il prossimo brano sara' una richiesta della chat: "
+                    f"{os.path.basename(music_file)}"
+                )
+            else:
+                if music_file:
+                    print(f"⚠️ Richiesta musicale {request.get('id')} pronta ma senza file valido: {music_file}")
+                music_file = None
+
+        if not music_file:
+            music_file = self.get_random_music(exclude=self.last_music_file)
+            
         if not music_file:
             time.sleep(1)
             return
@@ -415,11 +513,30 @@ class AudioPlayout:
         if not music_file:
             time.sleep(1)
             return
+            
         self.last_music_file = music_file
+        
+        metadata = self.build_music_metadata(music_file)
+        
+        # Gestione Annuncio Vocale in Sidechain
+        voice_proc = None
+        ducker = None
+        if is_requested and request:
+            metadata["requested_by"] = request.get("author", "Anonimo")
+            metadata["requested_title"] = metadata.get("current_music_title") or request.get("generated_title") or "Brano Richiesto"
+            
+            announcement_file = TMP_DIR / "request_announcement.wav"
+            if _generate_request_announcement(metadata["requested_by"], metadata["requested_title"], announcement_file):
+                voice_proc = subprocess.Popen(self._pcm_decode_command(str(announcement_file)), stdout=subprocess.PIPE)
+                ducker = PlayoutSidechainDucker(PCM_SAMPLE_RATE)
+        else:
+            metadata["requested_by"] = ""
+            metadata["requested_title"] = ""
+
         self.audio_queue.put(
             {
                 "type": "metadata",
-                "state": self.build_music_metadata(music_file),
+                "state": metadata,
             }
         )
 
@@ -430,29 +547,50 @@ class AudioPlayout:
         import numpy as np
         fade_duration = 2.5
         
-        while True:
-            now = datetime.datetime.now()
-            if now >= deadline:
-                break
-                
-            if self.is_interrupted():
-                process.terminate()
-                break
+        try:
+            while True:
+                now = datetime.datetime.now()
+                if now >= deadline:
+                    break
+                    
+                if self.is_interrupted():
+                    process.terminate()
+                    break
 
-            data = process.stdout.read(PCM_CHUNK_BYTES)
-            if not data:
-                break
-                
-            time_left = (deadline - now).total_seconds()
-            if time_left < fade_duration:
-                # Applica fade-out lineare sugli ultimi secondi
-                factor = max(0.0, time_left / fade_duration)
-                samples = np.frombuffer(data, dtype=np.int16).copy()
-                data = (samples * factor).astype(np.int16).tobytes()
+                data = process.stdout.read(PCM_CHUNK_BYTES)
+                if not data:
+                    break
+                    
+                # Applica mix sidechain con l'annuncio vocale se attivo
+                if voice_proc:
+                    voice_data = voice_proc.stdout.read(len(data))
+                    if voice_data:
+                        data = ducker.mix(data, voice_data)
+                    else:
+                        voice_proc.wait()
+                        voice_proc = None
+                elif ducker and ducker.current_gain < 0.99:
+                    # Dissolvenza di rilascio post-annuncio per ripristinare il volume della musica
+                    silence_chunk = b"\x00" * len(data)
+                    data = ducker.mix(data, silence_chunk)
 
-            if not self.queue_item({"type": "audio", "data": data}):
-                process.terminate()
-                break
+                time_left = (deadline - now).total_seconds()
+                if time_left < fade_duration:
+                    # Applica fade-out lineare sugli ultimi secondi
+                    factor = max(0.0, time_left / fade_duration)
+                    samples = np.frombuffer(data, dtype=np.int16).copy()
+                    data = (samples * factor).astype(np.int16).tobytes()
+
+                if not self.queue_item({"type": "audio", "data": data}):
+                    process.terminate()
+                    break
+        finally:
+            if voice_proc:
+                try:
+                    voice_proc.terminate()
+                    voice_proc.wait()
+                except Exception:
+                    pass
 
         if process.poll() is None:
             process.terminate()
@@ -463,9 +601,20 @@ class AudioPlayout:
         if self.is_interrupted():
             return
 
-        requested_track = self._consume_requested_track()
-        if requested_track:
-            music_file = requested_track
+        request = consume_next_ready_request()
+        is_requested = False
+        if request:
+            music_file = request.get("audio_path")
+            if music_file and Path(music_file).exists():
+                is_requested = True
+                print(
+                    f"🎵 [CHAT REQUEST] Il prossimo brano sara' una richiesta della chat: "
+                    f"{os.path.basename(music_file)}"
+                )
+            else:
+                if music_file:
+                    print(f"⚠️ Richiesta musicale {request.get('id')} pronta ma senza file valido: {music_file}")
+                music_file = None
 
         if not music_file:
             music_file = self.get_random_music(exclude=self.last_music_file)
@@ -477,11 +626,30 @@ class AudioPlayout:
         if not music_file:
             time.sleep(1)
             return
+            
         self.last_music_file = music_file
+        
+        metadata = self.build_music_metadata(music_file)
+        
+        # Gestione Annuncio Vocale in Sidechain
+        voice_proc = None
+        ducker = None
+        if is_requested and request:
+            metadata["requested_by"] = request.get("author", "Anonimo")
+            metadata["requested_title"] = metadata.get("current_music_title") or request.get("generated_title") or "Brano Richiesto"
+            
+            announcement_file = TMP_DIR / "request_announcement.wav"
+            if _generate_request_announcement(metadata["requested_by"], metadata["requested_title"], announcement_file):
+                voice_proc = subprocess.Popen(self._pcm_decode_command(str(announcement_file)), stdout=subprocess.PIPE)
+                ducker = PlayoutSidechainDucker(PCM_SAMPLE_RATE)
+        else:
+            metadata["requested_by"] = ""
+            metadata["requested_title"] = ""
+
         self.audio_queue.put(
             {
                 "type": "metadata",
-                "state": self.build_music_metadata(music_file),
+                "state": metadata,
             }
         )
 
@@ -489,17 +657,39 @@ class AudioPlayout:
         process = subprocess.Popen(self._music_decode_command(music_file), stdout=subprocess.PIPE)
         self.current_process = process
 
-        while True:
-            if self.is_interrupted():
-                process.terminate()
-                break
+        try:
+            while True:
+                if self.is_interrupted():
+                    process.terminate()
+                    break
 
-            data = process.stdout.read(PCM_CHUNK_BYTES)
-            if not data:
-                break
-            if not self.queue_item({"type": "audio", "data": data}):
-                process.terminate()
-                break
+                data = process.stdout.read(PCM_CHUNK_BYTES)
+                if not data:
+                    break
+                    
+                # Applica mix sidechain con l'annuncio vocale se attivo
+                if voice_proc:
+                    voice_data = voice_proc.stdout.read(len(data))
+                    if voice_data:
+                        data = ducker.mix(data, voice_data)
+                    else:
+                        voice_proc.wait()
+                        voice_proc = None
+                elif ducker and ducker.current_gain < 0.99:
+                    # Dissolvenza di rilascio post-annuncio per ripristinare il volume della musica
+                    silence_chunk = b"\x00" * len(data)
+                    data = ducker.mix(data, silence_chunk)
+
+                if not self.queue_item({"type": "audio", "data": data}):
+                    process.terminate()
+                    break
+        finally:
+            if voice_proc:
+                try:
+                    voice_proc.terminate()
+                    voice_proc.wait()
+                except Exception:
+                    pass
 
         if process.poll() is None:
             process.terminate()
