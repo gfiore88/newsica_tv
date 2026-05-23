@@ -11,6 +11,8 @@ import signal
 import subprocess
 import time
 from schedule_generator import get_current_schedule, generate_schedule
+from newsica.audio.ai_music_jobs import enqueue_job
+from newsica.audio.ai_music_runtime import resolve_ace_step_python
 from newsica.audio.settings import resolve_ffmpeg_cmd
 from newsica.audio.music_library import MusicLibrary
 from newsica.audio.music_mode import (
@@ -31,6 +33,7 @@ HOUR_CHIME_JINGLE_FILE = os.path.join(BASE_DIR, "assets", "jingles", "jingle_ora
 HOUR_CHIME_OUTPUT_FILE = os.path.join(TMP_DIR, "hourly_chime.wav")
 HOUR_CHIME_VOICE_FILE = os.path.join(TMP_DIR, "hourly_chime_voice.wav")
 FFMPEG_CMD = resolve_ffmpeg_cmd()
+ACE_STEP_PYTHON = resolve_ace_step_python()
 PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python3")
 if not os.path.exists(PYTHON_EXEC):
     PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python")
@@ -63,6 +66,12 @@ SERVICES = {
         "patterns": [r"src/chat_agent\.py"],
         "command": [PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "chat_agent.py")],
         "log": os.path.join(TMP_DIR, "chat_agent.log"),
+    },
+    "ai_music_worker": {
+        "label": "Musica AI Worker",
+        "patterns": [r"src/newsica/audio/ai_music_worker\.py"],
+        "command": [ACE_STEP_PYTHON, "-u", os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_worker.py")],
+        "log": os.path.join(TMP_DIR, "ai_music_worker.log"),
     },
 }
 
@@ -910,28 +919,21 @@ def trigger_chime():
 
 @app.route('/api/music_gen', methods=['POST'])
 def trigger_music_gen():
-    """Lancia in background la generazione musicale AI."""
-    import threading
+    """Accoda una generazione musicale AI e assicura il worker persistente."""
     try:
-        # Usa l'ambiente virtuale dedicato ad ACE-Step (che ha PyTorch)
-        ace_step_python = os.path.join(BASE_DIR, ".venv_ace_step", "bin", "python3")
-        if not os.path.exists(ace_step_python):
+        if not os.path.exists(ACE_STEP_PYTHON):
             return jsonify({"status": "ERROR", "message": "Ambiente ACE-Step non installato. Esegui manage.sh install-ace-step"}), 500
-            
-        env = os.environ.copy()
-        env.pop("VIRTUAL_ENV", None)
-        env.pop("PYTHONPATH", None)
-        env.pop("PYTHONHOME", None)
-        
-        threading.Thread(
-            target=lambda: subprocess.run(
-                ["bash", "-c", f"source {os.path.join(BASE_DIR, '.venv_ace_step', 'bin', 'activate')} && python {os.path.join(BASE_DIR, 'src', 'newsica', 'audio', 'ai_music_generator.py')}"],
-                env=env,
-                cwd=str(BASE_DIR)
-            ),
-            daemon=True
-        ).start()
-        return jsonify({"status": "OK", "message": "Generazione musicale avviata in background."})
+
+        job, created = enqueue_job(
+            job_type="rotation_fill",
+            source="dashboard",
+            dedupe_key="rotation_fill",
+        )
+        start_service(SERVICES["ai_music_worker"])
+
+        if created:
+            return jsonify({"status": "OK", "message": f"Job musica AI accodato ({job['id']})."})
+        return jsonify({"status": "OK", "message": f"Worker già impegnato sul job {job['id']}."})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -1188,7 +1190,7 @@ def restart_service_route():
 
     if requested_service == "all":
         restarted = {}
-        for service_name in ("director", "stream"):
+        for service_name in ("director", "stream", "ai_music_worker"):
             restarted[service_name] = restart_service(service_name)
         return jsonify({
             "status": "OK",

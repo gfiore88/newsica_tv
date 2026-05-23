@@ -1,12 +1,13 @@
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 from datetime import datetime
 import requests
 import pytchat
+from newsica.audio.ai_music_jobs import enqueue_job
+from newsica.audio.ai_music_runtime import launch_ai_music_worker
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 from dotenv import load_dotenv
@@ -18,8 +19,6 @@ RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 LIVE_VIDEO_ID_FILE = os.path.join(TMP_DIR, "live_video_id.txt")
 LIVE_VIDEO_CACHE_FILE = os.path.join(TMP_DIR, "live_video_cache.txt")
 LATEST_CHAT_FILE = os.path.join(TMP_DIR, "latest_chat.json")
-AI_MUSIC_GENERATOR = os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_generator.py")
-
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "UCQOA9AoLRA8XG2g9ruogE1g")
 YOUTUBE_HANDLE = os.getenv("YOUTUBE_HANDLE", "@NewsicaTV")
@@ -184,12 +183,7 @@ def extract_music_request(message):
 
 def trigger_music_request_generation():
     try:
-        subprocess.Popen(
-            [sys.executable, AI_MUSIC_GENERATOR, "--process-chat-requests"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        launch_ai_music_worker()
     except Exception as e:
         print(f"❌ [CHAT REQUEST] Impossibile avviare il generatore musicale: {e}")
 
@@ -207,10 +201,22 @@ def maybe_enqueue_music_request(author, message):
         theme=intent.get("theme"),
         custom_brief=intent.get("custom_brief"),
     )
+    job, created = enqueue_job(
+        job_type="chat_request",
+        source="chat",
+        request_id=request["id"],
+        theme=request.get("theme"),
+        custom_brief=request.get("custom_brief"),
+        dedupe_key=request["id"],
+    )
     print(
         f"🎵 [CHAT REQUEST] Richiesta musicale acquisita da {author}: "
         f"theme={request.get('theme') or 'freeform'} | text='{message}'"
     )
+    if created:
+        print(f"🧾 [CHAT REQUEST] Job musica accodato: {job['id']}")
+    else:
+        print(f"ℹ️ [CHAT REQUEST] Job già presente: {job['id']}")
     trigger_music_request_generation()
     return request
 

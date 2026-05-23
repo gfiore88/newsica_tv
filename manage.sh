@@ -21,6 +21,22 @@ BOLD='\033[1m'
 # Assicura la presenza delle cartelle
 mkdir -p "$RUNTIME_DIR" "$TMP_DIR"
 
+function get_ace_step_python() {
+  local candidates=(
+    "$BASE_DIR/.venv_ace_step/bin/python3"
+    "$BASE_DIR/.venv_ace_step/bin/python"
+    "$BASE_DIR/venv/bin/python3"
+    "$BASE_DIR/venv/bin/python"
+  )
+  for candidate in "${candidates[@]}"; do
+    if [ -x "$candidate" ]; then
+      echo "$candidate"
+      return
+    fi
+  done
+  command -v python3
+}
+
 function show_help() {
   echo -e "${BOLD}📺 NewsicaTV — Script di Gestione Unificato${NC}"
   echo -e "Uso: ./manage.sh [comando]"
@@ -70,6 +86,7 @@ function do_status() {
   check_status "Ticker Agent" "src/ticker_agent.py"
   check_status "Overlay Agent" "src/overlay_agent.py"
   check_status "Chime Agent" "src/hourly_chime_agent.py"
+  check_status "AI Music Worker" "src/newsica/audio/ai_music_worker.py"
   check_status "Watchdog" "src/watchdog.sh"
   echo -e "------------------------------------------------\n"
 }
@@ -85,7 +102,7 @@ function do_stop() {
   fi
 
   # Invia SIGTERM ordinato a Regia, Dashboard e Stream
-  local targets=("src/director.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py")
+  local targets=("src/director.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py")
   for target in "${targets[@]}"; do
     local pids=$(get_all_pids "$target")
     if [ -n "$pids" ]; then
@@ -112,7 +129,7 @@ function do_stop() {
   done
 
   # Chiude eventuali sessioni screen create da manage.sh start.
-  for session_name in newsica-dashboard newsica-watchdog newsica-stream; do
+  for session_name in newsica-dashboard newsica-watchdog newsica-stream newsica-ai-music-worker; do
     screen -S "$session_name" -X quit 2>/dev/null || true
   done
   screen -wipe >/dev/null 2>&1 || true
@@ -121,6 +138,8 @@ function do_stop() {
   echo -e "🧹 Rimozione lock e pipe orfane..."
   rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
   rm -rf "$RUNTIME_DIR"/stream.lock 2>/dev/null || true
+  rm -f "$TMP_DIR"/ai_music.lock 2>/dev/null || true
+  rm -f "$TMP_DIR"/ai_music_worker.lock 2>/dev/null || true
   rm -f "$TMP_DIR"/audio_pipe "$TMP_DIR"/overlay_pipe 2>/dev/null || true
 
   echo -e "${GREEN}✅ Tutto l'ecosistema è stato spento correttamente.${NC}\n"
@@ -164,7 +183,18 @@ function do_start() {
     echo "  [i] Watchdog Regia già attivo."
   fi
 
-  # 5. Avvia lo Streamer (FFmpeg/YouTube)
+  # 5. Avvia il worker persistente della Musica AI
+  if [ -z "$(get_pid "src/newsica/audio/ai_music_worker.py")" ]; then
+    echo "  -> Avvio AI Music Worker..."
+    local ace_step_python
+    ace_step_python="$(get_ace_step_python)"
+    screen -dmS newsica-ai-music-worker bash -lc "cd '$BASE_DIR' && exec '$ace_step_python' -u '$BASE_DIR/src/newsica/audio/ai_music_worker.py' > '$TMP_DIR/ai_music_worker.log' 2>&1"
+    sleep 2
+  else
+    echo "  [i] AI Music Worker già attivo."
+  fi
+
+  # 6. Avvia lo Streamer (FFmpeg/YouTube)
   if [ -z "$(get_pid "ffmpeg.*audio_pipe")" ]; then
     echo "  -> Avvio Streamer (FFmpeg)..."
     screen -dmS newsica-stream bash -lc "cd '$BASE_DIR' && exec bash '$BASE_DIR/src/stream.sh' > '$TMP_DIR/stream.log' 2>&1"
@@ -187,6 +217,10 @@ function do_logs() {
   echo -e "\n${BOLD}📺 Log Recenti Streamer (stream.log):${NC}"
   echo "------------------------------------------------"
   tail -n 12 "$TMP_DIR/stream.log" 2>/dev/null || echo "(Nessun log trovato)"
+
+  echo -e "\n${BOLD}🎵 Log Recenti AI Music Worker:${NC}"
+  echo "------------------------------------------------"
+  tail -n 12 "$TMP_DIR/ai_music_worker.log" 2>/dev/null || echo "(Nessun log trovato)"
   echo ""
 }
 
@@ -208,6 +242,9 @@ function do_live_health() {
   else
     echo "❌ Nessun progress FFmpeg scritto."
   fi
+
+  echo -e "\n${BOLD}Log AI Music Worker:${NC}"
+  tail -n 20 "$TMP_DIR/ai_music_worker.log" 2>/dev/null || echo "(Nessun ai_music_worker.log trovato)"
 
   echo -e "\n${BOLD}Stato Runtime:${NC}"
   if [ -f "$RUNTIME_DIR/on-air-state.json" ]; then

@@ -40,3 +40,4 @@
 | 37 | /orchestrator | ✅ Done | Format meteo breve: bollettino 3-5 minuti e poi rotazione musicale fino allo slot successivo |
 | 38 | /python_engineer | ✅ Done | Segnale orario random una volta l'ora, mixato solo sopra musica e mai sopra speaker |
 | 39 | /python_engineer | ✅ Done | Flag dashboard per scegliere rotazione musica `solo AI` o `mix cartella music + AI` |
+| 40 | /orchestrator | ✅ Done | Refactor Musica AI: worker persistente ACE-Step con coda locale, integrazione servizi e ADR 0036 |

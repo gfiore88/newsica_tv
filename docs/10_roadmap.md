@@ -35,6 +35,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] **Segnale Orario Non Interrompente (ADR 0033)**: il chime viene schedulato una volta l'ora a minuto casuale e può andare solo come overlay sopra musica, mai sopra speaker o contenuti parlati.
 - [x] **Modalità Rotazione Musica da Dashboard (ADR 0034)**: flag UI persistente per scegliere tra solo `assets/ai_music/` oppure mix `assets/music/` + `assets/ai_music/`.
 - [x] **Encoder Hardware Live su macOS (ADR 0035)**: `stream.sh` usa `h264_videotoolbox` quando disponibile per evitare stream sotto realtime con overlay dinamico e audio live.
+- [x] **Worker Persistente Musica AI (ADR 0036)**: la generazione ACE-Step passa da script one-shot a servizio residente con coda locale e prewarm dei modelli, per evitare bootstrap ripetuti durante la diretta H24.
 - [ ] **Lancio Ufficiale**: Diretta pubblica sul canale NewsicaTV.
 
 

@@ -13,6 +13,8 @@ import queue
 import json
 import datetime
 from newsica.audio.jingles import get_jingle_for_block, CLASSIC_JINGLE_FILE
+from newsica.audio.ai_music_jobs import enqueue_job
+from newsica.audio.ai_music_runtime import launch_ai_music_worker
 from newsica.audio.playout import AudioPlayout
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 from newsica.domain.characters import get_character
@@ -151,8 +153,16 @@ def generator_worker():
                 label = action_info["label"]
                 playout.queue_single_music_track(music_file)
                 if action_info.get("trigger_ai_music_gen"):
-                    print("🚀 [Director] Tempo residuo lungo: trigger background AI Music Gen...")
-                    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_generator.py")]), daemon=True).start()
+                    job, created = enqueue_job(
+                        job_type="rotation_fill",
+                        source="director",
+                        dedupe_key="rotation_fill",
+                    )
+                    if created:
+                        print(f"🚀 [Director] Accodato job Musica AI persistente: {job['id']}")
+                    else:
+                        print(f"⏭️ [Director] Job Musica AI già attivo: {job['id']}")
+                    threading.Thread(target=launch_ai_music_worker, daemon=True).start()
                 
             elif action == "PLAY_MUSIC_DEADLINE":
                 music_file = action_info["file"]

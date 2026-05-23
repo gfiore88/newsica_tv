@@ -1,12 +1,15 @@
 import os
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
 # Aggiunge src al path di importazione
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(BASE_DIR)
+sys.modules.setdefault("pytchat", types.SimpleNamespace())
+sys.modules.setdefault("dotenv", types.SimpleNamespace(load_dotenv=lambda *args, **kwargs: None))
 
 from chat_agent import extract_music_request
 from newsica.audio.chat_music_requests import (

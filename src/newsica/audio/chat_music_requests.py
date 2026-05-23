@@ -68,6 +68,14 @@ def get_next_request_by_status(status: str, path: Path = REQUESTS_FILE) -> dict 
     return None
 
 
+def get_request(request_id: str, path: Path = REQUESTS_FILE) -> dict | None:
+    payload = _load_payload(path)
+    for request in payload.get("requests", []):
+        if request.get("id") == request_id:
+            return dict(request)
+    return None
+
+
 def update_request(
     request_id: str,
     *,
