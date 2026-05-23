@@ -510,7 +510,7 @@ class DirectorAgent:
             try:
                 with open(manifest_file, "r", encoding="utf-8") as f:
                     manifest = json.load(f)
-                if manifest.get("character") != "podcast" or manifest.get("title") != title:
+                if manifest.get("character") != "podcast" or not manifest.get("title", "").startswith(title):
                     print(
                         f"⚠️ [DirectorAgent] Podcast pronto non coerente per {scheduled_slot}: "
                         f"atteso podcast/{title}, trovato {manifest}."
@@ -529,7 +529,7 @@ class DirectorAgent:
                     "action": "PLAY_VOICE",
                     "file": voice_file,
                     "character": "podcast",
-                    "title": title,
+                    "title": manifest.get("title", title) if os.path.exists(ready_dir) else title,
                     "segment": "Completo"
                 }
             # Se l'audio non è pronto, inneschiamo un fallback musicale.

@@ -36,6 +36,7 @@ class EditorialDirectorAgent:
             "15:00": {"title": "Newsica Podcast", "type": "podcast"},
             "16:00": {"title": "Tech in 60 Secondi", "type": "flash_60s"},
             "18:00": {"title": "Riepilogo Giornata", "type": "news"},
+            "18:30": {"title": "Newsica Podcast", "type": "podcast"},
             "20:00": {"title": "Newsica Sera", "type": "news"},
             "21:00": {"title": "Newsica Podcast", "type": "podcast"},
             "22:00": {"title": "Meteo Notte", "type": "meteo"},
@@ -102,6 +103,7 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
         return {
             "07:00": {"title": "Morning News: Il Risveglio", "type": "news"},
             "13:00": {"title": "Pranzo News: Il Punto delle 13", "type": "news"},
+            "18:30": {"title": "Newsica Podcast", "type": "podcast"},
             "20:00": {"title": "Newsica Sera: Il TG Principale", "type": "news"},
         }
 

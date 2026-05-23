@@ -90,7 +90,7 @@ def run_loop():
                             metadata={
                                 "slot_time": slot_time,
                                 "character": character,
-                                "title": title,
+                                "title": content_data.get("title", title),
                                 "prepared_at": datetime.datetime.now().isoformat(timespec="seconds"),
                             },
                         )
