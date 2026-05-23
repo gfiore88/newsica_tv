@@ -266,6 +266,7 @@ Esempio di struttura richiesta:
             "system": system_prompt,
             "prompt": user_prompt,
             "stream": False,
+            "keep_alive": "30m",
             "options": {
                 "temperature": 0.8,
                 "top_p": 0.9,
@@ -852,6 +853,7 @@ Lyrics:
             "model": self.model,
             "prompt": system_prompt,
             "stream": False,
+            "keep_alive": "30m",
             "options": {
                 "temperature": 1.0,
                 "top_p": 0.92,
