@@ -520,7 +520,7 @@ class DirectorAgent:
                 print(f"⚠️ [DirectorAgent] Podcast pronto senza manifest valido per {scheduled_slot}. Attendo rigenerazione.")
                 has_valid_audio = False
         
-        if current_segment in {"intro", "init", "music_rotation_until_deadline"}:
+        if current_segment in {"intro", "init"} or (current_segment == "music_rotation_until_deadline" and not state.get("podcast_played")):
             if has_valid_audio and not state.get("podcast_played"):
                 state["current_segment"] = "podcast_playing"
                 state["podcast_played"] = True
