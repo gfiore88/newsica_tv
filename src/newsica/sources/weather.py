@@ -44,9 +44,18 @@ def fetch_weather():
             current = data.get("current_weather", {})
             code = current.get("weathercode", 0)
             desc = WEATHER_CODES.get(code, "variabile")
+            
+            raw_temp = current.get("temperature")
+            temp = None
+            if raw_temp is not None:
+                try:
+                    temp = round(float(raw_temp))
+                except Exception:
+                    temp = raw_temp
+                    
             results[key] = {
                 "citta": city["name"],
-                "temperatura": current.get("temperature"),
+                "temperatura": temp,
                 "vento": current.get("windspeed"),
                 "condizioni": desc,
             }

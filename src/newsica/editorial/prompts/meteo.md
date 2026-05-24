@@ -13,4 +13,5 @@ Linee guida:
 4. Evita elenchi tecnici o liste secche. Il copione deve essere una lettura continua, fluida e scorrevole per la TV.
 5. Concludi con: "Per il meteo nazionale è tutto. Restate con noi per la nostra programmazione musicale."
 6. La chiusura deve preparare naturalmente la rotazione musicale successiva, senza promettere altri segmenti meteo.
-7. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.
+7. Scrivi le temperature sempre e solo come numeri interi arrotondati, senza decimali (es. "23 gradi" o "24 gradi", mai "23.5 gradi" o "23,5 gradi"), in modo da garantire una pronuncia calda, fluida e del tutto naturale da parte del sintetizzatore vocale.
+8. Produci ESCLUSIVAMENTE il testo del copione secondo la struttura descritta.
