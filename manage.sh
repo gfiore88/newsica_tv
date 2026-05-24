@@ -198,7 +198,7 @@ function do_start() {
   # 6. Avvia il Bot Telegram
   if [ -z "$(get_pid "src/telegram_agent.py")" ]; then
     echo "  -> Avvio Telegram Bot Agent..."
-    screen -dmS newsica-telegram bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' '$BASE_DIR/src/telegram_agent.py' > '$TMP_DIR/telegram_agent.log' 2>&1"
+    screen -dmS newsica-telegram bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/telegram_agent.py' > '$TMP_DIR/telegram_agent.log' 2>&1"
     sleep 2
   else
     echo "  [i] Telegram Bot Agent già attivo."
