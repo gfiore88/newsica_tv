@@ -52,11 +52,19 @@ def send_message(token, chat_id, text):
 
 
 def process_voice_message(token, message):
-    chat_id = message["chat"]["id"]
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    chat_type = chat.get("type", "private")
+    
     from_user = message.get("from", {})
     username = from_user.get("username")
     first_name = from_user.get("first_name", "Ascoltatore")
     
+    # Se proviene da un canale, utilizziamo il titolo del canale come nome dell'autore
+    if chat_type == "channel":
+        first_name = chat.get("title", "Canale NewsicaTV")
+        username = chat.get("username", "")
+        
     voice = message.get("voice")
     if not voice:
         return
@@ -70,7 +78,8 @@ def process_voice_message(token, message):
         r = requests.get(get_file_url, params={"file_id": file_id}, timeout=10)
         if r.status_code != 200:
             print(f"❌ Errore getFile Telegram: HTTP {r.status_code} - {r.text}")
-            send_message(token, chat_id, "Spiacenti, si è verificato un errore nel recupero del tuo vocale. Riprova tra poco!")
+            if chat_type != "channel":
+                send_message(token, chat_id, "Spiacenti, si è verificato un errore nel recupero del tuo vocale. Riprova tra poco!")
             return
         
         file_info = r.json().get("result", {})
@@ -113,7 +122,8 @@ def process_voice_message(token, message):
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         if res.returncode != 0:
             print(f"❌ Errore conversione FFmpeg:\nSTDOUT: {res.stdout}\nSTDERR: {res.stderr}")
-            send_message(token, chat_id, "Spiacenti, si è verificato un errore nell'elaborazione del file audio. Riprova con un altro vocale!")
+            if chat_type != "channel":
+                send_message(token, chat_id, "Spiacenti, si è verificato un errore nell'elaborazione del file audio. Riprova con un altro vocale!")
             return
         print(f"✅ Conversione completata: {converted_file_path}")
     except Exception as e:
@@ -139,18 +149,20 @@ def process_voice_message(token, message):
         
         if initial_status == "approved":
             print(f"🎙️ Vocale Telegram accodato con AUTO-APPROVAZIONE da {first_name} (@{username or 'no_username'})")
-            send_message(
-                token,
-                chat_id,
-                f"Grazie {first_name}! Il tuo vocale è stato ricevuto ed è già stato approvato per la messa in onda su NewsicaTV! Rimani all'ascolto! 📻"
-            )
+            if chat_type != "channel":
+                send_message(
+                    token,
+                    chat_id,
+                    f"Grazie {first_name}! Il tuo vocale è stato ricevuto ed è già stato approvato per la messa in onda su NewsicaTV! Rimani all'ascolto! 📻"
+                )
         else:
             print(f"🎙️ Vocale Telegram accodato con successo (in attesa approvazione) da {first_name} (@{username or 'no_username'})")
-            send_message(
-                token,
-                chat_id,
-                f"Grazie {first_name}! Il tuo vocale è stato ricevuto ed è in attesa di approvazione da parte della regia di NewsicaTV. Rimani all'ascolto! 📻"
-            )
+            if chat_type != "channel":
+                send_message(
+                    token,
+                    chat_id,
+                    f"Grazie {first_name}! Il tuo vocale è stato ricevuto ed è in attesa di approvazione da parte della regia di NewsicaTV. Rimani all'ascolto! 📻"
+                )
     except Exception as e:
         print(f"❌ Errore durante l'accodamento del vocale: {e}")
 
@@ -164,7 +176,7 @@ def run_telegram_loop(token):
         params = {
             "offset": offset,
             "timeout": 30,
-            "allowed_updates": json.dumps(["message"])
+            "allowed_updates": json.dumps(["message", "channel_post"])
         }
         
         try:
@@ -177,15 +189,21 @@ def run_telegram_loop(token):
                     update_id = update["update_id"]
                     offset = update_id + 1
                     
-                    message = update.get("message", {})
+                    # Rileviamo se si tratta di un messaggio privato/gruppo o di un post del canale
+                    message = update.get("message") or update.get("channel_post")
+                    if not message:
+                        continue
+                        
+                    chat_type = message.get("chat", {}).get("type", "private")
+                    
                     # Gestiamo solo i messaggi che contengono un file vocale
                     if "voice" in message:
                         try:
                             process_voice_message(token, message)
                         except Exception as pe:
                             print(f"❌ Errore durante process_voice_message: {pe}")
-                    elif "text" in message:
-                        # Risposta di benvenuto automatica se l'utente scrive testo o lancia /start
+                    elif "text" in message and chat_type != "channel":
+                        # Risposta di benvenuto automatica solo su chat privata/gruppi
                         chat_id = message["chat"]["id"]
                         first_name = message.get("from", {}).get("first_name", "Ascoltatore")
                         send_message(
