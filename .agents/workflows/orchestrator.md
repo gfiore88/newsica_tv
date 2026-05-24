@@ -242,3 +242,39 @@ Quando `tmp/stream.log` o `tmp/ffmpeg_progress.txt` mostrano stream sotto realti
    - asse editoriale: overlay ancora coerente, leggibile, riconoscibile come NewsicaTV.
 
 Regola di implementazione: prima ottimizzazione strutturale, poi feature flag, poi preset degradati. Mai il contrario.
+
+---
+
+## 🚀 Visione Futura & Backlog di Brainstorming
+
+Queste sono le direzioni strategiche ed evolutive prioritarie per rendere NewsicaTV una vera emittente radiotelevisiva viva e interattiva, e non un semplice bot di riproduzione:
+
+### 1. Interazione LIVE con il Pubblico (Priorità 1)
+- **Richieste Musicali via Chat (Completata & Attiva)**: Lettura in tempo reale dei comandi della chat (es. `!request Brano`), sintesi vocale dell'annuncio speaker in sidechain mixing con ducking del volume musicale, e visualizzazione overlay animata della richiesta.
+- **Messaggi Vocali degli Utenti**: Integrazione bot Telegram/Discord o form web per consentire agli utenti di inviare file audio. Una volta approvati dall'amministratore, vengono normalizzati e mandati in onda.
+- **Chat AI "Personaggi" Speaker**: Possibilità per gli utenti di taggare gli speaker (es. `@giulia`, `@marco`) in chat. L'agente risponde elaborando la risposta in tempo reale e sintetizzandola **in onda con la propria voce clonata**.
+
+### 2. Sistema Memoria / Continuità Narrativa (Priorità 2)
+- **Memory Engine**: Inserimento di riferimenti temporali incrociati tra i vari blocchi orari (es. alle 14: *"Ne parleremo stasera alle 20..."*; alle 20: *"Come vi avevamo anticipato oggi pomeriggio..."*) per creare continuità narrativa.
+- **Storyline Giornaliere**: Programmazione a tema coordinata (es. introduzione tema AI al mattino, approfondimento a pranzo, dibattito la sera, riepilogo la notte) per dare la sensazione di un canale organico.
+
+### 3. Scheduler Dichiarativo (Priorità 3)
+- Evoluzione del sistema di scheduling in una struttura dichiarativa robusta per supportare palinsesti complessi, variazioni stagionali, ed eventi speciali con una configurazione centralizzata ed estensibile.
+
+### 4. Dashboard Operativa Avanzata (Priorità 4)
+- Creazione di una cabina di regia professionale dotata di:
+  - Timeline interattiva del palinsesto.
+  - Stato e log degli agenti in tempo reale.
+  - Coda audio in riproduzione.
+  - Waveform audio live e latenza.
+  - Pulsanti di emergenza e override manuale della regia.
+
+### 5. Evoluzione Audiovisiva & Regia Automatica
+- **Overlay Dinamici Animati**: Lower thirds animate, cambi palette automatici reattivi alla rubrica, effetti visivi per ultim'ora ed edizioni straordinarie.
+- **Camera Virtuale AI**: Regia virtuale con inquadrature dinamiche, zoom lenti, cambi di scena e sorgenti browser animate tramite OBS WebSockets o scene FFmpeg.
+- **Waveform & Avatar**: Waveform audio reattive animate sul pannello per dare feedback visivo quando gli speaker (Giulia e Marco) parlano.
+
+### 6. Esperienza Atmosfera & Eventi Speciali
+- **Sistema Mood (Atmosfere Dinamiche)**: Il canale cambia veste grafica e sonora in base all'orario (Chill lo-fi con toni scuri la notte, ritmi allegri e colori solari al mattino, drammaticità rossa tesa per edizioni straordinarie).
+- **Eventi Live in Automatico**: Modalità copertura speciale per grandi eventi (es. Sanremo, elezioni, eventi tech) con commento live AI, Tweet/Chat reactions in tempo reale e recap costanti.
+- **Modalità "Radio Only" & Multi-Output**: Generazione parallela dello stream video per YouTube, stream solo audio Icecast, feed podcast RSS automatico e clip video Short autogenerate.
