@@ -262,6 +262,28 @@ class AudioPlayout:
         finally:
             self.current_process = None
 
+    def _safe_wait(self, process, name="process", timeout=3.0):
+        if not process:
+            return
+        try:
+            process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            print(f"⚠️ Timeout scaduto durante wait su '{name}', forzo la terminazione.")
+            try:
+                process.terminate()
+                process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                print(f"⚠️ Timeout scaduto anche su terminate per '{name}', forzo kill.")
+                try:
+                    process.kill()
+                    process.wait(timeout=1.0)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"⚠️ Eccezione durante wait su '{name}': {e}")
+
     def queue_item(self, item):
         while True:
             if self.is_interrupted():
@@ -410,7 +432,7 @@ class AudioPlayout:
                 self.audio_queue.put({"type": "audio", "data": data})
             count += 1
 
-        process.wait()
+        self._safe_wait(process, name="pcm_decode_process", timeout=3.0)
         if not is_breaking_news:
             self.current_process = None
         print(f"✅ Audio voce caricato nella coda ({count} chunks).")
@@ -437,7 +459,7 @@ class AudioPlayout:
                 process.terminate()
                 break
 
-        process.wait()
+        self._safe_wait(process, name="jingle_process", timeout=3.0)
         self.current_process = None
         return not self.is_interrupted()
 
@@ -465,7 +487,7 @@ class AudioPlayout:
                 break
             chunks.append(data)
 
-        process.wait()
+        self._safe_wait(process, name="mix_and_queue_process", timeout=3.0)
         self.current_process = None
 
         if self.is_interrupted() or not chunks:
@@ -594,30 +616,36 @@ class AudioPlayout:
                             if voice_data:
                                 data = ducker.mix(data, voice_data)
                             else:
-                                active_voice_proc.wait()
+                                print(f"🎙️ [TELEGRAM SIDECHAIN] Fine lettura vocale indice {current_voice_idx}, attesa processo...")
+                                self._safe_wait(active_voice_proc, name=f"tg_voice_active_proc_{current_voice_idx}", timeout=2.0)
                                 active_voice_proc = None
                                 current_voice_idx += 1
+                                print(f"🎙️ [TELEGRAM SIDECHAIN] Passaggio al vocale indice {current_voice_idx}")
                         elif ducker.current_gain < 0.99:
                             # Sfumatura di rilascio finale
                             silence_chunk = b"\x00" * len(data)
                             data = ducker.mix(data, silence_chunk)
                         else:
                             # Quando sia l'annuncio che il vocale sono terminati, terminiamo la riproduzione di questo sottofondo
+                            print("🎙️ [TELEGRAM SIDECHAIN] Annuncio e vocale terminati, ripristino volume completato. Esco dal loop.")
                             break
                             
                         if not self.queue_item({"type": "audio", "data": data}):
+                            print("⚠️ [TELEGRAM SIDECHAIN] Interruzione coda piena o errore queue_item. Esco dal loop.")
                             process.terminate()
                             break
                 finally:
                     if active_voice_proc:
+                        print("🎙️ [TELEGRAM SIDECHAIN] Pulizia active_voice_proc in corso...")
                         try:
                             active_voice_proc.terminate()
-                            active_voice_proc.wait()
+                            self._safe_wait(active_voice_proc, name="tg_voice_cleanup", timeout=1.0)
                         except Exception:
                             pass
                     if process.poll() is None:
+                        print("🎵 [TELEGRAM SIDECHAIN] Termino processo sottofondo musicale...")
                         process.terminate()
-                    process.wait()
+                    self._safe_wait(process, name="tg_bg_music", timeout=2.0)
                     self.current_process = None
                     try:
                         mark_played(tg_voice["id"])
@@ -825,30 +853,36 @@ class AudioPlayout:
                             if voice_data:
                                 data = ducker.mix(data, voice_data)
                             else:
-                                active_voice_proc.wait()
+                                print(f"🎙️ [TELEGRAM SINGLE SIDECHAIN] Fine lettura vocale indice {current_voice_idx}, attesa processo...")
+                                self._safe_wait(active_voice_proc, name=f"tg_single_voice_active_proc_{current_voice_idx}", timeout=2.0)
                                 active_voice_proc = None
                                 current_voice_idx += 1
+                                print(f"🎙️ [TELEGRAM SINGLE SIDECHAIN] Passaggio al vocale indice {current_voice_idx}")
                         elif ducker.current_gain < 0.99:
                             # Sfumatura di rilascio finale
                             silence_chunk = b"\x00" * len(data)
                             data = ducker.mix(data, silence_chunk)
                         else:
                             # Quando sia l'annuncio che il vocale sono terminati, terminiamo la riproduzione di questo sottofondo
+                            print("🎙️ [TELEGRAM SINGLE SIDECHAIN] Annuncio e vocale terminati, ripristino volume completato. Esco dal loop.")
                             break
                             
                         if not self.queue_item({"type": "audio", "data": data}):
+                            print("⚠️ [TELEGRAM SINGLE SIDECHAIN] Interruzione coda piena o errore queue_item. Esco dal loop.")
                             process.terminate()
                             break
                 finally:
                     if active_voice_proc:
+                        print("🎙️ [TELEGRAM SINGLE SIDECHAIN] Pulizia active_voice_proc in corso...")
                         try:
                             active_voice_proc.terminate()
-                            active_voice_proc.wait()
+                            self._safe_wait(active_voice_proc, name="tg_single_voice_cleanup", timeout=1.0)
                         except Exception:
                             pass
                     if process.poll() is None:
+                        print("🎵 [TELEGRAM SINGLE SIDECHAIN] Termino processo sottofondo musicale...")
                         process.terminate()
-                    process.wait()
+                    self._safe_wait(process, name="tg_single_bg_music", timeout=2.0)
                     self.current_process = None
                     try:
                         mark_played(tg_voice["id"])
@@ -930,7 +964,8 @@ class AudioPlayout:
                     if voice_data:
                         data = ducker.mix(data, voice_data)
                     else:
-                        voice_proc.wait()
+                        print("💬 [CHAT SIDECHAIN] Fine lettura annuncio, attesa processo...")
+                        self._safe_wait(voice_proc, name="chat_request_voice_proc", timeout=2.0)
                         voice_proc = None
                 elif ducker and ducker.current_gain < 0.99:
                     # Dissolvenza di rilascio post-annuncio per ripristinare il volume della musica
@@ -944,11 +979,11 @@ class AudioPlayout:
             if voice_proc:
                 try:
                     voice_proc.terminate()
-                    voice_proc.wait()
+                    self._safe_wait(voice_proc, name="chat_request_voice_cleanup", timeout=1.0)
                 except Exception:
                     pass
 
         if process.poll() is None:
             process.terminate()
-        process.wait()
+        self._safe_wait(process, name="chat_request_bg_music", timeout=2.0)
         self.current_process = None
