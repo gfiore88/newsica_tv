@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -49,6 +50,71 @@ def send_message(token, chat_id, text):
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
         print(f"❌ Errore nell'invio del messaggio di cortesia a Telegram: {e}")
+
+
+def process_admin_command(token, chat_id, text):
+    cmd = text.lower().split()[0]
+    
+    if cmd == "/status":
+        send_message(token, chat_id, "Checking NewsicaTV services status... 🔍")
+        try:
+            res = subprocess.run(["bash", os.path.join(BASE_DIR, "manage.sh"), "status"], capture_output=True, text=True, timeout=10)
+            clean_output = res.stdout
+            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            clean_output = ansi_escape.sub('', clean_output)
+            send_message(token, chat_id, f"📊 *Stato dei Servizi NewsicaTV:*\n\n{clean_output}")
+        except Exception as e:
+            send_message(token, chat_id, f"❌ Errore durante ./manage.sh status: {e}")
+            
+    elif cmd == "/restart":
+        send_message(token, chat_id, "🔄 Riavvio ordinato dell'ecosistema (escluso il Bot Telegram) in corso... Attendi.")
+        import threading
+        def run_restart():
+            try:
+                subprocess.run(["bash", os.path.join(BASE_DIR, "manage.sh"), "restart", "--exclude-telegram"], timeout=40)
+                send_message(token, chat_id, "✅ Ecosistema riavviato e online con successo! 🟢")
+            except Exception as e:
+                send_message(token, chat_id, f"❌ Errore durante il restart: {e}")
+        
+        threading.Thread(target=run_restart, daemon=True).start()
+        
+    elif cmd == "/stop":
+        send_message(token, chat_id, "🛑 Spegnimento della diretta e della regia (escluso il Bot Telegram) in corso...")
+        import threading
+        def run_stop():
+            try:
+                subprocess.run(["bash", os.path.join(BASE_DIR, "manage.sh"), "stop", "--exclude-telegram"], timeout=20)
+                send_message(token, chat_id, "✅ Ecosistema spento (Regia e FFmpeg interrotti). Il Bot Telegram rimane in ascolto ed è pronto a ripartire con /start! 🔴")
+            except Exception as e:
+                send_message(token, chat_id, f"❌ Errore durante lo stop: {e}")
+                
+        threading.Thread(target=run_stop, daemon=True).start()
+        
+    elif cmd == "/start":
+        send_message(token, chat_id, "🚀 Avvio dell'intero ecosistema NewsicaTV in corso...")
+        import threading
+        def run_start():
+            try:
+                subprocess.run(["bash", os.path.join(BASE_DIR, "manage.sh"), "start"], timeout=40)
+                send_message(token, chat_id, "✅ Ecosistema avviato con successo e in onda su YouTube! 🟢")
+            except Exception as e:
+                send_message(token, chat_id, f"❌ Errore durante l'avvio: {e}")
+                
+        threading.Thread(target=run_start, daemon=True).start()
+        
+    elif cmd in ("/help", "/info"):
+        help_text = (
+            "👑 NewsicaTV Admin Panel (Remoto)\n"
+            "Benvenuto Giovanni! Puoi gestire l'intera radio con i seguenti comandi:\n\n"
+            "🔍 /status - Controlla lo stato di tutti i servizi\n"
+            "🚀 /start - Avvia tutti i servizi e vai in onda\n"
+            "🔄 /restart - Riavvia la regia, lo stream e la dashboard\n"
+            "🛑 /stop - Ferma la diretta e la regia (il Bot resta attivo)\n"
+            "ℹ️ /help - Mostra questo pannello di aiuto"
+        )
+        send_message(token, chat_id, help_text)
+    else:
+        send_message(token, chat_id, "⚠️ Comando admin sconosciuto. Digita /help per i comandi disponibili.")
 
 
 def process_voice_message(token, message):
@@ -203,14 +269,25 @@ def run_telegram_loop(token):
                         except Exception as pe:
                             print(f"❌ Errore durante process_voice_message: {pe}")
                     elif "text" in message and chat_type != "channel":
-                        # Risposta di benvenuto automatica solo su chat privata/gruppi
                         chat_id = message["chat"]["id"]
-                        first_name = message.get("from", {}).get("first_name", "Ascoltatore")
-                        send_message(
-                            token,
-                            chat_id,
-                            f"Ciao {first_name}! Benvenuto su NewsicaTV! 📻\n\nInviami un messaggio vocale (un memo vocale) per farlo ascoltare in diretta durante la nostra trasmissione live H24 su YouTube!"
-                        )
+                        from_user = message.get("from", {})
+                        username = from_user.get("username")
+                        first_name = from_user.get("first_name", "Ascoltatore")
+                        text = message.get("text", "").strip()
+                        
+                        # Rileva e autentica i comandi remoti dell'amministratore Giovanni
+                        if username == "giovannifiore" and text.startswith("/"):
+                            try:
+                                process_admin_command(token, chat_id, text)
+                            except Exception as ae:
+                                print(f"❌ Errore durante process_admin_command: {ae}")
+                        else:
+                            # Risposta di benvenuto automatica per gli ascoltatori standard
+                            send_message(
+                                token,
+                                chat_id,
+                                f"Ciao {first_name}! Benvenuto su NewsicaTV! 📻\n\nInviami un messaggio vocale (un memo vocale) per farlo ascoltare in diretta durante la nostra trasmissione live H24 su YouTube!"
+                            )
                         
             elif r.status_code == 401:
                 print("❌ [TELEGRAM AGENT] Token del Bot non valido (Errore 401). Verifica il valore in .env.")

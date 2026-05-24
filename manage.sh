@@ -93,7 +93,13 @@ function do_status() {
 }
 
 function do_stop() {
-  echo -e "\n${RED}${BOLD}🛑 Spegnimento di tutto l'ecosistema NewsicaTV...${NC}"
+  local exclude_telegram=false
+  if [ "$1" == "--exclude-telegram" ]; then
+    exclude_telegram=true
+    echo -e "\n${RED}${BOLD}🛑 Spegnimento parziale di NewsicaTV (bot Telegram ESCLUSO)...${NC}"
+  else
+    echo -e "\n${RED}${BOLD}🛑 Spegnimento di tutto l'ecosistema NewsicaTV...${NC}"
+  fi
   
   # Termina watchdog prima di tutto
   local watchdog_pids=$(get_all_pids "src/watchdog.sh")
@@ -103,7 +109,11 @@ function do_stop() {
   fi
 
   # Invia SIGTERM ordinato a Regia, Dashboard e Stream
-  local targets=("src/director.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py" "src/telegram_agent.py")
+  local targets=("src/director.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py")
+  if [ "$exclude_telegram" = false ]; then
+    targets+=("src/telegram_agent.py")
+  fi
+  
   for target in "${targets[@]}"; do
     local pids=$(get_all_pids "$target")
     if [ -n "$pids" ]; then
@@ -130,20 +140,28 @@ function do_stop() {
   done
 
   # Chiude eventuali sessioni screen create da manage.sh start.
-  for session_name in newsica-dashboard newsica-watchdog newsica-stream newsica-ai-music-worker newsica-telegram; do
+  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker")
+  if [ "$exclude_telegram" = false ]; then
+    screens+=("newsica-telegram")
+  fi
+  for session_name in "${screens[@]}"; do
     screen -S "$session_name" -X quit 2>/dev/null || true
   done
   screen -wipe >/dev/null 2>&1 || true
 
   # Rimozione dei lockfile e della pipe
   echo -e "🧹 Rimozione lock e pipe orfane..."
-  rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
+  if [ "$exclude_telegram" = false ]; then
+    rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
+  else
+    find "$RUNTIME_DIR" -name "*.lock" ! -name "telegram_agent.lock" -delete 2>/dev/null || true
+  fi
   rm -rf "$RUNTIME_DIR"/stream.lock 2>/dev/null || true
   rm -f "$TMP_DIR"/ai_music.lock 2>/dev/null || true
   rm -f "$TMP_DIR"/ai_music_worker.lock 2>/dev/null || true
   rm -f "$TMP_DIR"/audio_pipe "$TMP_DIR"/overlay_pipe 2>/dev/null || true
 
-  echo -e "${GREEN}✅ Tutto l'ecosistema è stato spento correttamente.${NC}\n"
+  echo -e "${GREEN}✅ Spegnimento completato correttamente.${NC}\n"
 }
 
 function do_start() {
@@ -412,13 +430,17 @@ case "$1" in
     do_start
     ;;
   stop)
-    do_stop
+    do_stop "$2"
     ;;
   restart)
-    do_stop
+    do_stop "$2"
     echo -e "  -> Attesa rilascio lockfile..."
     sleep 3
-    rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
+    if [ "$2" != "--exclude-telegram" ]; then
+      rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
+    else
+      find "$RUNTIME_DIR" -name "*.lock" ! -name "telegram_agent.lock" -delete 2>/dev/null || true
+    fi
     do_start
     ;;
   status)
