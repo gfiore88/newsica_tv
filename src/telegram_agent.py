@@ -192,6 +192,7 @@ def run_telegram_loop(token):
 
 
 def main():
+    global TELEGRAM_BOT_TOKEN
     lock = check_singleton("telegram_agent")
     if not lock:
         sys.exit(1)
