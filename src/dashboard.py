@@ -320,6 +320,13 @@ HTML_TEMPLATE = """
                             Coda dei messaggi vocali inviati dagli ascoltatori su Telegram. Ascoltali in anteprima e approvali per mandarli in onda.
                         </p>
                         
+                        <div class="mb-4 flex justify-between items-center text-[11px] text-slate-400 bg-slate-950/20 p-2.5 rounded border border-slate-800">
+                            <span>Canale: <strong class="text-slate-300">@newsicaTV</strong></span>
+                            <a href="https://t.me/newsicaTV" target="_blank" class="text-sky-400 hover:text-sky-300 font-semibold transition">
+                                Apri Canale ↗️
+                            </a>
+                        </div>
+                        
                         <div id="telegram-voices-container" class="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                             <div class="text-xs text-slate-500 text-center py-4">Nessun vocale in attesa.</div>
                         </div>
