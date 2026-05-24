@@ -49,6 +49,19 @@ def run_loop():
     
     strategist = ContentStrategistAgent()
     sysadmin = SystemAdminAgent()
+
+    # Al boot, ripuliamo eventuali residui orfani in preparing per garantire self-healing immediato
+    from newsica.agents.system_admin import ASSETS_DIR
+    preparing_root = ASSETS_DIR / "preparing"
+    if preparing_root.exists():
+        import shutil
+        for p_dir in preparing_root.iterdir():
+            if p_dir.is_dir():
+                try:
+                    shutil.rmtree(p_dir)
+                    print(f"🧹 [PreparationAgent] Pulito residuo orfano al boot: {p_dir.name}")
+                except Exception as e:
+                    print(f"⚠️ Errore pulizia residuo {p_dir.name}: {e}")
     
     while True:
         try:

@@ -95,6 +95,11 @@ STREAM_FPS="${STREAM_FPS:-25}"
 OVERLAY_FPS="${OVERLAY_FPS:-25}"
 STREAM_WIDTH="${STREAM_WIDTH:-1280}"
 STREAM_HEIGHT="${STREAM_HEIGHT:-720}"
+STREAM_BITRATE="${STREAM_BITRATE:-4500k}"
+
+# Estrae la parte numerica del bitrate per raddoppiarla dinamicamente per il bufsize
+BITRATE_NUM=$(echo "$STREAM_BITRATE" | tr -cd '0-9')
+STREAM_BUFSIZE="$((BITRATE_NUM * 2))k"
 
 if [ ! -f "$PROGRAM_FILE" ]; then
   echo "NEWSICA TV" > "$PROGRAM_FILE"
@@ -158,9 +163,9 @@ if [ "$STREAM_VIDEO_ENCODER" = "h264_videotoolbox" ]; then
     -allow_sw 1
     -constant_bit_rate true
     -profile:v high
-    -b:v 3000k
-    -maxrate:v 3000k
-    -bufsize:v 6000k
+    -b:v "$STREAM_BITRATE"
+    -maxrate:v "$STREAM_BITRATE"
+    -bufsize:v "$STREAM_BUFSIZE"
     -pix_fmt yuv420p
     -r "$STREAM_FPS"
     -g $((STREAM_FPS * 2))
@@ -169,10 +174,10 @@ else
   VIDEO_CODEC_ARGS=(
     -c:v libx264
     -preset veryfast
-    -b:v 3000k
-    -minrate 3000k
-    -maxrate 3000k
-    -bufsize 6000k
+    -b:v "$STREAM_BITRATE"
+    -minrate "$STREAM_BITRATE"
+    -maxrate "$STREAM_BITRATE"
+    -bufsize "$STREAM_BUFSIZE"
     -x264-params nal-hrd=cbr:force-cfr=1:filler=1
     -pix_fmt yuv420p
     -r "$STREAM_FPS"
