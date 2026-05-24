@@ -120,8 +120,13 @@ def process_voice_message(token, message):
         print(f"❌ Eccezione durante la conversione FFmpeg: {e}")
         return
 
-    # 4. Accoda il messaggio in stato "pending"
+    # 4. Accoda il messaggio (gestendo l'auto-approvazione)
     try:
+        # Rileggiamo da .env ad ogni messaggio per supportare cambi a caldo se l'utente modifica l'env
+        load_dotenv(os.path.join(BASE_DIR, ".env"), override=True)
+        auto_approve = os.getenv("TELEGRAM_AUTO_APPROVE", "false").lower() in ("true", "1", "yes")
+        initial_status = "approved" if auto_approve else "pending"
+        
         enqueue_voice(
             author_username=username,
             author_first_name=first_name,
@@ -129,13 +134,23 @@ def process_voice_message(token, message):
             duration=duration,
             original_path=str(original_file_path),
             converted_path=str(converted_file_path),
+            status=initial_status,
         )
-        print(f"🎙️ Vocale Telegram accodato con successo da {first_name} (@{username or 'no_username'})")
-        send_message(
-            token,
-            chat_id,
-            f"Grazie {first_name}! Il tuo vocale è stato ricevuto ed è in attesa di approvazione da parte della regia di NewsicaTV. Rimani all'ascolto! 📻"
-        )
+        
+        if initial_status == "approved":
+            print(f"🎙️ Vocale Telegram accodato con AUTO-APPROVAZIONE da {first_name} (@{username or 'no_username'})")
+            send_message(
+                token,
+                chat_id,
+                f"Grazie {first_name}! Il tuo vocale è stato ricevuto ed è già stato approvato per la messa in onda su NewsicaTV! Rimani all'ascolto! 📻"
+            )
+        else:
+            print(f"🎙️ Vocale Telegram accodato con successo (in attesa approvazione) da {first_name} (@{username or 'no_username'})")
+            send_message(
+                token,
+                chat_id,
+                f"Grazie {first_name}! Il tuo vocale è stato ricevuto ed è in attesa di approvazione da parte della regia di NewsicaTV. Rimani all'ascolto! 📻"
+            )
     except Exception as e:
         print(f"❌ Errore durante l'accodamento del vocale: {e}")
 

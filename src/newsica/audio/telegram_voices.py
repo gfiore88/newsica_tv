@@ -46,6 +46,7 @@ def enqueue_voice(
     duration: int,
     original_path: str,
     converted_path: str,
+    status: str = "pending",
     path: Path = TELEGRAM_VOICES_FILE,
 ) -> dict:
     payload = _load_payload(path)
@@ -58,7 +59,7 @@ def enqueue_voice(
         "duration": duration,
         "original_path": original_path,
         "converted_path": converted_path,
-        "status": "pending",
+        "status": status,
         "received_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     payload["voices"].append(voice)
