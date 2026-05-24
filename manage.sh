@@ -87,6 +87,7 @@ function do_status() {
   check_status "Overlay Agent" "src/overlay_agent.py"
   check_status "Chime Agent" "src/hourly_chime_agent.py"
   check_status "AI Music Worker" "src/newsica/audio/ai_music_worker.py"
+  check_status "Telegram Agent" "src/telegram_agent.py"
   check_status "Watchdog" "src/watchdog.sh"
   echo -e "------------------------------------------------\n"
 }
@@ -102,7 +103,7 @@ function do_stop() {
   fi
 
   # Invia SIGTERM ordinato a Regia, Dashboard e Stream
-  local targets=("src/director.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py")
+  local targets=("src/director.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py" "src/telegram_agent.py")
   for target in "${targets[@]}"; do
     local pids=$(get_all_pids "$target")
     if [ -n "$pids" ]; then
@@ -129,7 +130,7 @@ function do_stop() {
   done
 
   # Chiude eventuali sessioni screen create da manage.sh start.
-  for session_name in newsica-dashboard newsica-watchdog newsica-stream newsica-ai-music-worker; do
+  for session_name in newsica-dashboard newsica-watchdog newsica-stream newsica-ai-music-worker newsica-telegram; do
     screen -S "$session_name" -X quit 2>/dev/null || true
   done
   screen -wipe >/dev/null 2>&1 || true
@@ -194,7 +195,16 @@ function do_start() {
     echo "  [i] AI Music Worker già attivo."
   fi
 
-  # 6. Avvia lo Streamer (FFmpeg/YouTube)
+  # 6. Avvia il Bot Telegram
+  if [ -z "$(get_pid "src/telegram_agent.py")" ]; then
+    echo "  -> Avvio Telegram Bot Agent..."
+    screen -dmS newsica-telegram bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' '$BASE_DIR/src/telegram_agent.py' > '$TMP_DIR/telegram_agent.log' 2>&1"
+    sleep 2
+  else
+    echo "  [i] Telegram Bot Agent già attivo."
+  fi
+
+  # 7. Avvia lo Streamer (FFmpeg/YouTube)
   if [ -z "$(get_pid "ffmpeg.*audio_pipe")" ]; then
     echo "  -> Avvio Streamer (FFmpeg)..."
     screen -dmS newsica-stream bash -lc "cd '$BASE_DIR' && exec bash '$BASE_DIR/src/stream.sh' > '$TMP_DIR/stream.log' 2>&1"

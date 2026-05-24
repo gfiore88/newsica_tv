@@ -93,6 +93,31 @@ def _generate_request_announcement(author, title, output_file):
         return False
 
 
+def _generate_telegram_announcement(author, output_file):
+    try:
+        from kokoro_onnx import Kokoro
+        import soundfile as sf
+        
+        onnx_path = BASE_DIR / "kokoro-v1.0.onnx"
+        voices_path = BASE_DIR / "voices-v1.0.bin"
+        
+        clean_author = author.replace('"', '').replace("'", "").strip()
+        
+        text = f"E ora diamo voce a voi! Ecco un messaggio vocale inviato da {clean_author} su Telegram."
+        print(f"🎙️ Generazione annuncio vocale Telegram TTS: \"{text}\"")
+        
+        kokoro = Kokoro(str(onnx_path), str(voices_path))
+        samples, sample_rate = kokoro.create(
+            text, voice="if_sara", speed=0.95, lang="it"
+        )
+        sf.write(output_file, samples, sample_rate)
+        print(f"✅ Annuncio vocale Telegram generato con successo: {output_file}")
+        return True
+    except Exception as e:
+        print(f"❌ Errore durante la generazione dell'annuncio vocale Telegram TTS: {e}")
+        return False
+
+
 class AudioPlayout:
     def __init__(self, audio_queue, interrupt_event, is_breaking_news_active, music_library=None, ffmpeg_cmd=None):
         self.audio_queue = audio_queue
@@ -486,6 +511,122 @@ class AudioPlayout:
         if datetime.datetime.now() >= deadline or self.is_interrupted():
             return
 
+        # 1. Controlla prima se c'è un vocale Telegram approvato
+        try:
+            from newsica.audio.telegram_voices import consume_next_approved_voice, mark_played
+            tg_voice = consume_next_approved_voice()
+        except Exception as e:
+            print(f"⚠️ Errore durante il recupero dei vocali Telegram: {e}")
+            tg_voice = None
+
+        if tg_voice:
+            voice_file = tg_voice.get("converted_path")
+            author_display = tg_voice.get("author_first_name", "un ascoltatore")
+            if tg_voice.get("author_username"):
+                author_display = f"{author_display} (@{tg_voice['author_username']})"
+                
+            if voice_file and os.path.exists(voice_file):
+                print(f"🎙️ [TELEGRAM VOICE] In onda il vocale di {author_display}")
+                
+                # Sottofondo musicale per il vocale
+                bg_music = self.get_random_music(exclude=self.last_music_file)
+                if not bg_music:
+                    print("⚠️ Nessun sottofondo musicale trovato per il vocale Telegram. Lo riproduco liscio.")
+                    self.queue_pcm_from_file(voice_file, {
+                        "status": "ON_AIR",
+                        "current_block": "telegram_voice",
+                        "current_title": f"Vocale Telegram di {author_display}",
+                        "current_music_title": f"Vocale Telegram di {author_display}",
+                        "requested_by": author_display,
+                        "requested_title": "Messaggio Vocale"
+                    })
+                    try:
+                        mark_played(tg_voice["id"])
+                    except Exception:
+                        pass
+                    return
+
+                # Generazione dell'annuncio
+                announcement_file = TMP_DIR / "tg_announcement.wav"
+                has_announcement = _generate_telegram_announcement(author_display, announcement_file)
+                
+                metadata = {
+                    "current_music_title": f"Vocale Telegram di {author_display}",
+                    "requested_by": author_display,
+                    "requested_title": "Messaggio Vocale",
+                    "current_block": "telegram_voice",
+                    "current_title": f"Vocale Telegram di {author_display}",
+                }
+                self.audio_queue.put({"type": "metadata", "state": metadata})
+                
+                # Decodifichiamo l'annuncio e il vocale
+                voice_files_to_play = []
+                if has_announcement:
+                    voice_files_to_play.append(str(announcement_file))
+                voice_files_to_play.append(str(voice_file))
+                
+                # Processo di riproduzione con musica + sidechain
+                print(f"🎵 Sottofondo musicale: {os.path.basename(bg_music)}")
+                process = subprocess.Popen(self._music_decode_command(bg_music), stdout=subprocess.PIPE)
+                self.current_process = process
+                
+                ducker = PlayoutSidechainDucker(PCM_SAMPLE_RATE)
+                current_voice_idx = 0
+                active_voice_proc = None
+                
+                try:
+                    while True:
+                        if self.is_interrupted():
+                            process.terminate()
+                            break
+                            
+                        data = process.stdout.read(PCM_CHUNK_BYTES)
+                        if not data:
+                            break
+                            
+                        # Gestione della catena di audio vocali (TTS prima, poi il vocale utente)
+                        if current_voice_idx < len(voice_files_to_play):
+                            if active_voice_proc is None:
+                                active_voice_file = voice_files_to_play[current_voice_idx]
+                                active_voice_proc = subprocess.Popen(self._pcm_decode_command(active_voice_file), stdout=subprocess.PIPE)
+                                
+                            voice_data = active_voice_proc.stdout.read(len(data))
+                            if voice_data:
+                                data = ducker.mix(data, voice_data)
+                            else:
+                                active_voice_proc.wait()
+                                active_voice_proc = None
+                                current_voice_idx += 1
+                        elif ducker.current_gain < 0.99:
+                            # Sfumatura di rilascio finale
+                            silence_chunk = b"\x00" * len(data)
+                            data = ducker.mix(data, silence_chunk)
+                        else:
+                            # Quando sia l'annuncio che il vocale sono terminati, terminiamo la riproduzione di questo sottofondo
+                            break
+                            
+                        if not self.queue_item({"type": "audio", "data": data}):
+                            process.terminate()
+                            break
+                finally:
+                    if active_voice_proc:
+                        try:
+                            active_voice_proc.terminate()
+                            active_voice_proc.wait()
+                        except Exception:
+                            pass
+                    if process.poll() is None:
+                        process.terminate()
+                    process.wait()
+                    self.current_process = None
+                    try:
+                        mark_played(tg_voice["id"])
+                    except Exception:
+                        pass
+                    
+                # Procediamo oltre, interrompendo il brano per far posto alla programmazione
+                return
+
         request = consume_next_ready_request()
         music_file = None
         is_requested = False
@@ -600,6 +741,122 @@ class AudioPlayout:
     def queue_single_music_track(self, music_file=None):
         if self.is_interrupted():
             return
+
+        # 1. Controlla prima se c'è un vocale Telegram approvato
+        try:
+            from newsica.audio.telegram_voices import consume_next_approved_voice, mark_played
+            tg_voice = consume_next_approved_voice()
+        except Exception as e:
+            print(f"⚠️ Errore durante il recupero dei vocali Telegram: {e}")
+            tg_voice = None
+
+        if tg_voice:
+            voice_file = tg_voice.get("converted_path")
+            author_display = tg_voice.get("author_first_name", "un ascoltatore")
+            if tg_voice.get("author_username"):
+                author_display = f"{author_display} (@{tg_voice['author_username']})"
+                
+            if voice_file and os.path.exists(voice_file):
+                print(f"🎙️ [TELEGRAM VOICE] In onda il vocale di {author_display}")
+                
+                # Sottofondo musicale per il vocale
+                bg_music = self.get_random_music(exclude=self.last_music_file)
+                if not bg_music:
+                    print("⚠️ Nessun sottofondo musicale trovato per il vocale Telegram. Lo riproduco liscio.")
+                    self.queue_pcm_from_file(voice_file, {
+                        "status": "ON_AIR",
+                        "current_block": "telegram_voice",
+                        "current_title": f"Vocale Telegram di {author_display}",
+                        "current_music_title": f"Vocale Telegram di {author_display}",
+                        "requested_by": author_display,
+                        "requested_title": "Messaggio Vocale"
+                    })
+                    try:
+                        mark_played(tg_voice["id"])
+                    except Exception:
+                        pass
+                    return
+
+                # Generazione dell'annuncio
+                announcement_file = TMP_DIR / "tg_announcement.wav"
+                has_announcement = _generate_telegram_announcement(author_display, announcement_file)
+                
+                metadata = {
+                    "current_music_title": f"Vocale Telegram di {author_display}",
+                    "requested_by": author_display,
+                    "requested_title": "Messaggio Vocale",
+                    "current_block": "telegram_voice",
+                    "current_title": f"Vocale Telegram di {author_display}",
+                }
+                self.audio_queue.put({"type": "metadata", "state": metadata})
+                
+                # Decodifichiamo l'annuncio e il vocale
+                voice_files_to_play = []
+                if has_announcement:
+                    voice_files_to_play.append(str(announcement_file))
+                voice_files_to_play.append(str(voice_file))
+                
+                # Processo di riproduzione con musica + sidechain
+                print(f"🎵 Sottofondo musicale: {os.path.basename(bg_music)}")
+                process = subprocess.Popen(self._music_decode_command(bg_music), stdout=subprocess.PIPE)
+                self.current_process = process
+                
+                ducker = PlayoutSidechainDucker(PCM_SAMPLE_RATE)
+                current_voice_idx = 0
+                active_voice_proc = None
+                
+                try:
+                    while True:
+                        if self.is_interrupted():
+                            process.terminate()
+                            break
+                            
+                        data = process.stdout.read(PCM_CHUNK_BYTES)
+                        if not data:
+                            break
+                            
+                        # Gestione della catena di audio vocali (TTS prima, poi il vocale utente)
+                        if current_voice_idx < len(voice_files_to_play):
+                            if active_voice_proc is None:
+                                active_voice_file = voice_files_to_play[current_voice_idx]
+                                active_voice_proc = subprocess.Popen(self._pcm_decode_command(active_voice_file), stdout=subprocess.PIPE)
+                                
+                            voice_data = active_voice_proc.stdout.read(len(data))
+                            if voice_data:
+                                data = ducker.mix(data, voice_data)
+                            else:
+                                active_voice_proc.wait()
+                                active_voice_proc = None
+                                current_voice_idx += 1
+                        elif ducker.current_gain < 0.99:
+                            # Sfumatura di rilascio finale
+                            silence_chunk = b"\x00" * len(data)
+                            data = ducker.mix(data, silence_chunk)
+                        else:
+                            # Quando sia l'annuncio che il vocale sono terminati, terminiamo la riproduzione di questo sottofondo
+                            break
+                            
+                        if not self.queue_item({"type": "audio", "data": data}):
+                            process.terminate()
+                            break
+                finally:
+                    if active_voice_proc:
+                        try:
+                            active_voice_proc.terminate()
+                            active_voice_proc.wait()
+                        except Exception:
+                            pass
+                    if process.poll() is None:
+                        process.terminate()
+                    process.wait()
+                    self.current_process = None
+                    try:
+                        mark_played(tg_voice["id"])
+                    except Exception:
+                        pass
+                    
+                # Procediamo oltre
+                return
 
         request = consume_next_ready_request()
         is_requested = False

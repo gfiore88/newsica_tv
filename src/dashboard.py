@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template_string, request
+from flask import Flask, jsonify, render_template_string, request, send_file
 import os
 from dotenv import load_dotenv
 
@@ -72,6 +72,12 @@ SERVICES = {
         "patterns": [r"src/newsica/audio/ai_music_worker\.py"],
         "command": [ACE_STEP_PYTHON, "-u", os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_worker.py")],
         "log": os.path.join(TMP_DIR, "ai_music_worker.log"),
+    },
+    "telegram_agent": {
+        "label": "Telegram Bot",
+        "patterns": [r"src/telegram_agent\.py"],
+        "command": [PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "telegram_agent.py")],
+        "log": os.path.join(TMP_DIR, "telegram_agent.log"),
     },
 }
 
@@ -294,6 +300,28 @@ HTML_TEMPLATE = """
                                 class="w-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs py-2 px-3 rounded-lg transition-all flex justify-center items-center shadow-[0_0_10px_rgba(239,68,68,0.2)]">
                                 🚀 Inietta nell'Overlay
                             </button>
+                        </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card Vocali Telegram -->
+                <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between mt-6">
+                    <div>
+                        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-700/50">
+                            <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold flex items-center">
+                                🎙️ Vocali Telegram
+                            </h2>
+                            <span id="tg-service-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 border border-slate-600 font-bold uppercase tracking-wider">
+                                Checking...
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+                            Coda dei messaggi vocali inviati dagli ascoltatori su Telegram. Ascoltali in anteprima e approvali per mandarli in onda.
+                        </p>
+                        
+                        <div id="telegram-voices-container" class="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                            <div class="text-xs text-slate-500 text-center py-4">Nessun vocale in attesa.</div>
                         </div>
                     </div>
                 </div>
@@ -807,16 +835,102 @@ HTML_TEMPLATE = """
             }
         }
 
+        async function fetchTelegramVoices() {
+            try {
+                const res = await fetch('/api/telegram-voices');
+                const data = await res.json();
+                if (data.status === "OK") {
+                    const container = document.getElementById('telegram-voices-container');
+                    const voices = data.voices.filter(v => v.status === "pending");
+                    
+                    if (voices.length === 0) {
+                        container.innerHTML = `<div class="text-xs text-slate-500 text-center py-4">Nessun vocale in attesa.</div>`;
+                        return;
+                    }
+                    
+                    container.innerHTML = voices.map(v => `
+                        <div class="p-3 rounded-lg border border-slate-700 bg-slate-900/40 hover:bg-slate-900/60 transition space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-200">👤 ${v.author_first_name} ${v.author_username ? '(@' + v.author_username + ')' : ''}</span>
+                                <span class="text-[10px] text-slate-500">${v.duration}s</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <audio controls class="w-full h-8 rounded bg-slate-800 text-xs">
+                                    <source src="/api/telegram-voices/play/${v.id}" type="audio/wav">
+                                    Il tuo browser non supporta l'audio.
+                                </audio>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="approveVoice('${v.id}')" 
+                                    class="flex-1 bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold text-[11px] py-1 px-2 rounded transition">
+                                    Approva
+                                </button>
+                                <button onclick="rejectVoice('${v.id}')" 
+                                    class="flex-1 bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] py-1 px-2 rounded transition">
+                                    Rifiuta
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error("Errore recupero vocali Telegram", e);
+            }
+        }
+
+        async function approveVoice(voiceId) {
+            try {
+                const res = await fetch(`/api/telegram-voices/approve/${voiceId}`, { method: 'POST' });
+                const data = await res.json();
+                logMsg(data.message);
+                fetchTelegramVoices();
+            } catch (e) {
+                logMsg("Errore approvazione vocale");
+            }
+        }
+
+        async function rejectVoice(voiceId) {
+            try {
+                const res = await fetch(`/api/telegram-voices/reject/${voiceId}`, { method: 'POST' });
+                const data = await res.json();
+                logMsg(data.message);
+                fetchTelegramVoices();
+            } catch (e) {
+                logMsg("Errore rifiuto vocale");
+            }
+        }
+
+        async function fetchTelegramStatus() {
+            try {
+                const res = await fetch('/api/telegram/status');
+                const data = await res.json();
+                const badge = document.getElementById('tg-service-badge');
+                if (data.is_running) {
+                    badge.className = "text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold uppercase tracking-wider";
+                    badge.innerText = "Attivo";
+                } else {
+                    badge.className = "text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold uppercase tracking-wider";
+                    badge.innerText = "Spento";
+                }
+            } catch (e) {
+                console.error("Errore fetch telegram status", e);
+            }
+        }
+
         setInterval(fetchState, 3000);
         setInterval(fetchAuditLog, 5000);
         setInterval(fetchMusicMode, 15000);
         setInterval(fetchChatStatus, 3000);
+        setInterval(fetchTelegramVoices, 5000);
+        setInterval(fetchTelegramStatus, 3000);
         
         // Initial fetch
         fetchState();
         fetchAuditLog();
         fetchMusicMode();
         fetchChatStatus();
+        fetchTelegramVoices();
+        fetchTelegramStatus();
 
     </script>
 </body>
@@ -1278,6 +1392,65 @@ def inject_chat_mock():
         json.dump(chat_data, f, ensure_ascii=False, indent=2)
         
     return jsonify({"status": "OK", "message": f"Messaggio di {author} iniettato"})
+
+
+# API per la gestione dei Vocali Telegram
+@app.route('/api/telegram-voices', methods=['GET'])
+def get_telegram_voices():
+    from newsica.audio.telegram_voices import list_voices
+    try:
+        voices = list_voices()
+        return jsonify({"status": "OK", "voices": voices})
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)})
+
+
+@app.route('/api/telegram-voices/approve/<voice_id>', methods=['POST'])
+def approve_telegram_voice(voice_id):
+    from newsica.audio.telegram_voices import approve_voice
+    try:
+        res = approve_voice(voice_id)
+        if res:
+            return jsonify({"status": "OK", "message": "Vocale approvato"})
+        return jsonify({"status": "ERROR", "message": "Vocale non trovato"})
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)})
+
+
+@app.route('/api/telegram-voices/reject/<voice_id>', methods=['POST'])
+def reject_telegram_voice(voice_id):
+    from newsica.audio.telegram_voices import reject_voice
+    try:
+        res = reject_voice(voice_id)
+        if res:
+            return jsonify({"status": "OK", "message": "Vocale rifiutato"})
+        return jsonify({"status": "ERROR", "message": "Vocale non trovato"})
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)})
+
+
+@app.route('/api/telegram-voices/play/<voice_id>', methods=['GET'])
+def play_telegram_voice(voice_id):
+    from newsica.audio.telegram_voices import get_voice
+    try:
+        voice = get_voice(voice_id)
+        if voice and voice.get("converted_path"):
+            path = voice["converted_path"]
+            if os.path.exists(path):
+                return send_file(path, mimetype="audio/wav")
+        return jsonify({"status": "ERROR", "message": "File non trovato"}), 404
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+
+@app.route('/api/telegram/status', methods=['GET'])
+def get_telegram_status():
+    pids = find_pids([r"src/telegram_agent\.py"])
+    is_running = len(pids) > 0
+    return jsonify({
+        "status": "OK",
+        "is_running": is_running
+    })
 
 
 def check_singleton(name):
