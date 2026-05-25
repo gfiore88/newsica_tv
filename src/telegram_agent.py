@@ -43,9 +43,23 @@ def check_singleton(name):
         return None
 
 
-def send_message(token, chat_id, text):
+ADMIN_KEYBOARD = {
+    "keyboard": [
+        [{"text": "/status"}],
+        [{"text": "/start"}, {"text": "/stop"}],
+        [{"text": "/restart"}, {"text": "/help"}]
+    ],
+    "resize_keyboard": True,
+    "is_persistent": True
+}
+
+
+def send_message(token, chat_id, text, reply_markup=None):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+        
     try:
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
@@ -56,53 +70,53 @@ def process_admin_command(token, chat_id, text, first_name="Admin"):
     cmd = text.lower().split()[0]
     
     if cmd == "/status":
-        send_message(token, chat_id, "Checking NewsicaTV services status... 🔍")
+        send_message(token, chat_id, "Checking NewsicaTV services status... 🔍", reply_markup=ADMIN_KEYBOARD)
         try:
             res = subprocess.run(["bash", os.path.join(BASE_DIR, "manage.sh"), "status"], capture_output=True, text=True, timeout=10)
             clean_output = res.stdout
             ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
             clean_output = ansi_escape.sub('', clean_output)
-            send_message(token, chat_id, f"📊 *Stato dei Servizi NewsicaTV:*\n\n{clean_output}")
+            send_message(token, chat_id, f"📊 *Stato dei Servizi NewsicaTV:*\n\n{clean_output}", reply_markup=ADMIN_KEYBOARD)
         except Exception as e:
-            send_message(token, chat_id, f"❌ Errore durante ./manage.sh status: {e}")
+            send_message(token, chat_id, f"❌ Errore durante ./manage.sh status: {e}", reply_markup=ADMIN_KEYBOARD)
             
     elif cmd == "/restart":
-        send_message(token, chat_id, "🔄 Riavvio ordinato dell'ecosistema (escluso il Bot Telegram) in corso... Attendi.")
+        send_message(token, chat_id, "🔄 Riavvio ordinato dell'ecosistema (escluso il Bot Telegram) in corso... Attendi.", reply_markup=ADMIN_KEYBOARD)
         import threading
         def run_restart():
             try:
                 subprocess.run(["bash", os.path.join(BASE_DIR, "manage.sh"), "restart", "--exclude-telegram"], timeout=40)
-                send_message(token, chat_id, "✅ Ecosistema riavviato e online con successo! 🟢")
+                send_message(token, chat_id, "✅ Ecosistema riavviato e online con successo! 🟢", reply_markup=ADMIN_KEYBOARD)
             except Exception as e:
-                send_message(token, chat_id, f"❌ Errore durante il restart: {e}")
+                send_message(token, chat_id, f"❌ Errore durante il restart: {e}", reply_markup=ADMIN_KEYBOARD)
         
         threading.Thread(target=run_restart, daemon=True).start()
         
     elif cmd == "/stop":
-        send_message(token, chat_id, "🛑 Spegnimento della diretta e della regia (escluso il Bot Telegram) in corso...")
+        send_message(token, chat_id, "🛑 Spegnimento della diretta e della regia (escluso il Bot Telegram) in corso...", reply_markup=ADMIN_KEYBOARD)
         import threading
         def run_stop():
             try:
                 subprocess.run(["bash", os.path.join(BASE_DIR, "manage.sh"), "stop", "--exclude-telegram"], timeout=20)
-                send_message(token, chat_id, "✅ Ecosistema spento (Regia e FFmpeg interrotti). Il Bot Telegram rimane in ascolto ed è pronto a ripartire con /start! 🔴")
+                send_message(token, chat_id, "✅ Ecosistema spento (Regia e FFmpeg interrotti). Il Bot Telegram rimane in ascolto ed è pronto a ripartire con /start! 🔴", reply_markup=ADMIN_KEYBOARD)
             except Exception as e:
-                send_message(token, chat_id, f"❌ Errore durante lo stop: {e}")
+                send_message(token, chat_id, f"❌ Errore durante lo stop: {e}", reply_markup=ADMIN_KEYBOARD)
                 
         threading.Thread(target=run_stop, daemon=True).start()
         
     elif cmd == "/start":
-        send_message(token, chat_id, "🚀 Avvio dell'intero ecosistema NewsicaTV in corso...")
+        send_message(token, chat_id, "🚀 Avvio dell'intero ecosistema NewsicaTV in corso...", reply_markup=ADMIN_KEYBOARD)
         import threading
         def run_start():
             try:
                 subprocess.run(["bash", os.path.join(BASE_DIR, "manage.sh"), "start"], timeout=40)
-                send_message(token, chat_id, "✅ Ecosistema avviato con successo e in onda su YouTube! 🟢")
+                send_message(token, chat_id, "✅ Ecosistema avviato con successo e in onda su YouTube! 🟢", reply_markup=ADMIN_KEYBOARD)
             except Exception as e:
-                send_message(token, chat_id, f"❌ Errore durante l'avvio: {e}")
+                send_message(token, chat_id, f"❌ Errore durante l'avvio: {e}", reply_markup=ADMIN_KEYBOARD)
                 
         threading.Thread(target=run_start, daemon=True).start()
         
-    elif cmd in ("/help", "/info"):
+    elif cmd in ("/help", "/info") or text.startswith("/"):
         help_text = (
             "👑 NewsicaTV Admin Panel (Remoto)\n"
             f"Benvenuto {first_name}! Puoi gestire l'intera radio con i seguenti comandi:\n\n"
@@ -112,9 +126,10 @@ def process_admin_command(token, chat_id, text, first_name="Admin"):
             "🛑 /stop - Ferma la diretta e la regia (il Bot resta attivo)\n"
             "ℹ️ /help - Mostra questo pannello di aiuto"
         )
-        send_message(token, chat_id, help_text)
+        send_message(token, chat_id, help_text, reply_markup=ADMIN_KEYBOARD)
     else:
-        send_message(token, chat_id, "⚠️ Comando admin sconosciuto. Digita /help per i comandi disponibili.")
+        # Se invia un testo qualsiasi l'admin, magari non è un comando ma forziamo la comparsa della tastiera
+        send_message(token, chat_id, "⚠️ Comando admin sconosciuto. Usa la tastiera qui sotto per i comandi disponibili.", reply_markup=ADMIN_KEYBOARD)
 
 
 def process_voice_message(token, message):
@@ -277,7 +292,7 @@ def run_telegram_loop(token):
                         
                         # Rileva e autentica i comandi remoti dell'amministratore tramite variabile d'ambiente
                         admin_username = os.getenv("TELEGRAM_ADMIN_USERNAME", "giovannifiore")
-                        if admin_username and username == admin_username and text.startswith("/"):
+                        if admin_username and username == admin_username:
                             try:
                                 process_admin_command(token, chat_id, text, first_name)
                             except Exception as ae:
