@@ -68,6 +68,15 @@ Questo evita che un restart del solo director produca:
 * doppie istanze reali di agent privi di lock;
 * effetti collaterali come doppia preparazione degli slot o doppio scheduling del segnale orario.
 
+### F. Recovery di restart senza replay del parlato
+Quando il solo `director.py` viene riavviato, non e' possibile riprendere un file PCM esattamente a meta' battuta. La strategia runtime attuale e' quindi intenzionalmente pragmatica:
+* se lo stato corrente appartiene ancora allo slot wallclock attivo, il director prova a preservare il contesto editoriale;
+* se il segmento era gia' musicale, lo mantiene cosi';
+* se il segmento era parlato (`podcast_playing`, `voice_part_*`, `voice_closing`, ecc.), il director degrada il blocco a `music_rotation_until_deadline`;
+* per i podcast viene anche marcato `podcast_played = true`, cosi' la puntata non riparte dall'inizio.
+
+Obiettivo: evitare il replay artificiale della parte 1 o del podcast completo dopo un restart tecnico, pur mantenendo la continuita' della fascia in onda.
+
 ---
 
 ## 3. Valutazione Gravità Notizie (`GravityAssessor`)

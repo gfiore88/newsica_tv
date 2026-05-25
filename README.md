@@ -51,6 +51,8 @@ Il refactor include anche una protezione sui job musica AI: i job `rotation_fill
 
 Il supervisor dei sotto-processi del director è ora idempotente: prima di lanciare `ticker_agent.py`, `overlay_agent.py`, `hourly_chime_agent.py`, `chat_agent.py` o `preparation_agent.py`, verifica se il processo è già vivo e in quel caso salta l'avvio duplicato. `hourly_chime_agent.py` e `preparation_agent.py` hanno inoltre ora un proprio lock singleton, per evitare doppie istanze anche fuori dal path standard del director.
 
+In caso di restart del solo director, la regia prova anche a recuperare il contesto dello slot corrente senza ripartire dall'inizio del parlato. Se il blocco in corso era in una fase vocale non riprendibile a metà file, il director degrada in `music_rotation_until_deadline`: mantiene la fascia editoriale corrente, ma evita replay artificiali della `Parte 1` o del podcast completo.
+
 ### 🎼 Importazione Musica Creative Commons (`chart_importer.py`)
 Esiste anche uno script locale per importare brani esterni in `assets/music/`, con focus primario su tracce **Creative Commons BY** recuperate da **Jamendo**. Lo script:
 * scarica i file audio;

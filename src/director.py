@@ -80,6 +80,42 @@ def build_ordinary_breaking_state(prev_state, now_ts):
     }
 
 
+def build_restart_recovery_state(existing_state, wallclock_slot, now_ts):
+    state = dict(existing_state or {})
+    status = state.get("status", "OFFLINE")
+
+    if status == "SPECIAL_BROADCAST":
+        recovered = dict(state)
+        if recovered.get("current_segment") in {"intro", "broadcast_body"}:
+            recovered["current_segment"] = "broadcast_waiting"
+        recovered["last_update"] = now_ts
+        return recovered
+
+    if status != "ON_AIR":
+        return {"status": "OFFLINE", "last_update": now_ts}
+
+    scheduled_slot = state.get("scheduled_slot")
+    current_block = state.get("current_block")
+    if not scheduled_slot or scheduled_slot != wallclock_slot:
+        return {"status": "OFFLINE", "last_update": now_ts}
+
+    # Dopo un restart non possiamo riprendere un file PCM a metà voce:
+    # manteniamo lo slot ma degradando in rotazione musicale fino a fine fascia.
+    recovered = dict(state)
+    current_segment = recovered.get("current_segment", "") or ""
+    is_music_segment = (
+        current_block == "music_only"
+        or current_segment == "music_rotation_until_deadline"
+        or current_segment.startswith("music_")
+    )
+    if not is_music_segment:
+        recovered["current_segment"] = "music_rotation_until_deadline"
+        if current_block == "podcast":
+            recovered["podcast_played"] = True
+    recovered["last_update"] = now_ts
+    return recovered
+
+
 def handle_ordinary_breaking_news(
     fifo_writer,
     bn_file,
@@ -250,14 +286,30 @@ def main():
         sys.exit(1)
     
     print("🎬 Regia NewsicaTV avviata.")
-    write_state_files({"status": "OFFLINE"})
+    now_ts = time.strftime("%Y-%m-%dT%H:%M:%S")
+    recovered_state = build_restart_recovery_state(
+        get_current_state(),
+        get_wallclock_schedule_key(),
+        now_ts,
+    )
+    if recovered_state.get("status") == "ON_AIR":
+        print(
+            "♻️ Recovery director: preservo lo slot corrente "
+            f"{recovered_state.get('scheduled_slot')} in segmento "
+            f"{recovered_state.get('current_segment')}."
+        )
+    elif recovered_state.get("status") == "SPECIAL_BROADCAST":
+        print("♻️ Recovery director: ripristino stato di edizione straordinaria.")
+    else:
+        print("ℹ️ Recovery director: nessuno slot recuperabile, imposto OFFLINE.")
+    write_state_files(recovered_state)
     
     threading.Thread(target=generator_worker, daemon=True).start()
     supervisor = SubprocessSupervisor(PYTHON_EXEC, BASE_DIR)
     supervisor.start_all()
     
     silence = b'\x00' * PCM_CHUNK_BYTES
-    last_schedule_key = get_wallclock_schedule_key()
+    last_schedule_key = recovered_state.get("scheduled_slot") or get_wallclock_schedule_key()
     
     while True:
         print("\n📡 In attesa che FFmpeg si colleghi alla pipe in lettura...")
