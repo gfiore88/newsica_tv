@@ -57,6 +57,17 @@ Il refactor del Director e' stato completato eliminando il vecchio bridge ibrido
 
 Questo ha rimosso una classe di bug in cui lo stato avanzava correttamente ma l'audio, i jingle o la schedulazione dei job collaterali non partivano.
 
+### E. Supervisione idempotente degli agenti secondari
+Il `director` avvia agenti collaterali tramite `SubprocessSupervisor`, ma il supervisor ora e' idempotente:
+* prima di lanciare un agente controlla se esiste gia' un processo vivo per quello script;
+* se il processo esiste, logga uno `skip` e non tenta un secondo avvio;
+* `hourly_chime_agent.py` e `preparation_agent.py` sono stati irrigiditi con un lock singleton locale, come gia' avveniva per ticker, overlay e chat.
+
+Questo evita che un restart del solo director produca:
+* errori rumorosi di singleton nei log;
+* doppie istanze reali di agent privi di lock;
+* effetti collaterali come doppia preparazione degli slot o doppio scheduling del segnale orario.
+
 ---
 
 ## 3. Valutazione Gravità Notizie (`GravityAssessor`)

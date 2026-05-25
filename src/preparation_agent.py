@@ -1,6 +1,8 @@
 import time
 import datetime
 import sys
+import os
+import fcntl
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
@@ -10,6 +12,26 @@ sys.path.append(str(BASE_DIR))
 from newsica.agents.content_strategist import ContentStrategistAgent
 from newsica.agents.ai_integrator import AIIntegratorAgent
 from newsica.agents.system_admin import SystemAdminAgent
+
+RUNTIME_DIR = BASE_DIR / "runtime"
+_singleton_lock = None
+
+
+def check_singleton(name):
+    lock_file_path = RUNTIME_DIR / f"{name}.lock"
+    try:
+        f = open(lock_file_path, "w")
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        global _singleton_lock
+        _singleton_lock = f
+        f.seek(0)
+        f.truncate()
+        f.write(str(os.getpid()))
+        f.flush()
+        return True
+    except Exception:
+        print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione!")
+        return False
 
 def get_future_slots(hours_ahead=2, current_grace_minutes=30):
     # Leggiamo lo schedule
@@ -117,4 +139,7 @@ def run_loop():
         time.sleep(60)
 
 if __name__ == "__main__":
+    os.makedirs(RUNTIME_DIR, exist_ok=True)
+    if not check_singleton("preparation_agent"):
+        sys.exit(1)
     run_loop()

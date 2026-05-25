@@ -49,6 +49,8 @@ Questo elimina il vecchio doppio binario `dict` legacy + eventi e riduce i bug s
 
 Il refactor include anche una protezione sui job musica AI: i job `rotation_fill` rimasti orfani in stato `running` vengono auto-chiusi dopo timeout configurabile (`AI_MUSIC_RUNNING_STALE_SECONDS`, default `3600`), così la schedulazione automatica non resta bloccata per giorni.
 
+Il supervisor dei sotto-processi del director è ora idempotente: prima di lanciare `ticker_agent.py`, `overlay_agent.py`, `hourly_chime_agent.py`, `chat_agent.py` o `preparation_agent.py`, verifica se il processo è già vivo e in quel caso salta l'avvio duplicato. `hourly_chime_agent.py` e `preparation_agent.py` hanno inoltre ora un proprio lock singleton, per evitare doppie istanze anche fuori dal path standard del director.
+
 ### 🎼 Importazione Musica Creative Commons (`chart_importer.py`)
 Esiste anche uno script locale per importare brani esterni in `assets/music/`, con focus primario su tracce **Creative Commons BY** recuperate da **Jamendo**. Lo script:
 * scarica i file audio;

@@ -9,6 +9,7 @@ import sys
 import time
 import datetime
 import random
+import fcntl
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
@@ -89,6 +90,25 @@ CHIME_TEMPLATES = [
     "Le {ora} in punto. Grazie per essere con noi su NewsicaTV.",
     "Sono le {ora} in punto, buon ascolto da NewsicaTV.",
 ]
+
+_singleton_lock = None
+
+
+def check_singleton(name):
+    lock_file_path = os.path.join(RUNTIME_DIR, f"{name}.lock")
+    try:
+        f = open(lock_file_path, "w")
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        global _singleton_lock
+        _singleton_lock = f
+        f.seek(0)
+        f.truncate()
+        f.write(str(os.getpid()))
+        f.flush()
+        return True
+    except Exception:
+        print(f"❌ ERRORE: Un'altra istanza di {name} è già in esecuzione!")
+        return False
 
 def build_chime_text(hour: int) -> str:
     ora = HOUR_WORDS.get(hour, f"{hour}")
@@ -212,4 +232,6 @@ def run():
 
 
 if __name__ == "__main__":
+    if not check_singleton("hourly_chime_agent"):
+        sys.exit(1)
     run()
