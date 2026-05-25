@@ -77,6 +77,18 @@ Quando il solo `director.py` viene riavviato, non e' possibile riprendere un fil
 
 Obiettivo: evitare il replay artificiale della parte 1 o del podcast completo dopo un restart tecnico, pur mantenendo la continuita' della fascia in onda.
 
+### G. Shutdown cooperativo del director
+Quando il `director` riceve un arresto intenzionale (`SIGTERM` o `SIGINT`):
+* segnala uno shutdown cooperativo ai thread interni;
+* termina il processo audio corrente e svuota la coda;
+* sblocca il wait sulla FIFO, cosi' il generator non resta sospeso;
+* esce con codice `0`, permettendo al watchdog di loggare un restart intenzionale invece di un crash.
+
+Questo non elimina la necessita' del watchdog, ma separa chiaramente:
+* restart tecnici o deploy del solo `director`;
+* crash reali del processo;
+* disconnessioni temporanee della FIFO verso FFmpeg.
+
 ---
 
 ## 3. Valutazione Gravità Notizie (`GravityAssessor`)

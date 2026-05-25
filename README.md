@@ -53,6 +53,8 @@ Il supervisor dei sotto-processi del director è ora idempotente: prima di lanci
 
 In caso di restart del solo director, la regia prova anche a recuperare il contesto dello slot corrente senza ripartire dall'inizio del parlato. Se il blocco in corso era in una fase vocale non riprendibile a metà file, il director degrada in `music_rotation_until_deadline`: mantiene la fascia editoriale corrente, ma evita replay artificiali della `Parte 1` o del podcast completo.
 
+Il restart del director è ora anche cooperativo: su `SIGTERM` o `SIGINT` la regia interrompe in modo pulito il processo audio corrente, sblocca il loop FIFO e termina con `exit 0`. Il `watchdog.sh` distingue quindi gli stop intenzionali dai crash veri, riducendo il rumore di log tipo `Broken pipe` durante deploy e riavvii tecnici.
+
 ### 🎼 Importazione Musica Creative Commons (`chart_importer.py`)
 Esiste anche uno script locale per importare brani esterni in `assets/music/`, con focus primario su tracce **Creative Commons BY** recuperate da **Jamendo**. Lo script:
 * scarica i file audio;

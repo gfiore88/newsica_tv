@@ -11,6 +11,7 @@ import time
 import threading
 import queue
 import datetime
+import signal
 from newsica.audio.playout import AudioPlayout
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 from newsica.broadcast import scheduler
@@ -51,6 +52,7 @@ manual_block_override_index = None
 current_active_index = 0
 breaking_news_active = False
 schedule_interrupt_event = threading.Event()
+shutdown_requested = threading.Event()
 # Evento che segnala quando la FIFO è aperta in scrittura (FFmpeg collegato)
 # Il generator_worker lo aspetta per evitare di pre-caricare audio prima del tempo
 fifo_connected_event = threading.Event()
@@ -63,6 +65,48 @@ playout = AudioPlayout(
 FFMPEG_CMD = resolve_ffmpeg_cmd()
 director_agent = DirectorAgent(playout)
 _singleton_lock = None
+SHUTDOWN_GRACE_SECONDS = 3.0
+
+
+def install_signal_handlers():
+    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+    signal.signal(signal.SIGINT, _handle_shutdown_signal)
+
+
+def _handle_shutdown_signal(signum, frame):
+    signal_name = signal.Signals(signum).name
+    request_shutdown(f"📴 Arresto intenzionale del director ricevuto via {signal_name}.")
+
+
+def _force_exit_after_grace_period(grace_seconds):
+    time.sleep(grace_seconds)
+    if shutdown_requested.is_set():
+        print(f"⏹️ Shutdown del director ancora pendente dopo {grace_seconds:.1f}s, termino il processo.")
+        os._exit(0)
+
+
+def request_shutdown(reason, *, force_exit=True):
+    if shutdown_requested.is_set():
+        return
+    print(reason)
+    shutdown_requested.set()
+    schedule_interrupt_event.set()
+    fifo_connected_event.set()
+    playout.stop_current_process("🛑 Arresto audio corrente per shutdown del director.")
+    playout.clear_queue()
+    if force_exit:
+        threading.Thread(
+            target=_force_exit_after_grace_period,
+            args=(SHUTDOWN_GRACE_SECONDS,),
+            daemon=True,
+        ).start()
+
+
+def wait_for_fifo_connection(poll_interval=0.5):
+    while not shutdown_requested.is_set():
+        if fifo_connected_event.wait(timeout=poll_interval):
+            return not shutdown_requested.is_set()
+    return False
 
 
 def build_ordinary_breaking_state(prev_state, now_ts):
@@ -146,7 +190,7 @@ def handle_ordinary_breaking_news(
         "pipe:1"
     ]
     try:
-        proc = popen_factory(cmd_ffmpeg, stdout=subprocess.PIPE)
+        proc = popen_factory(cmd_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         while True:
             chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
             if not chunk_data:
@@ -200,13 +244,18 @@ def generator_worker():
     
     # Aspetta che la FIFO sia aperta da FFmpeg prima di pre-caricare audio.
     print("⏸️  Generator in attesa che FFmpeg apra la pipe audio...")
-    fifo_connected_event.wait()
+    if not wait_for_fifo_connection():
+        print("🛑 Generator arrestato prima della connessione FIFO.")
+        return
     print("▶️  Generator sbloccato — avvio ciclo palinsesto.")
     
-    while True:
+    while not shutdown_requested.is_set():
         try:
-            while breaking_news_active:
+            while breaking_news_active and not shutdown_requested.is_set():
                 time.sleep(1)
+
+            if shutdown_requested.is_set():
+                break
                 
             schedule_interrupt_event.clear()
             
@@ -225,6 +274,8 @@ def generator_worker():
             execute_playout_event(event)
                 
         except Exception as e:
+            if shutdown_requested.is_set():
+                break
             print(f"💥 Errore nel ciclo del generatore DirectorAgent: {e}")
             time.sleep(5)
 
@@ -282,6 +333,7 @@ def check_singleton(name):
 def main():
     global manual_block_override_index, current_active_index, breaking_news_active
     ensure_folders()
+    install_signal_handlers()
     if not check_singleton("director"):
         sys.exit(1)
     
@@ -311,7 +363,7 @@ def main():
     silence = b'\x00' * PCM_CHUNK_BYTES
     last_schedule_key = recovered_state.get("scheduled_slot") or get_wallclock_schedule_key()
     
-    while True:
+    while not shutdown_requested.is_set():
         print("\n📡 In attesa che FFmpeg si colleghi alla pipe in lettura...")
         fifo_fd = None
         try:
@@ -323,7 +375,7 @@ def main():
             fade_in_chunks_remaining = 0
             next_write_time = time.time()
             fifo_writer = FifoWriter(fifo_fd, audio_queue)
-            while True:
+            while not shutdown_requested.is_set():
                 if manual_block_override_index is None:
                     current_schedule_key = get_wallclock_schedule_key()
                     if current_schedule_key != last_schedule_key:
@@ -418,7 +470,7 @@ def main():
                                     "pipe:1"
                                 ]
                                 try:
-                                    proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
+                                    proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                                     while True:
                                         chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
                                         if not chunk_data:
@@ -513,6 +565,8 @@ def main():
                     elif sleep_time < -0.5:
                         next_write_time = time.time()
                 except queue.Empty:
+                    if shutdown_requested.is_set():
+                        break
                     if breaking_news_active:
                         breaking_news_active = False
                         schedule_interrupt_event.set()
@@ -536,6 +590,8 @@ def main():
                 except BrokenPipeError:
                     break
         except Exception as e:
+            if shutdown_requested.is_set():
+                break
             print(f"⚠️ Errore pipe: {e}")
             time.sleep(2)
         finally:
@@ -547,10 +603,12 @@ def main():
                     os.close(fifo_fd)
                 except OSError:
                     pass
+    print("👋 Director arrestato in modo pulito.")
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
+        request_shutdown("📴 Interruzione da tastiera ricevuta.")
         print("\n👋 Regia interrotta.")
         sys.exit(0)

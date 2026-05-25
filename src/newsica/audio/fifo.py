@@ -108,7 +108,7 @@ class FifoWriter:
             "-ac", str(PCM_CHANNELS),
             "pipe:1"
         ]
-        proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
+        proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         
         # Parametri Sidechain / Ducking
         threshold = 0.02

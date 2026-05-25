@@ -419,7 +419,11 @@ class AudioPlayout:
         if block_info:
             self.audio_queue.put({"type": "metadata", "state": block_info})
 
-        process = subprocess.Popen(self._pcm_decode_command(audio_file), stdout=subprocess.PIPE)
+        process = subprocess.Popen(
+            self._pcm_decode_command(audio_file),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
         if not is_breaking_news:
             self.current_process = process
 
@@ -452,7 +456,11 @@ class AudioPlayout:
             return True
 
         print(f"🎶 Lancio {label}: {os.path.basename(jingle_file)}")
-        process = subprocess.Popen(self._pcm_decode_command(jingle_file), stdout=subprocess.PIPE)
+        process = subprocess.Popen(
+            self._pcm_decode_command(jingle_file),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
         self.current_process = process
 
         while True:
@@ -482,7 +490,11 @@ class AudioPlayout:
         if block_info:
             self.audio_queue.put({"type": "metadata", "state": block_info})
 
-        process = subprocess.Popen(self._mix_command(music_file, voice_file), stdout=subprocess.PIPE)
+        process = subprocess.Popen(
+            self._mix_command(music_file, voice_file),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
         self.current_process = process
 
         # Legge l'intero audio in memoria per applicare il fade-out software finale
@@ -601,7 +613,11 @@ class AudioPlayout:
                 
                 # Processo di riproduzione con musica + sidechain
                 print(f"🎵 Sottofondo musicale: {os.path.basename(bg_music)}")
-                process = subprocess.Popen(self._music_decode_command(bg_music), stdout=subprocess.PIPE)
+                process = subprocess.Popen(
+                    self._music_decode_command(bg_music),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
                 self.current_process = process
                 
                 ducker = PlayoutSidechainDucker(PCM_SAMPLE_RATE)
@@ -622,7 +638,11 @@ class AudioPlayout:
                         if current_voice_idx < len(voice_files_to_play):
                             if active_voice_proc is None:
                                 active_voice_file = voice_files_to_play[current_voice_idx]
-                                active_voice_proc = subprocess.Popen(self._pcm_decode_command(active_voice_file), stdout=subprocess.PIPE)
+                                active_voice_proc = subprocess.Popen(
+                                    self._pcm_decode_command(active_voice_file),
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL,
+                                )
                                 
                             voice_data = active_voice_proc.stdout.read(len(data))
                             if voice_data:
@@ -713,7 +733,11 @@ class AudioPlayout:
             
             announcement_file = TMP_DIR / "request_announcement.wav"
             if _generate_request_announcement(metadata["requested_by"], metadata["requested_title"], announcement_file):
-                voice_proc = subprocess.Popen(self._pcm_decode_command(str(announcement_file)), stdout=subprocess.PIPE)
+                voice_proc = subprocess.Popen(
+                    self._pcm_decode_command(str(announcement_file)),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
                 ducker = PlayoutSidechainDucker(PCM_SAMPLE_RATE)
         else:
             metadata["requested_by"] = ""
@@ -727,7 +751,11 @@ class AudioPlayout:
         )
 
         print(f"🎵 Brano musicale di riempimento: {os.path.basename(music_file)}")
-        process = subprocess.Popen(self._music_decode_command(music_file), stdout=subprocess.PIPE)
+        process = subprocess.Popen(
+            self._music_decode_command(music_file),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
         self.current_process = process
 
         import numpy as np
@@ -848,7 +876,11 @@ class AudioPlayout:
                 
                 # Processo di riproduzione con musica + sidechain
                 print(f"🎵 Sottofondo musicale: {os.path.basename(bg_music)}")
-                process = subprocess.Popen(self._music_decode_command(bg_music), stdout=subprocess.PIPE)
+                process = subprocess.Popen(
+                    self._music_decode_command(bg_music),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
                 self.current_process = process
                 
                 ducker = PlayoutSidechainDucker(PCM_SAMPLE_RATE)
@@ -869,7 +901,11 @@ class AudioPlayout:
                         if current_voice_idx < len(voice_files_to_play):
                             if active_voice_proc is None:
                                 active_voice_file = voice_files_to_play[current_voice_idx]
-                                active_voice_proc = subprocess.Popen(self._pcm_decode_command(active_voice_file), stdout=subprocess.PIPE)
+                                active_voice_proc = subprocess.Popen(
+                                    self._pcm_decode_command(active_voice_file),
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL,
+                                )
                                 
                             voice_data = active_voice_proc.stdout.read(len(data))
                             if voice_data:
@@ -958,7 +994,11 @@ class AudioPlayout:
             
             announcement_file = TMP_DIR / "request_announcement.wav"
             if _generate_request_announcement(metadata["requested_by"], metadata["requested_title"], announcement_file):
-                voice_proc = subprocess.Popen(self._pcm_decode_command(str(announcement_file)), stdout=subprocess.PIPE)
+                voice_proc = subprocess.Popen(
+                    self._pcm_decode_command(str(announcement_file)),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
                 ducker = PlayoutSidechainDucker(PCM_SAMPLE_RATE)
         else:
             metadata["requested_by"] = ""
@@ -972,7 +1012,11 @@ class AudioPlayout:
         )
 
         print(f"🎵 Brano musicale intermedio (Full Track): {os.path.basename(music_file)}")
-        process = subprocess.Popen(self._music_decode_command(music_file), stdout=subprocess.PIPE)
+        process = subprocess.Popen(
+            self._music_decode_command(music_file),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
         self.current_process = process
 
         try:
