@@ -28,6 +28,8 @@ KOKORO_PODCAST_VOICES = {
     "giulia": "if_sara",
     "marco": "im_nicola",
 }
+PODCAST_TARGET_RMS_DBFS = float(os.getenv("PODCAST_TARGET_RMS_DBFS", "-20.0"))
+PODCAST_MAX_PEAK_DBFS = float(os.getenv("PODCAST_MAX_PEAK_DBFS", "-1.5"))
 
 VOICES_PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "newsica", "editorial", "prompts", "voices")
 
@@ -91,6 +93,37 @@ def cleanup_podcast_segments():
             except Exception:
                 pass
 
+def _speaker_gain_db_env(speaker):
+    speaker_key = get_speaker_key(speaker)
+    return float(os.getenv(f"PODCAST_SPEAKER_GAIN_{speaker_key.upper()}_DB", "0.0"))
+
+def _normalize_segment_level(data, speaker):
+    peak = float(np.max(np.abs(data))) if data.size else 0.0
+    if peak <= 1e-6:
+        return data
+
+    gate = max(peak * 0.08, 1e-4)
+    active = data[np.abs(data) >= gate]
+    if active.size == 0:
+        active = data[np.abs(data) >= 1e-5]
+    if active.size == 0:
+        active = data
+
+    rms = float(np.sqrt(np.mean(np.square(active), dtype=np.float64)))
+    if rms <= 1e-9:
+        return data
+
+    current_rms_db = 20.0 * np.log10(rms)
+    gain_db = PODCAST_TARGET_RMS_DBFS - current_rms_db
+    gain_db += _speaker_gain_db_env(speaker)
+
+    target_peak_linear = 10.0 ** (PODCAST_MAX_PEAK_DBFS / 20.0)
+    max_gain_db = 20.0 * np.log10(target_peak_linear / peak)
+    applied_gain_db = min(gain_db, max_gain_db)
+    gain = 10.0 ** (applied_gain_db / 20.0)
+    normalized = data * gain
+    return np.clip(normalized, -1.0, 1.0)
+
 def write_combined_podcast(segment_files, output_path):
     combined_samples = []
     sample_rate = 24000
@@ -102,6 +135,7 @@ def write_combined_podcast(segment_files, output_path):
         if combined_samples and sr != sample_rate:
             raise RuntimeError(f"Sample rate diverso nel segmento {seg_file}: {sr} != {sample_rate}")
         sample_rate = sr
+        data = _normalize_segment_level(data, speaker)
         combined_samples.append((data, speaker))
 
     if not combined_samples:
