@@ -29,6 +29,7 @@ Attualmente `src/director.py` è un file monolitico di oltre 800 righe che fa da
 - [x] **Rimozione bridge legacy dict/eventi:** completata la migrazione a `PlayoutEvent` unificati per evitare divergenze tra path live e path planner.
 - [ ] **Unit Testing:** Implementare test unitari sul planner e sul selettore di notizie simulando la pipeline senza dover avviare FFmpeg.
 - [ ] **Estensione copertura test regressivi:** Costruire progressivamente una suite piu' ampia di unit test sui rami critici della regia live (`director.py`, breaking news, restore slot, control bus, scheduler, playout state). Nota operativa: il bisogno e' riconosciuto e documentato, ma questo non e' un task da svolgere ora; va pianificato come cantiere dedicato per non rallentare i fix runtime prioritari.
+- [ ] **Allineamento Dashboard ai nuovi flussi del Director:** La Dashboard oggi e' compatibile con il runtime refactorato, ma non rappresenta ancora in modo nativo gli stati e i flussi introdotti dal nuovo director (`SPECIAL_BROADCAST`, `breaking_news`, `podcast_immediate`, `telegram_voice`, recovery post-restart, restart servizi coerenti, semantica reale del palinsesto attivo). Va aperto un task dedicato per riallineare UI, API e semantica operativa al modello attuale della regia. Nota operativa: documentato come debito tecnico, ma non da implementare ora.
 
 ---
 
