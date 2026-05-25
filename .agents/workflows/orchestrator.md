@@ -14,6 +14,8 @@ Sei l'Agente Coordinatore per il progetto NewsicaTV. Il tuo obiettivo è garanti
 
 > 🔎 **REGOLA DI DEBUG LIVE: LOG PRIMA DI QUALSIASI IPOTESI**: Quando si debugga un problema di diretta, audio, palinsesto, overlay, RTMP, YouTube o processi locali, l'Orchestratore deve leggere e citare subito i log rilevanti prima di proporre o applicare fix. Minimo obbligatorio: `./manage.sh status`, `tmp/director.log`, `tmp/stream.log`, `tmp/ffmpeg_progress.txt`, `runtime/on-air-state.json` e verifica processi/runner (`screen -ls`, `launchctl list | rg 'com\\.newsica' || true`). Nessun intervento su processi live deve essere considerato valido se non parte dai log e non chiude con una verifica dei log dopo il cambio.
 
+> ⚠️ **REGOLA AUREA DEL POST-REFACTORING (SELF-ANNEALING)**: Quando gli agenti eseguono un refactoring (A, B, o C che sia), o una qualsiasi modifica al codice, IL TASK NON È FINITO AL RESTART. L'Orchestratore DEVE verificare i test funzionali, analizzare sempre `tmp/director.log` e `tmp/stream.log` DOPO il riavvio per assicurarsi che la modifica non abbia rotto nulla a runtime. Se i log mostrano crash, il fix deve essere applicato immediatamente. Nessun refactor può essere considerato chiuso a scatola chiusa senza leggere l'output del restart nei log.
+
 ---
 
 ## Pipeline Standard di Progetto
