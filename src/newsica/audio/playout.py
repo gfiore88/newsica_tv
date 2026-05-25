@@ -638,14 +638,19 @@ class AudioPlayout:
                     if active_voice_proc:
                         print("🎙️ [TELEGRAM SIDECHAIN] Pulizia active_voice_proc in corso...")
                         try:
+                            active_voice_proc.stdout.close()
                             active_voice_proc.terminate()
-                            self._safe_wait(active_voice_proc, name="tg_voice_cleanup", timeout=1.0)
+                            self._safe_wait(active_voice_proc, name="tg_voice_cleanup", timeout=0.2)
                         except Exception:
                             pass
                     if process.poll() is None:
                         print("🎵 [TELEGRAM SIDECHAIN] Termino processo sottofondo musicale...")
+                        try:
+                            process.stdout.close()
+                        except Exception:
+                            pass
                         process.terminate()
-                    self._safe_wait(process, name="tg_bg_music", timeout=2.0)
+                    self._safe_wait(process, name="tg_bg_music", timeout=0.2)
                     self.current_process = None
                     try:
                         mark_played(tg_voice["id"])
@@ -756,14 +761,19 @@ class AudioPlayout:
         finally:
             if voice_proc:
                 try:
+                    voice_proc.stdout.close()
                     voice_proc.terminate()
-                    voice_proc.wait()
+                    self._safe_wait(voice_proc, name="announcement_cleanup", timeout=0.2)
                 except Exception:
                     pass
 
         if process.poll() is None:
+            try:
+                process.stdout.close()
+            except Exception:
+                pass
             process.terminate()
-        process.wait()
+        self._safe_wait(process, name="music_track_process", timeout=0.2)
         self.current_process = None
 
     def queue_single_music_track(self, music_file=None):
@@ -875,14 +885,19 @@ class AudioPlayout:
                     if active_voice_proc:
                         print("🎙️ [TELEGRAM SINGLE SIDECHAIN] Pulizia active_voice_proc in corso...")
                         try:
+                            active_voice_proc.stdout.close()
                             active_voice_proc.terminate()
-                            self._safe_wait(active_voice_proc, name="tg_single_voice_cleanup", timeout=1.0)
+                            self._safe_wait(active_voice_proc, name="tg_single_voice_cleanup", timeout=0.2)
                         except Exception:
                             pass
                     if process.poll() is None:
                         print("🎵 [TELEGRAM SINGLE SIDECHAIN] Termino processo sottofondo musicale...")
+                        try:
+                            process.stdout.close()
+                        except Exception:
+                            pass
                         process.terminate()
-                    self._safe_wait(process, name="tg_single_bg_music", timeout=2.0)
+                    self._safe_wait(process, name="tg_single_bg_music", timeout=0.2)
                     self.current_process = None
                     try:
                         mark_played(tg_voice["id"])
