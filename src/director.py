@@ -64,6 +64,21 @@ director_agent = DirectorAgent(playout)
 _singleton_lock = None
 
 
+def build_ordinary_breaking_state(prev_state, now_ts):
+    return {
+        "status": "ON_AIR",
+        "current_block": "breaking_news",
+        "current_title": "ULTIM'ORA",
+        "current_segment": prev_state.get("current_segment", ""),
+        "next_block": "Ripresa Palinsesto",
+        "next_start": "",
+        "scheduled_slot": prev_state.get("scheduled_slot", ""),
+        "theme": prev_state.get("theme"),
+        "breaking_news_available": False,
+        "last_update": now_ts,
+    }
+
+
 def generator_worker():
     global breaking_news_active, manual_block_override_index, current_active_index
     print("🤖 Thread Generatore (DirectorAgent Event Loop) avviato.")
@@ -330,18 +345,10 @@ def main():
                                     fifo_writer.apply_preventive_fade_out_and_write()
                                     prev_state = get_current_state()
                                     breaking_news_active = True
-                                    bn_info = {
-                                        "status": "ON_AIR",
-                                        "current_block": "breaking_news",
-                                        "current_title": "ULTIM'ORA",
-                                        "current_segment": prev_state.get("current_segment", ""),
-                                        "next_block": "Ripresa Palinsesto",
-                                        "next_start": "",
-                                        "scheduled_slot": prev_state.get("scheduled_slot", ""),
-                                        "theme": prev_state.get("theme"),
-                                        "breaking_news_available": False,
-                                        "last_update": time.strftime("%Y-%m-%dT%H:%M:%S")
-                                    }
+                                    bn_info = build_ordinary_breaking_state(
+                                        prev_state,
+                                        time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                    )
                                     write_state_files(bn_info)
                                     cmd_ffmpeg = [
                                         FFMPEG_CMD,
