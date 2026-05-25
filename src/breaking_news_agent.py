@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import argparse
 import subprocess
 import json
 import requests
@@ -17,8 +18,9 @@ JINGLES_DIR = os.path.join(BASE_DIR, "assets", "jingles")
 BREAKING_JINGLE_FILE = os.path.join(JINGLES_DIR, "jingle_breaking_news.mp3")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
 FFMPEG_CMD = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg" if os.path.exists("/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg") else "ffmpeg"
+LAST_BREAKING_FILE = os.path.join(TMP_DIR, "last_breaking_news.txt")
 
-def generate_breaking_news():
+def generate_breaking_news(force=True):
     print("🚨 Avvio pipeline Breaking News...")
     character = get_character("breaking_news")
     
@@ -70,6 +72,20 @@ def generate_breaking_news():
             severity_score = int(force_severity)
             reason = "Test forzato di Edizione Straordinaria"
             print(f"🚨 [Test] Forza gravità a: {severity_score}")
+            is_emergency = severity_score >= 90
+            
+        if not force and not is_emergency:
+            print(f"⏩ [Daemon] La notizia non è una vera emergenza (Score {severity_score}). Ignoro.")
+            return False
+            
+        # Controllo anti-duplicati nel demone
+        if not force:
+            if os.path.exists(LAST_BREAKING_FILE):
+                with open(LAST_BREAKING_FILE, "r") as f:
+                    last_title = f.read().strip()
+                if last_title == titolo:
+                    print("⏩ [Daemon] Notizia già trasmessa come Breaking News. Ignoro.")
+                    return False
         
         # 2. Rielaborazione testo tramite LLM (Ollama locale)
         OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -171,7 +187,42 @@ def generate_breaking_news():
     with open(CONTROL_FILE, "w") as f:
         f.write(cmd)
         
+    if notizia:
+        with open(LAST_BREAKING_FILE, "w") as f:
+            f.write(notizia.get("title", ""))
+            
     print("✅ Breaking News completa. Segnale pronto inviato al regista.")
+    return True
+
+def run_daemon():
+    print("🕵️‍♂️ [Daemon] Agente Breaking News Autonomo avviato. Controllo ogni 15 minuti...")
+    while True:
+        try:
+            print("⏳ [Daemon] Avvio ciclo di controllo ultim'ora...")
+            
+            # Controlla l'età del file raw_news.json
+            raw_news_path = os.path.join(TMP_DIR, "raw_news.json")
+            if not os.path.exists(raw_news_path) or (time.time() - os.path.getmtime(raw_news_path) > 900):
+                print("🔄 [Daemon] Cache obsoleta o assente, avvio aggiornamento feed (collector)...")
+                try:
+                    from newsica.sources.collector import collect_news_items
+                    all_news = collect_news_items()
+                    with open(raw_news_path, "w", encoding="utf-8") as f:
+                        json.dump(all_news, f, ensure_ascii=False, indent=4)
+                    print(f"✅ [Daemon] Cache aggiornata con {len(all_news)} notizie.")
+                except ImportError:
+                    print("⚠️ [Daemon] Impossibile importare collector, salto l'aggiornamento.")
+                except Exception as e:
+                    print(f"⚠️ [Daemon] Errore nell'aggiornamento cache: {e}")
+                    
+            # Esegue la logica senza forzatura manuale
+            generate_breaking_news(force=False)
+            
+        except Exception as e:
+            print(f"⚠️ [Daemon] Errore nel loop: {e}")
+            
+        print("💤 [Daemon] Riposo per 15 minuti...")
+        time.sleep(900)
 
 def check_singleton(name):
     import fcntl
@@ -189,7 +240,15 @@ def check_singleton(name):
         return False
 
 if __name__ == "__main__":
-    if not check_singleton("breaking_news_agent"):
-        print("❌ Uscita immediata per prevenire conflitti.")
-        sys.exit(1)
-    generate_breaking_news()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--daemon", action="store_true", help="Avvia l'agente in modalità demone (background)")
+    args = parser.parse_args()
+    
+    if args.daemon:
+        if not check_singleton("breaking_news_daemon"):
+            print("❌ Demone già in esecuzione. Esco.")
+            sys.exit(1)
+        run_daemon()
+    else:
+        # Esecuzione manuale one-shot (non usa lo stesso singleton del demone, permette overlay)
+        generate_breaking_news(force=True)

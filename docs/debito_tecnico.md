@@ -40,10 +40,10 @@ Il caricamento e l'alternanza dei brani da `assets/ai_music/` sono pronti in `Mu
 
 ### 🚨 B. Agente Breaking News Autonomo (MVP 3)
 Il meccanismo di interruzione sincrona a "zero buchi" è stabile nel regista, ma l'innesco è prettamente manuale dalla Dashboard.
-- [ ] **Sviluppare il calcolo dello score d'urgenza:** Creare in `src/breaking_news_agent.py` una logica che valuti le notizie fresche in cache (`tmp/raw_news.json`) calcolando un punteggio:
+- [x] **Sviluppare il calcolo dello score d'urgenza:** Creare in `src/breaking_news_agent.py` una logica che valuti le notizie fresche in cache (`tmp/raw_news.json`) calcolando un punteggio:
   $$\text{score} = \text{freschezza} + \text{peso\_fonte} + \text{parole\_chiave} - \text{duplicati}$$
-- [ ] **Demone di Ingestion periodico:** Eseguire in background un controllo periodico (es. ogni 10-15 minuti) sulle fonti ANSA Ultim'ora.
-- [ ] **Autotrigger:** Se una notizia supera una certa soglia di score, l'agente deve generare autonomamente il bollettino audio e inviare il segnale `BREAKING_NEWS_READY` per interrompere immediatamente il flusso regolare del regista.
+- [x] **Demone di Ingestion periodico:** Eseguire in background un controllo periodico (es. ogni 10-15 minuti) sulle fonti ANSA Ultim'ora.
+- [x] **Autotrigger:** Se una notizia supera una certa soglia di score, l'agente deve generare autonomamente il bollettino audio e inviare il segnale `BREAKING_NEWS_READY` per interrompere immediatamente il flusso regolare del regista.
 
 ### 📅 C. Motore di Palinsesto Giornaliero Dinamico (MVP 3)
 La scaletta quotidiana è generata a partire da una struttura statica (`DEFAULT_SCHEDULE` in `schedule_generator.py`).

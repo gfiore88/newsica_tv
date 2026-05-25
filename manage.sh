@@ -87,6 +87,7 @@ function do_status() {
   check_status "Overlay Agent" "src/overlay_agent.py"
   check_status "Chime Agent" "src/hourly_chime_agent.py"
   check_status "AI Music Worker" "src/newsica/audio/ai_music_worker.py"
+  check_status "Breaking News Daemon" "src/breaking_news_agent.py --daemon"
   check_status "Telegram Agent" "src/telegram_agent.py"
   check_status "Watchdog" "src/watchdog.sh"
   if [ "$(uname)" = "Darwin" ]; then
@@ -152,7 +153,7 @@ function do_stop() {
   done
 
   # Chiude eventuali sessioni screen create da manage.sh start.
-  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker" "newsica-caffeinate")
+  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker" "newsica-bn-daemon" "newsica-caffeinate")
   if [ "$exclude_telegram" = false ]; then
     screens+=("newsica-telegram")
   fi
@@ -243,6 +244,15 @@ function do_start() {
     sleep 2
   else
     echo "  [i] Telegram Bot Agent già attivo."
+  fi
+
+  # 6.5 Avvia il Breaking News Daemon
+  if [ -z "$(get_pid "src/breaking_news_agent.py --daemon")" ]; then
+    echo "  -> Avvio Breaking News Daemon..."
+    screen -dmS newsica-bn-daemon bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/breaking_news_agent.py' --daemon > '$TMP_DIR/breaking_news_daemon.log' 2>&1"
+    sleep 1
+  else
+    echo "  [i] Breaking News Daemon già attivo."
   fi
 
   # 7. Avvia lo Streamer (FFmpeg/YouTube)
