@@ -328,16 +328,20 @@ def main():
                                     fade_in_chunks_remaining = 20
                                 else:
                                     fifo_writer.apply_preventive_fade_out_and_write()
+                                    prev_state = get_current_state()
+                                    breaking_news_active = True
                                     bn_info = {
                                         "status": "ON_AIR",
                                         "current_block": "breaking_news",
                                         "current_title": "ULTIM'ORA",
+                                        "current_segment": prev_state.get("current_segment", ""),
                                         "next_block": "Ripresa Palinsesto",
                                         "next_start": "",
+                                        "scheduled_slot": prev_state.get("scheduled_slot", ""),
+                                        "theme": prev_state.get("theme"),
                                         "breaking_news_available": False,
                                         "last_update": time.strftime("%Y-%m-%dT%H:%M:%S")
                                     }
-                                    prev_state = get_current_state()
                                     write_state_files(bn_info)
                                     cmd_ffmpeg = [
                                         FFMPEG_CMD,
@@ -359,6 +363,8 @@ def main():
                                         proc.wait()
                                     except Exception as e:
                                         print(f"⚠️ Errore breaking news: {e}")
+                                    finally:
+                                        breaking_news_active = False
                                     restore_after_interrupt(prev_state, "breaking news")
                                     fade_in_chunks_remaining = 20
                         elif cmd_event.name == "REVOKE_SPECIAL_BROADCAST":
