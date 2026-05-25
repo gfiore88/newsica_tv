@@ -14,6 +14,7 @@ from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RAT
 from newsica.config.paths import BASE_DIR, TMP_DIR
 
 import numpy as np
+from newsica.broadcast.runtime_state import get_current_state
 
 class PlayoutSidechainDucker:
     def __init__(self, sample_rate=24000):
@@ -226,6 +227,14 @@ class AudioPlayout:
         state = dict(current_state or {})
         state["current_music_title"] = self._display_title_for_music_file(music_file)
         return state
+
+    def build_post_telegram_restore_metadata(self, previous_state, bg_music=None):
+        restored = dict(previous_state or {})
+        if bg_music:
+            restored = self.build_music_metadata(bg_music, current_state=restored)
+        restored["requested_by"] = ""
+        restored["requested_title"] = ""
+        return restored
 
     def is_interrupted(self):
         return self.interrupt_event.is_set() or self.is_breaking_news_active()
@@ -573,6 +582,7 @@ class AudioPlayout:
                 
             if voice_file and os.path.exists(voice_file):
                 print(f"🎙️ [TELEGRAM VOICE] In onda il vocale di {author_display}")
+                previous_state = get_current_state()
                 
                 # Sottofondo musicale per il vocale
                 bg_music = self.get_random_music(exclude=self.last_music_file)
@@ -586,6 +596,12 @@ class AudioPlayout:
                         "requested_by": author_display,
                         "requested_title": "Messaggio Vocale"
                     })
+                    self.audio_queue.put(
+                        {
+                            "type": "metadata",
+                            "state": self.build_post_telegram_restore_metadata(previous_state),
+                        }
+                    )
                     try:
                         mark_played(tg_voice["id"])
                     except Exception:
@@ -688,6 +704,12 @@ class AudioPlayout:
                         mark_played(tg_voice["id"])
                     except Exception:
                         pass
+                    self.audio_queue.put(
+                        {
+                            "type": "metadata",
+                            "state": self.build_post_telegram_restore_metadata(previous_state, bg_music),
+                        }
+                    )
                     
                 # Procediamo oltre, interrompendo il brano per far posto alla programmazione
                 return
@@ -836,6 +858,7 @@ class AudioPlayout:
                 
             if voice_file and os.path.exists(voice_file):
                 print(f"🎙️ [TELEGRAM VOICE] In onda il vocale di {author_display}")
+                previous_state = get_current_state()
                 
                 # Sottofondo musicale per il vocale
                 bg_music = self.get_random_music(exclude=self.last_music_file)
@@ -849,6 +872,12 @@ class AudioPlayout:
                         "requested_by": author_display,
                         "requested_title": "Messaggio Vocale"
                     })
+                    self.audio_queue.put(
+                        {
+                            "type": "metadata",
+                            "state": self.build_post_telegram_restore_metadata(previous_state),
+                        }
+                    )
                     try:
                         mark_played(tg_voice["id"])
                     except Exception:
@@ -951,6 +980,12 @@ class AudioPlayout:
                         mark_played(tg_voice["id"])
                     except Exception:
                         pass
+                    self.audio_queue.put(
+                        {
+                            "type": "metadata",
+                            "state": self.build_post_telegram_restore_metadata(previous_state, bg_music),
+                        }
+                    )
                     
                 # Procediamo oltre
                 return

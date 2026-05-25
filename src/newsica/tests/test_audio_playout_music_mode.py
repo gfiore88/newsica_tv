@@ -70,6 +70,30 @@ class TestAudioPlayoutMusicMode(unittest.TestCase):
 
         self.assertEqual(metadata["current_music_title"], "Cosmic Drift")
 
+    def test_build_post_telegram_restore_metadata_restores_previous_block_and_music(self):
+        playout = AudioPlayout(queue.Queue(), None, lambda: False)
+        previous_state = {
+            "status": "ON_AIR",
+            "current_block": "flash_60s",
+            "current_title": "Tech in 60 Secondi - Completo",
+            "current_segment": "music_rotation_until_deadline",
+            "scheduled_slot": "16:00",
+            "requested_by": "Giovanni",
+            "requested_title": "Messaggio Vocale",
+        }
+
+        with patch.object(AudioPlayout, "_probe_music_tags", return_value=("", "")):
+            restored = playout.build_post_telegram_restore_metadata(
+                previous_state,
+                "/tmp/Flashback - Piano Version.mp3",
+            )
+
+        self.assertEqual(restored["current_block"], "flash_60s")
+        self.assertEqual(restored["current_title"], "Tech in 60 Secondi - Completo")
+        self.assertEqual(restored["current_music_title"], "Flashback - Piano Version")
+        self.assertEqual(restored["requested_by"], "")
+        self.assertEqual(restored["requested_title"], "")
+
 
 if __name__ == "__main__":
     unittest.main()
