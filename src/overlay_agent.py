@@ -152,7 +152,7 @@ FONT_TICKER_BOLD = font(20, bold=True)
 
 MEASURE_DRAW = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
 
-ON_AIR_BOX = (30, 30, 1010, 132)
+ON_AIR_BOX = (30, 30, 1010, 145)
 CLOCK_BOX = (1080, 30, 1250, 132)
 MUSIC_BOX = (995, 145, 1250, 187)
 TIMELINE_BOX = (30, 535, 1250, 642)
@@ -316,6 +316,14 @@ def draw_on_air_panel(draw, xy, current_program, accent):
             fill=(255, 255, 255, 255),
         )
         title_y += 30
+
+    bot_msg = "Invia un memo vocale o richiedi un brano al bot Telegram: @NewsicaTV_Bot"
+    draw.text(
+        (content_x, title_y + 4),
+        bot_msg,
+        font=FONT_LABEL,
+        fill=(148, 163, 184, 255),
+    )
 
 
 def draw_music_pill(draw, xy, music_title, accent):
