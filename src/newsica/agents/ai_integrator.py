@@ -9,6 +9,7 @@ from pathlib import Path
 
 from newsica.config.paths import TMP_DIR
 from newsica.audio.tts_text import prepare_text_for_tts
+from newsica.editorial.fact_checker import check_hallucinations, silent_scrub
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:12b")
@@ -39,15 +40,39 @@ class AIIntegratorAgent:
             },
         }
 
-        try:
-            response = requests.post(OLLAMA_URL, json=payload, timeout=OLLAMA_TIMEOUT)
-            response.raise_for_status()
-            script = response.json().get("response", "").strip()
-            if not script:
-                print("⚠️ Ollama ha restituito un copione vuoto. Uso fallback locale.")
-                script = content_data["fallback_script"]
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Errore connessione a Ollama: {e}")
+        script = ""
+        is_safe = True
+        bad_entities = []
+        
+        for attempt in range(3):
+            try:
+                response = requests.post(OLLAMA_URL, json=payload, timeout=OLLAMA_TIMEOUT)
+                response.raise_for_status()
+                script = response.json().get("response", "").strip()
+                if not script:
+                    print(f"⚠️ [{attempt+1}/3] Ollama ha restituito un copione vuoto.")
+                    continue
+                    
+                # Fact Checking
+                is_safe, bad_entities = check_hallucinations(script, content_data["prompt"])
+                if not is_safe:
+                    print(f"🚨 [{attempt+1}/3] ALLUCINAZIONE RILEVATA nel copione di {content_data['character_id']}: {bad_entities}")
+                    payload["prompt"] = content_data["prompt"] + f"\n\nATTENZIONE: Nel tuo precedente tentativo hai inventato questi dati/numeri: {', '.join(bad_entities)}. Riscrivi il copione assicurandoti di usare SOLO dati presenti nel JSON fornito e senza inventare nulla."
+                    continue
+                    
+                # Se è sicuro
+                is_safe = True
+                break
+                
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Errore connessione a Ollama: {e}")
+                break
+                
+        if not is_safe and script:
+            print("🧽 [AIIntegratorAgent] Tentativi esauriti. Applico Silent Scrubbing per rimuovere le allucinazioni.")
+            script = silent_scrub(script, bad_entities)
+            
+        if not script:
             print("⚠️ Uso copione fallback locale.")
             script = content_data["fallback_script"]
             
