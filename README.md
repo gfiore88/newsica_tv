@@ -29,6 +29,22 @@ Lo sviluppo è supportato da un team di agenti AI specializzati con direttive pr
 - `streaming_expert.md`: Ingegnere del video output (FFmpeg)
 - E altri...
 
+## ⚡ Funzionalità Chiave & Moduli Locali
+
+### 🎙️ Integrazione Interattiva Telegram (`telegram_agent.py`)
+Il sistema include un Bot Telegram interattivo per creare engagement reale con il pubblico e permettere la gestione remota:
+* **Memo Vocali del Pubblico**: Gli ascoltatori possono inviare memo vocali sul canale Telegram. Il bot li scarica, li converte in formato WAV PCM a 24000Hz (mono) tramite FFmpeg e li mette in coda di approvazione per la messa in onda immediata.
+* **Pannello Amministrativo Remoto**: Tramite comandi esclusivi per l'amministratore (autenticazione tramite username Telegram `@giovannifiore`), è possibile monitorare e governare l'intera regia e lo streaming da remoto con i comandi `/status`, `/start`, `/restart` e `/stop`.
+
+### 🎵 AI Music Worker (`ai_music_worker.py`)
+Per riempire in modo creativo ed esente da copyright i momenti di silenzio o di attesa tra i programmi, il sistema integra un worker locale per la musica generativa AI (`newsica-ai-music-worker`). Questo genera tracce procedurali direttamente in locale senza costi e senza alcun rischio di strike Content ID su YouTube.
+
+### 🛡️ Protezione Anti-Sleep per macOS (`caffeinate`)
+NewsicaTV è progettato per lo streaming continuo H24. Su macchine macOS, all'avvio della live lo script `manage.sh` attiva automaticamente il processo nativo `caffeinate` con asserzioni a livello di kernel. Questo previene lo sleep di sistema, display e dischi rigidi, assicurando:
+* Prestazioni costanti e non ridotte della GPU/MPS per la sintesi vocale TTS (Chatterbox/Kokoro).
+* Banda passante e connessione RTMP a YouTube ininterrotta senza cadute di rete.
+* Riavvi da remoto stabili (impedisce che il PC ritorni in stop subito dopo l'avvio via Telegram).
+
 ## 🚀 Esecuzione e Gestione
 
 Per semplificare l'avvio, l'arresto e il monitoraggio di tutti i servizi in locale (Dashboard, Regia, Ticker, Chime e Streamer FFmpeg), è disponibile il tool unificato **`manage.sh`** nella root del progetto.
