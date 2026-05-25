@@ -38,6 +38,13 @@ def generate_breaking_news(force=True):
                         break
         except Exception as e:
             print(f"⚠️ Errore nel caricamento delle news: {e}")
+
+    if not notizia:
+        if force:
+            print("⚠️ Nessuna notizia ANSA ultim'ora disponibile. Procedo solo per esecuzione forzata/manuale.")
+        else:
+            print("⏩ [Daemon] Nessuna notizia ANSA ultim'ora disponibile. Nessuna breaking news generata.")
+            return False
             
     # Testo di fallback drammatico
     testo_default = (
