@@ -883,7 +883,10 @@ def draw_request_overlay(image, accent, state):
         draw.text((25, 15), "NEWSICA TI ASCOLTA!", font=FONT_TIMELINE_LABEL, fill=(244, 63, 94, _request_opacity))
         
         # Testo principale wrapped
-        main_text = f"Questo brano \"{requested_title}\" è stato richiesto da {requested_by}"
+        if state.get("current_block") == "telegram_voice" or requested_title == "Messaggio Vocale":
+            main_text = f"Stiamo ascoltando un messaggio vocale inviato da {requested_by}"
+        else:
+            main_text = f"Questo brano \"{requested_title}\" è stato richiesto da {requested_by}"
         max_text_width = CARD_WIDTH - 50
         lines = wrap_text_lines(draw, main_text, FONT_BODY, max_text_width, max_lines=2)
         

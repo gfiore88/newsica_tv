@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY
-from newsica.audio.playout import AudioPlayout
+from newsica.audio.playout import AudioPlayout, _prepare_telegram_voice_for_air
 
 
 class TestAudioPlayoutMusicMode(unittest.TestCase):
@@ -93,6 +93,14 @@ class TestAudioPlayoutMusicMode(unittest.TestCase):
         self.assertEqual(restored["current_music_title"], "Flashback - Piano Version")
         self.assertEqual(restored["requested_by"], "")
         self.assertEqual(restored["requested_title"], "")
+
+    @patch("newsica.audio.playout.subprocess.run")
+    def test_prepare_telegram_voice_for_air_runs_ffmpeg_normalization(self, mock_run):
+        self.assertTrue(_prepare_telegram_voice_for_air("/tmp/in.wav", "/tmp/out.wav"))
+        args = mock_run.call_args.args[0]
+        af_value = args[args.index("-af") + 1]
+        self.assertIn("loudnorm=I=-18:TP=-1.5:LRA=7", af_value)
+        self.assertIn("acompressor=threshold=-20dB:ratio=3:attack=5:release=80:makeup=3", af_value)
 
 
 if __name__ == "__main__":

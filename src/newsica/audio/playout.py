@@ -18,7 +18,7 @@ from newsica.broadcast.runtime_state import get_current_state
 
 class PlayoutSidechainDucker:
     def __init__(self, sample_rate=24000):
-        self.threshold = 0.02
+        self.threshold = 0.012
         self.ratio = 20.0
         chunk_dur = 2048.0 / float(sample_rate)
         
@@ -28,8 +28,8 @@ class PlayoutSidechainDucker:
         self.envelope = 0.0
         self.current_gain = 1.0      # Guadagno normale della traccia musicale
         self.normal_gain = 1.0
-        self.min_gain = 0.15         # Abbassa la musica al 15% del volume
-        self.overlay_volume = 1.3    # Boost della voce dell'annuncio per chiarezza
+        self.min_gain = 0.08         # Abbassa la musica all'8% del volume
+        self.overlay_volume = 1.55   # Boost della voce per chiarezza
 
     def mix(self, base_chunk, voice_chunk):
         min_len = min(len(base_chunk), len(voice_chunk))
@@ -66,6 +66,33 @@ class PlayoutSidechainDucker:
         
         mixed = (base * gains) + (overlay * self.overlay_volume)
         return np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
+
+
+def _prepare_telegram_voice_for_air(input_file, output_file):
+    try:
+        cmd = [
+            resolve_ffmpeg_cmd(),
+            "-y",
+            "-hide_banner",
+            "-loglevel", "error",
+            "-i", str(input_file),
+            "-af",
+            (
+                "highpass=f=100,"
+                "lowpass=f=7000,"
+                "acompressor=threshold=-20dB:ratio=3:attack=5:release=80:makeup=3,"
+                "loudnorm=I=-18:TP=-1.5:LRA=7"
+            ),
+            "-ar", "24000",
+            "-ac", "1",
+            "-c:a", "pcm_s16le",
+            str(output_file),
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception as e:
+        print(f"⚠️ Normalizzazione vocale Telegram fallita, uso file originale: {e}")
+        return False
 
 def _generate_request_announcement(author, title, output_file):
     try:
@@ -583,12 +610,16 @@ class AudioPlayout:
             if voice_file and os.path.exists(voice_file):
                 print(f"🎙️ [TELEGRAM VOICE] In onda il vocale di {author_display}")
                 previous_state = get_current_state()
+                normalized_voice_file = TMP_DIR / f"tg_voice_normalized_{tg_voice['id']}.wav"
+                playback_voice_file = str(normalized_voice_file)
+                if not _prepare_telegram_voice_for_air(voice_file, playback_voice_file):
+                    playback_voice_file = str(voice_file)
                 
                 # Sottofondo musicale per il vocale
                 bg_music = self.get_random_music(exclude=self.last_music_file)
                 if not bg_music:
                     print("⚠️ Nessun sottofondo musicale trovato per il vocale Telegram. Lo riproduco liscio.")
-                    self.queue_pcm_from_file(voice_file, {
+                    self.queue_pcm_from_file(playback_voice_file, {
                         "status": "ON_AIR",
                         "current_block": "telegram_voice",
                         "current_title": f"Vocale Telegram di {author_display}",
@@ -625,7 +656,7 @@ class AudioPlayout:
                 voice_files_to_play = []
                 if has_announcement:
                     voice_files_to_play.append(str(announcement_file))
-                voice_files_to_play.append(str(voice_file))
+                voice_files_to_play.append(playback_voice_file)
                 
                 # Processo di riproduzione con musica + sidechain
                 print(f"🎵 Sottofondo musicale: {os.path.basename(bg_music)}")
@@ -704,6 +735,11 @@ class AudioPlayout:
                         mark_played(tg_voice["id"])
                     except Exception:
                         pass
+                    if str(normalized_voice_file) != str(voice_file) and normalized_voice_file.exists():
+                        try:
+                            normalized_voice_file.unlink()
+                        except Exception:
+                            pass
                     self.audio_queue.put(
                         {
                             "type": "metadata",
@@ -859,12 +895,16 @@ class AudioPlayout:
             if voice_file and os.path.exists(voice_file):
                 print(f"🎙️ [TELEGRAM VOICE] In onda il vocale di {author_display}")
                 previous_state = get_current_state()
+                normalized_voice_file = TMP_DIR / f"tg_voice_normalized_{tg_voice['id']}.wav"
+                playback_voice_file = str(normalized_voice_file)
+                if not _prepare_telegram_voice_for_air(voice_file, playback_voice_file):
+                    playback_voice_file = str(voice_file)
                 
                 # Sottofondo musicale per il vocale
                 bg_music = self.get_random_music(exclude=self.last_music_file)
                 if not bg_music:
                     print("⚠️ Nessun sottofondo musicale trovato per il vocale Telegram. Lo riproduco liscio.")
-                    self.queue_pcm_from_file(voice_file, {
+                    self.queue_pcm_from_file(playback_voice_file, {
                         "status": "ON_AIR",
                         "current_block": "telegram_voice",
                         "current_title": f"Vocale Telegram di {author_display}",
@@ -901,7 +941,7 @@ class AudioPlayout:
                 voice_files_to_play = []
                 if has_announcement:
                     voice_files_to_play.append(str(announcement_file))
-                voice_files_to_play.append(str(voice_file))
+                voice_files_to_play.append(playback_voice_file)
                 
                 # Processo di riproduzione con musica + sidechain
                 print(f"🎵 Sottofondo musicale: {os.path.basename(bg_music)}")
@@ -980,6 +1020,11 @@ class AudioPlayout:
                         mark_played(tg_voice["id"])
                     except Exception:
                         pass
+                    if str(normalized_voice_file) != str(voice_file) and normalized_voice_file.exists():
+                        try:
+                            normalized_voice_file.unlink()
+                        except Exception:
+                            pass
                     self.audio_queue.put(
                         {
                             "type": "metadata",
