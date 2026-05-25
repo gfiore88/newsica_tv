@@ -67,7 +67,7 @@ acquire_stream_lock
 
 # Carica variabili d'ambiente
 if [ -f .env ]; then
-  export $(cat .env | xargs)
+  export $(grep -v '^#' .env | xargs)
 fi
 
 if [ -z "$YOUTUBE_STREAM_KEY" ] || [ "$YOUTUBE_STREAM_KEY" == "inserisci_qui_la_tua_stream_key_di_youtube" ]; then

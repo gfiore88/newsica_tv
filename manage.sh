@@ -331,7 +331,7 @@ function do_live_health() {
 
   echo -e "\n${BOLD}Player pubblico YouTube:${NC}"
   if [ -f "$BASE_DIR/.env" ]; then
-    export $(cat "$BASE_DIR/.env" | xargs)
+    export $(grep -v '^#' "$BASE_DIR/.env" | xargs)
   fi
   local public_url="https://www.youtube.com/${YOUTUBE_HANDLE:-@gfiore88}/live"
   local public_check
