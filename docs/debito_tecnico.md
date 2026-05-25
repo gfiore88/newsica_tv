@@ -27,6 +27,7 @@ Attualmente `src/director.py` è un file monolitico di oltre 800 righe che fa da
 - [x] **Spostare la supervisione dei sotto-processi:** Creare un modulo per avviare e monitorare thread o processi secondari (come il ticker).
 - [x] **Obiettivo finale:** Portare `director.py` sotto le **250 righe di codice** per lasciarlo come puro orchestratore ad alto livello.
 - [ ] **Unit Testing:** Implementare test unitari sul planner e sul selettore di notizie simulando la pipeline senza dover avviare FFmpeg.
+- [ ] **Estensione copertura test regressivi:** Costruire progressivamente una suite piu' ampia di unit test sui rami critici della regia live (`director.py`, breaking news, restore slot, control bus, scheduler, playout state). Nota operativa: il bisogno e' riconosciuto e documentato, ma questo non e' un task da svolgere ora; va pianificato come cantiere dedicato per non rallentare i fix runtime prioritari.
 
 ---
 
@@ -70,4 +71,3 @@ Manca un filtro di validazione editoriale prima della messa in onda dei copioni 
 - [ ] **Linee Guida Future:** 
   - Evitare l'avvio manuale in parallelo a launchd.
   - Se si desidera utilizzare launchd per la stabilità in produzione H24, integrare l'abilitazione/disabilitazione dei plist direttamente dentro `./manage.sh` (es. `./manage.sh daemon-enable` e `./manage.sh daemon-disable`) anziché usare loop di background shell orfani.
-

@@ -79,6 +79,50 @@ def build_ordinary_breaking_state(prev_state, now_ts):
     }
 
 
+def handle_ordinary_breaking_news(
+    fifo_writer,
+    bn_file,
+    *,
+    now_ts,
+    state_reader=get_current_state,
+    state_writer=write_state_files,
+    restore_fn=None,
+    popen_factory=subprocess.Popen,
+):
+    global breaking_news_active
+    if restore_fn is None:
+        restore_fn = restore_after_interrupt
+
+    fifo_writer.apply_preventive_fade_out_and_write()
+    prev_state = state_reader()
+    breaking_news_active = True
+    bn_info = build_ordinary_breaking_state(prev_state, now_ts)
+    state_writer(bn_info)
+    cmd_ffmpeg = [
+        FFMPEG_CMD,
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", bn_file,
+        "-f", "s16le",
+        "-ar", str(PCM_SAMPLE_RATE),
+        "-ac", str(PCM_CHANNELS),
+        "pipe:1"
+    ]
+    try:
+        proc = popen_factory(cmd_ffmpeg, stdout=subprocess.PIPE)
+        while True:
+            chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
+            if not chunk_data:
+                break
+            fifo_writer.write_chunk(chunk_data)
+        proc.wait()
+    except Exception as e:
+        print(f"⚠️ Errore breaking news: {e}")
+    finally:
+        breaking_news_active = False
+    restore_fn(prev_state, "breaking news")
+
+
 def generator_worker():
     global breaking_news_active, manual_block_override_index, current_active_index
     print("🤖 Thread Generatore (DirectorAgent Event Loop) avviato.")
@@ -342,37 +386,11 @@ def main():
                                     director_agent.notify_interrupt(reason, severity_score)
                                     fade_in_chunks_remaining = 20
                                 else:
-                                    fifo_writer.apply_preventive_fade_out_and_write()
-                                    prev_state = get_current_state()
-                                    breaking_news_active = True
-                                    bn_info = build_ordinary_breaking_state(
-                                        prev_state,
-                                        time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                    handle_ordinary_breaking_news(
+                                        fifo_writer,
+                                        bn_file,
+                                        now_ts=time.strftime("%Y-%m-%dT%H:%M:%S"),
                                     )
-                                    write_state_files(bn_info)
-                                    cmd_ffmpeg = [
-                                        FFMPEG_CMD,
-                                        "-hide_banner",
-                                        "-loglevel", "error",
-                                        "-i", bn_file,
-                                        "-f", "s16le",
-                                        "-ar", str(PCM_SAMPLE_RATE),
-                                        "-ac", str(PCM_CHANNELS),
-                                        "pipe:1"
-                                    ]
-                                    try:
-                                        proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
-                                        while True:
-                                            chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
-                                            if not chunk_data:
-                                                break
-                                            fifo_writer.write_chunk(chunk_data)
-                                        proc.wait()
-                                    except Exception as e:
-                                        print(f"⚠️ Errore breaking news: {e}")
-                                    finally:
-                                        breaking_news_active = False
-                                    restore_after_interrupt(prev_state, "breaking news")
                                     fade_in_chunks_remaining = 20
                         elif cmd_event.name == "REVOKE_SPECIAL_BROADCAST":
                             print("🚨 [Director] Ricevuto comando di fine Edizione Straordinaria. Ripristino palinsesto.")
