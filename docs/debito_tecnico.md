@@ -46,9 +46,8 @@ Il meccanismo di interruzione sincrona a "zero buchi" è stabile nel regista, ma
 - [x] **Autotrigger:** Se una notizia supera una certa soglia di score, l'agente deve generare autonomamente il bollettino audio e inviare il segnale `BREAKING_NEWS_READY` per interrompere immediatamente il flusso regolare del regista.
 
 ### 📅 C. Motore di Palinsesto Giornaliero Dinamico (MVP 3)
-La scaletta quotidiana è generata a partire da una struttura statica (`DEFAULT_SCHEDULE` in `schedule_generator.py`).
-- [ ] **Fasce e formati flessibili:** Rendere il generatore capace di assemblare scalette diverse a seconda del giorno della settimana (es. palinsesto weekend più leggero, rassegna stampa approfondita al mattino, format solo musicali di notte).
-- [ ] **Generazione dinamica dei titoli delle rubriche** basandosi sugli argomenti caldi del giorno.
+- [x] **Fasce e formati flessibili:** `EditorialDirectorAgent` genera ora scalette diverse usando `get_weekly_appointments` (es. weekend e speciali settimanali).
+- [x] **Generazione dinamica dei titoli delle rubriche:** Implementato in `EditorialDirectorAgent.generate_dynamic_schedule` usando Ollama per inventare titoli sempre nuovi attorno ai pillar giornalieri.
 
 ### 🔍 D. Fact-Checking & Anti-Allucinazione (MVP 3)
 Manca un filtro di validazione editoriale prima della messa in onda dei copioni generati dall'LLM locale.
@@ -60,7 +59,7 @@ Manca un filtro di validazione editoriale prima della messa in onda dei copioni 
 ## 📺 3. Broadcaster & Regia Video
 
 ### 🎨 A. Ripristino Accenti Colore Dinamici in Regia (ADR 0012)
-- [ ] **Integrazione Grafica Overlay:** Il cambio di accento colore nei file in `tmp/accent_*.txt` è pronto, ma l'overlay video di FFmpeg deve essere aggiornato per ricolorare dinamicamente i box grafici (ULTIMORA, orologio, box del programma) in base al personaggio attivo.
+- [x] **Integrazione Grafica Overlay:** Il cambio di accento colore nei file in `tmp/accent_*.txt` è pronto, e l'overlay video di FFmpeg (in `overlay_agent.py`) ricolora dinamicamente i box grafici (ULTIMORA, orologio, box del programma) in base al blocco in onda letto da `on-air-state.json`.
 
 ---
 
