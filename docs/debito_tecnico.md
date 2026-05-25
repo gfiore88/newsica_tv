@@ -34,9 +34,9 @@ Attualmente `src/director.py` è un file monolitico di oltre 800 righe che fa da
 
 ### 🎵 A. Generatore di Musica AI Locale (ADR 0020)
 Il caricamento e l'alternanza dei brani da `assets/ai_music/` sono pronti in `MusicLibrary`, ma manca il motore di generazione.
-- [ ] **Integrazione ACE-Step v1.5:** Creare uno script di background (es. `src/newsica/audio/music_generator.py` o analogo bash) che utilizzi ACE-Step localmente.
-- [ ] **Generazione offline:** Lo script deve generare in anticipo brani da 30-60 secondi nei momenti di minore carico della CPU (o come task schedulato).
-- [ ] **Pipeline di normalizzazione:** Convertire e normalizzare l'audio generato (16-bit PCM, 24kHz o 44.1kHz mono/stereo coerente) prima di salvarlo in `assets/ai_music/` per evitare sbalzi di volume o frequenza in onda.
+- [x] **Integrazione ACE-Step v1.5:** Creare uno script di background (es. `src/newsica/audio/music_generator.py` o analogo bash) che utilizzi ACE-Step localmente.
+- [x] **Generazione offline:** Lo script deve generare in anticipo brani da 30-60 secondi nei momenti di minore carico della CPU (o come task schedulato).
+- [x] **Pipeline di normalizzazione:** Convertire e normalizzare l'audio generato (16-bit PCM, 24kHz o 44.1kHz mono/stereo coerente) prima di salvarlo in `assets/ai_music/` per evitare sbalzi di volume o frequenza in onda.
 
 ### 🚨 B. Agente Breaking News Autonomo (MVP 3)
 Il meccanismo di interruzione sincrona a "zero buchi" è stabile nel regista, ma l'innesco è prettamente manuale dalla Dashboard.
