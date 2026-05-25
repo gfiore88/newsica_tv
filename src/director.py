@@ -166,6 +166,45 @@ def generator_worker():
                     playout.stop_current_process("⏰ Termino il blocco corrente per cambio fascia.")
                     playout.clear_queue()
                     write_state_files({"status": "OFFLINE"})
+                elif action == "PLAY_JINGLE":
+                    next_segment = event_or_dict.get("next_segment")
+                    if next_segment:
+                        state = get_current_state()
+                        if state.get("status") != "OFFLINE":
+                            state["current_segment"] = next_segment
+                            write_state_files(state)
+                    playout.queue_jingle(
+                        event_or_dict["file"],
+                        event_or_dict.get("label", "jingle"),
+                    )
+                elif action == "PLAY_VOICE":
+                    block_info = {
+                        "status": "ON_AIR",
+                        "current_block": event_or_dict.get("character", ""),
+                        "current_title": (
+                            f"{event_or_dict.get('title', '')} - {event_or_dict.get('segment', '')}"
+                            .strip(" -")
+                        ),
+                        "breaking_news_available": False,
+                    }
+                    playout.queue_pcm_from_file(event_or_dict["file"], block_info)
+                elif action == "PLAY_VOICE_MIX":
+                    block_info = {
+                        "status": "ON_AIR",
+                        "current_block": event_or_dict.get("character", ""),
+                        "current_title": (
+                            f"{event_or_dict.get('title', '')} - {event_or_dict.get('segment', '')}"
+                            .strip(" -")
+                        ),
+                        "breaking_news_available": False,
+                    }
+                    playout.mix_and_queue(
+                        event_or_dict.get("music_file"),
+                        event_or_dict["voice_file"],
+                        block_info,
+                    )
+                elif action == "PLAY_MUSIC":
+                    playout.queue_single_music_track(event_or_dict.get("file"))
                 elif action == "PLAY_SILENCE_FALLBACK":
                     time.sleep(event_or_dict.get("seconds", 2))
                 else:
