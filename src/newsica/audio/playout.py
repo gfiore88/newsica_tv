@@ -530,6 +530,9 @@ class AudioPlayout:
         return self.music_library.get_random_track(exclude=exclude, theme=theme)
 
     def queue_music_track(self, deadline):
+        if isinstance(deadline, str):
+            deadline = datetime.datetime.fromisoformat(deadline)
+            
         if datetime.datetime.now() >= deadline or self.is_interrupted():
             return
 

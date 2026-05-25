@@ -96,7 +96,7 @@ class PlayoutPlanner:
                 if stacco_music:
                     events.append(PlayMusicDeadlineEvent(
                         file=stacco_music,
-                        deadline=stacco_deadline_time.isoformat(),
+                        deadline=stacco_deadline_time,
                         label="stacco_musicale_rubrica"
                     ))
 
@@ -112,4 +112,4 @@ class PlayoutPlanner:
         # Evento fittizio: potremmo aver bisogno di un evento speciale che cicla la musica
         # o delegare al generatore di richiedere nuovi brani.
         # Creiamo un evento che verrà consumato per riempire il tempo
-        return PlayMusicDeadlineEvent(music_file, deadline.isoformat(), "music_rotation")
+        return PlayMusicDeadlineEvent(music_file, deadline, "music_rotation")
