@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import datetime
 import json
+import os
 import time
 from pathlib import Path
 
@@ -8,6 +10,41 @@ from newsica.config.paths import RUNTIME_DIR
 
 JOBS_FILE = RUNTIME_DIR / "ai_music_jobs.json"
 ACTIVE_STATUSES = {"pending", "running"}
+RUNNING_STALE_SECONDS = int(os.getenv("AI_MUSIC_RUNNING_STALE_SECONDS", "3600"))
+
+
+def _parse_job_timestamp(value: str | None) -> datetime.datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _expire_stale_running_jobs(payload: dict) -> bool:
+    if RUNNING_STALE_SECONDS <= 0:
+        return False
+
+    changed = False
+    now = datetime.datetime.now()
+    for job in payload.get("jobs", []):
+        if job.get("status") != "running":
+            continue
+        started_at = _parse_job_timestamp(job.get("started_at")) or _parse_job_timestamp(job.get("created_at"))
+        if not started_at:
+            continue
+        age_seconds = (now - started_at).total_seconds()
+        if age_seconds <= RUNNING_STALE_SECONDS:
+            continue
+        job["status"] = "failed"
+        job["failed_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
+        job["error"] = (
+            f"Job running orfano auto-chiuso dopo {int(age_seconds)}s "
+            f"(soglia {RUNNING_STALE_SECONDS}s)"
+        )[:400]
+        changed = True
+    return changed
 
 
 def _load_payload(path: Path = JOBS_FILE) -> dict:
@@ -22,6 +59,8 @@ def _load_payload(path: Path = JOBS_FILE) -> dict:
     jobs = data.get("jobs")
     if not isinstance(jobs, list):
         data["jobs"] = []
+    if _expire_stale_running_jobs(data):
+        _save_payload(data, path)
     return data
 
 

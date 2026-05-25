@@ -391,7 +391,16 @@ class AudioPlayout:
         if is_valid_ai:
             return music_file
 
-        replacement = self.get_random_music(exclude=self.last_music_file, theme=theme)
+        replacement = None
+        ai_candidates = self.music_library._scan(self.music_library.ai_music_dir)
+        ai_candidates = [path for path in ai_candidates if str(path) != self.last_music_file]
+        if theme:
+            ai_candidates = [path for path in ai_candidates if self._ai_track_matches_theme(str(path), theme)]
+        candidates_with_metadata = [path for path in ai_candidates if path.with_suffix(".json").exists()]
+        if candidates_with_metadata:
+            ai_candidates = candidates_with_metadata
+        if ai_candidates:
+            replacement = str(ai_candidates[0])
         if replacement:
             label_text = f"per il tema '{theme}'" if theme else "non AI"
             print(

@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from newsica.audio.ai_music_jobs import enqueue_job
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 TMP_DIR = BASE_DIR / "tmp"
 WORKER_SCRIPT = BASE_DIR / "src" / "newsica" / "audio" / "ai_music_worker.py"
@@ -41,3 +43,14 @@ def launch_ai_music_worker() -> subprocess.Popen:
         close_fds=True,
         env=env,
     )
+
+
+def schedule_rotation_fill_job(source: str, *, theme: str | None = None) -> tuple[dict, bool]:
+    job, created = enqueue_job(
+        job_type="rotation_fill",
+        source=source,
+        theme=theme,
+        dedupe_key="rotation_fill",
+    )
+    launch_ai_music_worker()
+    return job, created

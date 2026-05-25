@@ -88,6 +88,42 @@ class TestAiMusicJobs(unittest.TestCase):
             self.assertIsNotNone(pending)
             self.assertEqual(first_job["id"], pending["id"])
 
+    def test_stale_running_job_is_expired_and_does_not_block_new_enqueue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs_file = Path(tmp) / "ai_music_jobs.json"
+            jobs_file.write_text(
+                """
+{
+  "jobs": [
+    {
+      "id": "aijob_stale",
+      "job_type": "rotation_fill",
+      "source": "director",
+      "dedupe_key": "rotation_fill",
+      "status": "running",
+      "created_at": "2026-05-20T10:00:00",
+      "started_at": "2026-05-20T10:00:00"
+    }
+  ]
+}
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            job, created = enqueue_job(
+                job_type="rotation_fill",
+                source="director",
+                dedupe_key="rotation_fill",
+                path=jobs_file,
+            )
+
+            self.assertTrue(created)
+            jobs = list_jobs(path=jobs_file)
+            self.assertEqual(jobs[0]["status"], "failed")
+            self.assertEqual(jobs[1]["id"], job["id"])
+            self.assertEqual(jobs[1]["status"], "pending")
+
 
 if __name__ == "__main__":
     unittest.main()

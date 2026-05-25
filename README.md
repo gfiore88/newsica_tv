@@ -39,6 +39,16 @@ Il sistema include un Bot Telegram interattivo per creare engagement reale con i
 ### 🎵 AI Music Worker (`ai_music_worker.py`)
 Per riempire in modo creativo ed esente da copyright i momenti di silenzio o di attesa tra i programmi, il sistema integra un worker locale per la musica generativa AI (`newsica-ai-music-worker`). Questo genera tracce procedurali direttamente in locale senza costi e senza alcun rischio di strike Content ID su YouTube.
 
+### 🎛️ Director Runtime & Playout Events
+La regia live usa ora un solo protocollo interno: il `DirectorAgent` restituisce esclusivamente `PlayoutEvent` tipizzati, che `src/director.py` esegue sequenzialmente tramite un runtime unico.
+
+Questo elimina il vecchio doppio binario `dict` legacy + eventi e riduce i bug silenziosi in cui:
+* uno slot avanzava di stato ma non metteva davvero audio in coda;
+* un side effect secondario, come il trigger della generazione di nuova musica AI, si perdeva nel bridge di compatibilità;
+* rami poco battuti come podcast e special broadcast divergevano dal path standard.
+
+Il refactor include anche una protezione sui job musica AI: i job `rotation_fill` rimasti orfani in stato `running` vengono auto-chiusi dopo timeout configurabile (`AI_MUSIC_RUNNING_STALE_SECONDS`, default `3600`), così la schedulazione automatica non resta bloccata per giorni.
+
 ### 🎼 Importazione Musica Creative Commons (`chart_importer.py`)
 Esiste anche uno script locale per importare brani esterni in `assets/music/`, con focus primario su tracce **Creative Commons BY** recuperate da **Jamendo**. Lo script:
 * scarica i file audio;

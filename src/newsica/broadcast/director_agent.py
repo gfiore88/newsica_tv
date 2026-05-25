@@ -5,6 +5,16 @@ import random
 import wave
 from newsica.config.paths import TMP_DIR, RUNTIME_DIR, ASSETS_DIR
 from newsica.utils.audit_logger import log_decision
+from newsica.domain.playout_events import (
+    PlayJingleEvent,
+    PlayMusicDeadlineEvent,
+    PlayMusicEvent,
+    PlayoutEvent,
+    PlaySilenceFallbackEvent,
+    PlayVoiceEvent,
+    PlayVoiceMixEvent,
+    TriggerNextBlockEvent,
+)
 
 def get_audio_duration(file_path):
     if not os.path.exists(file_path):
@@ -54,10 +64,8 @@ class DirectorAgent:
         # 1. Se siamo in SPECIAL_BROADCAST, gestiamo la copertura speciale
         if status == "SPECIAL_BROADCAST":
             res = self._handle_special_broadcast(state)
-            if isinstance(res, dict):
-                _, _, _, _, _, active_idx = get_current_block_info(manual_block_override_index)
-                res["active_idx"] = active_idx
-            return res
+            _, _, _, _, _, active_idx = get_current_block_info(manual_block_override_index)
+            return self._attach_active_index(res, active_idx)
             
         # 2. Leggiamo il blocco programmato dal palinsesto
         block_type, title, next_title, next_time, current_time, active_idx = get_current_block_info(manual_block_override_index)
@@ -71,9 +79,14 @@ class DirectorAgent:
             # 3. Gestiamo la progressione interna del blocco attivo
             res = self._progress_current_block(state, block_type, title, next_title, next_time, current_time)
             
-        if isinstance(res, dict):
-            res["active_idx"] = active_idx
-        return res
+        return self._attach_active_index(res, active_idx)
+
+    def _attach_active_index(self, result, active_idx):
+        if isinstance(result, list):
+            return [event.with_active_idx(active_idx) for event in result]
+        if isinstance(result, PlayoutEvent):
+            return result.with_active_idx(active_idx)
+        return result
 
     def _initialize_scheduled_block(self, block_type, title, next_title, next_time, current_time):
         """
@@ -108,12 +121,7 @@ class DirectorAgent:
         # Se è un podcast serale o un podcast generico, manteniamo la vecchia logica di fallback iterativa per ora
         if block_type == "podcast" or (block_type == "news" and current_time == EVENING_PODCAST_SLOT):
             jingle_file, jingle_label = get_jingle_for_block(block_type)
-            return {
-                "action": "PLAY_JINGLE",
-                "file": jingle_file,
-                "label": jingle_label,
-                "next_segment": "intro"
-            }
+            return PlayJingleEvent(jingle_file, jingle_label, next_segment="intro")
         
         # Generiamo la playlist con il Planner per le rubriche standard e la musica
         from newsica.broadcast.planner import PlayoutPlanner
@@ -147,7 +155,7 @@ class DirectorAgent:
         current_segment = state.get("current_segment", "init")
         
         if block_type == "music_only":
-            return {"action": "TRIGGER_NEXT_BLOCK"}
+            return TriggerNextBlockEvent()
             
         elif block_type == "podcast" or (block_type == "news" and current_time == EVENING_PODCAST_SLOT):
             return self._handle_podcast_progression(state, title, current_segment, next_time)
@@ -158,17 +166,16 @@ class DirectorAgent:
             # passiamo al prossimo blocco.
             deadline = schedule_deadline(next_time)
             if datetime.datetime.now() >= deadline:
-                return {"action": "TRIGGER_NEXT_BLOCK"}
+                return TriggerNextBlockEvent()
                 
             if current_segment == "music_rotation_until_deadline":
                 theme = state.get("theme")
                 music_file = self._select_non_repeated_music(theme=theme)
                 if music_file:
                     add_music_track(music_file)
-                    from newsica.broadcast.planner import PlayMusicDeadlineEvent
                     return PlayMusicDeadlineEvent(music_file, deadline, "music_rotation")
                     
-            return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
+            return PlaySilenceFallbackEvent(2)
 
 
 
@@ -214,13 +221,12 @@ class DirectorAgent:
                 state["current_segment"] = "podcast_playing"
                 state["podcast_played"] = True
                 write_state_files(state)
-                return {
-                    "action": "PLAY_VOICE",
-                    "file": voice_file,
-                    "character": "podcast",
-                    "title": manifest.get("title", title) if os.path.exists(ready_dir) else title,
-                    "segment": "Completo"
-                }
+                return PlayVoiceEvent(
+                    voice_file,
+                    "podcast",
+                    manifest.get("title", title) if os.path.exists(ready_dir) else title,
+                    "Completo",
+                )
             # Se l'audio non è pronto, inneschiamo un fallback musicale.
             print(f"⚠️ [DirectorAgent] Podcast non pronto per slot {scheduled_slot}. Uso musica finché l'asset non arriva.")
             state["current_segment"] = "music_rotation_until_deadline"
@@ -230,20 +236,18 @@ class DirectorAgent:
             music_file = self._select_non_repeated_music(theme=theme)
             if music_file:
                 add_music_track(music_file)
-                from newsica.broadcast.planner import PlayMusicDeadlineEvent
                 deadline = schedule_deadline(next_time)
                 return PlayMusicDeadlineEvent(music_file, deadline, "fallback_non_pronto")
-            return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
+            return PlaySilenceFallbackEvent(2)
 
         elif current_segment == "podcast_playing":
             state["current_segment"] = "podcast_closing"
             write_state_files(state)
-            return {
-                "action": "PLAY_JINGLE",
-                "file": self.classic_jingle,
-                "label": "stacco_uscita_podcast",
-                "next_segment": "music_rotation_until_deadline"
-            }
+            return PlayJingleEvent(
+                self.classic_jingle,
+                "stacco_uscita_podcast",
+                next_segment="music_rotation_until_deadline",
+            )
                 
         elif current_segment == "podcast_closing" or current_segment == "music_rotation_until_deadline":
             state["current_segment"] = "music_rotation_until_deadline"
@@ -255,11 +259,11 @@ class DirectorAgent:
             if current_slot and wallclock_slot and current_slot != wallclock_slot:
                 if current_slot < wallclock_slot:
                     print(f"⏰ [DirectorAgent] Past override slot '{title}' completed. Returning to normal schedule.")
-                    return {"action": "TRIGGER_NEXT_BLOCK"}
+                    return TriggerNextBlockEvent()
 
             deadline = schedule_deadline(next_time)
             if datetime.datetime.now() >= deadline:
-                return {"action": "TRIGGER_NEXT_BLOCK"}
+                return TriggerNextBlockEvent()
                 
             time_remaining = (deadline - datetime.datetime.now()).total_seconds()
             trigger_ai_music_gen = time_remaining >= 180
@@ -268,16 +272,16 @@ class DirectorAgent:
             music_file = self._select_non_repeated_music(theme=theme)
             if music_file:
                 add_music_track(music_file)
-                return {
-                    "action": "PLAY_MUSIC",
-                    "file": music_file,
-                    "label": "music_rotation",
-                    "trigger_ai_music_gen": trigger_ai_music_gen
-                }
+                return PlayMusicEvent(
+                    music_file,
+                    "music_rotation",
+                    trigger_ai_music_gen=trigger_ai_music_gen,
+                    theme=theme,
+                )
             else:
-                return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 5}
+                return PlaySilenceFallbackEvent(5)
                 
-        return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
+        return PlaySilenceFallbackEvent(2)
 
     def _handle_special_broadcast(self, state):
         """
@@ -297,16 +301,15 @@ class DirectorAgent:
             if os.path.exists(bn_file):
                 state["current_segment"] = "broadcast_body"
                 write_state_files(state)
-                return {
-                    "action": "PLAY_VOICE_MIX",
-                    "voice_file": bn_file,
-                    "music_file": special_theme,
-                    "character": "breaking_news",
-                    "title": "EDIZIONE STRAORDINARIA",
-                    "segment": "Bollettino Speciale"
-                }
+                return PlayVoiceMixEvent(
+                    voice_file=bn_file,
+                    music_file=special_theme,
+                    character="breaking_news",
+                    title="EDIZIONE STRAORDINARIA",
+                    segment="Bollettino Speciale",
+                )
             else:
-                return {"action": "WAIT_OR_GENERATE", "character": "breaking_news", "title": "EDIZIONE STRAORDINARIA", "time_key": "SPECIAL"}
+                return PlaySilenceFallbackEvent(5)
                 
         elif current_segment == "broadcast_body":
             # Finito il bollettino, se non c'è una revoca manuale o se non sono passati abbastanza minuti,
@@ -315,19 +318,15 @@ class DirectorAgent:
             write_state_files(state)
             
             # Sfondi tesi di attesa
-            return {
-                "action": "PLAY_MUSIC",
-                "file": special_theme,
-                "label": "attesa_edizione_straordinaria"
-            }
+            return PlayMusicEvent(special_theme, "attesa_edizione_straordinaria")
             
         elif current_segment == "broadcast_waiting":
             # Ripete il bollettino speciale aggiornato
             state["current_segment"] = "intro"
             write_state_files(state)
-            return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 5}
+            return PlaySilenceFallbackEvent(5)
             
-        return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
+        return PlaySilenceFallbackEvent(2)
 
     def notify_interrupt(self, reason, severity_score=0):
         """
@@ -367,12 +366,7 @@ class DirectorAgent:
             if not os.path.exists(jingle_file):
                 jingle_file = self.classic_jingle
                 
-            return {
-                "action": "PLAY_JINGLE",
-                "file": jingle_file,
-                "label": "jingle_straordinaria",
-                "next_segment": "intro"
-            }
+            return PlayJingleEvent(jingle_file, "jingle_straordinaria", next_segment="intro")
         else:
             print(f"📢 [DirectorAgent] Rilevata Breaking News ordinaria (Score {severity_score}).")
             return None

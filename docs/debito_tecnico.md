@@ -26,6 +26,7 @@ Attualmente `src/director.py` è un file monolitico di oltre 800 righe che fa da
 - [x] **Spostare la gestione dei file di controllo e overlay:** Creare `src/newsica/broadcast/overlay.py` per isolare la scrittura di `STATE_FILE`, `PROGRAM_FILE`, `NEXT_PROGRAM_FILE` e i file degli accenti colore.
 - [x] **Spostare la supervisione dei sotto-processi:** Creare un modulo per avviare e monitorare thread o processi secondari (come il ticker).
 - [x] **Obiettivo finale:** Portare `director.py` sotto le **250 righe di codice** per lasciarlo come puro orchestratore ad alto livello.
+- [x] **Rimozione bridge legacy dict/eventi:** completata la migrazione a `PlayoutEvent` unificati per evitare divergenze tra path live e path planner.
 - [ ] **Unit Testing:** Implementare test unitari sul planner e sul selettore di notizie simulando la pipeline senza dover avviare FFmpeg.
 - [ ] **Estensione copertura test regressivi:** Costruire progressivamente una suite piu' ampia di unit test sui rami critici della regia live (`director.py`, breaking news, restore slot, control bus, scheduler, playout state). Nota operativa: il bisogno e' riconosciuto e documentato, ma questo non e' un task da svolgere ora; va pianificato come cantiere dedicato per non rallentare i fix runtime prioritari.
 

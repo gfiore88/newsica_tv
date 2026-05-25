@@ -1,11 +1,19 @@
-import unittest
-from unittest.mock import MagicMock, patch, mock_open
 import datetime
 import json
 import os
 import tempfile
+import unittest
+from unittest.mock import MagicMock, patch
 
 from newsica.broadcast.director_agent import DirectorAgent
+from newsica.domain.playout_events import (
+    PlayJingleEvent,
+    PlayMusicDeadlineEvent,
+    PlayMusicEvent,
+    PlaySilenceFallbackEvent,
+    PlayVoiceEvent,
+)
+
 
 class TestDirectorAgent(unittest.TestCase):
     def setUp(self):
@@ -25,159 +33,150 @@ class TestDirectorAgent(unittest.TestCase):
 
     @patch("newsica.broadcast.director_agent.write_state_files")
     @patch("newsica.broadcast.director_agent.get_jingle_for_block")
-    def test_initialize_scheduled_block(self, mock_get_jingle, mock_write_state):
-        mock_get_jingle.return_value = ("assets/jingles/jingle_sport.mp3", "sport_jingle")
-        
+    def test_initialize_podcast_block_returns_jingle_event(self, mock_get_jingle, mock_write_state):
+        mock_get_jingle.return_value = ("assets/jingles/jingle_podcast.mp3", "podcast_jingle")
+
         action = self.director._initialize_scheduled_block(
-            block_type="sport",
-            title="Leo Sport",
+            block_type="podcast",
+            title="Newsica Podcast",
             next_title="Meteo",
-            next_time="15:30",
-            current_time="15:00"
+            next_time="16:00",
+            current_time="15:00",
         )
-        
-        # Controlla la scrittura dello stato
+
+        self.assertIsInstance(action, PlayJingleEvent)
+        self.assertEqual(action.file, "assets/jingles/jingle_podcast.mp3")
+        self.assertEqual(action.next_segment, "intro")
         mock_write_state.assert_called_once()
-        written_state = mock_write_state.call_args[0][0]
-        self.assertEqual(written_state["status"], "ON_AIR")
-        self.assertEqual(written_state["current_block"], "sport")
-        self.assertEqual(written_state["current_title"], "Leo Sport")
-        
-        # Controlla l'azione restituita
-        self.assertEqual(action["action"], "PLAY_JINGLE")
-        self.assertEqual(action["file"], "assets/jingles/jingle_sport.mp3")
-        self.assertEqual(action["next_segment"], "intro")
 
     @patch("newsica.broadcast.director_agent.get_current_state")
     @patch("newsica.broadcast.director_agent.write_state_files")
-    def test_notify_interrupt_high_severity(self, mock_write_state, mock_get_state):
+    def test_notify_interrupt_high_severity_returns_jingle_event(self, mock_write_state, mock_get_state):
         mock_get_state.return_value = {
             "status": "ON_AIR",
             "current_block": "news",
             "current_title": "Chiara News",
-            "scheduled_slot": "15:00"
+            "scheduled_slot": "15:00",
         }
-        
+
         action = self.director.notify_interrupt(
             reason="Terremoto di forte intensità rilevato",
-            severity_score=95
+            severity_score=95,
         )
-        
-        # Controlla la scrittura dello stato speciale
-        mock_write_state.assert_called_once()
+
+        self.assertIsInstance(action, PlayJingleEvent)
+        self.assertEqual(action.label, "jingle_straordinaria")
         written_state = mock_write_state.call_args[0][0]
         self.assertEqual(written_state["status"], "SPECIAL_BROADCAST")
         self.assertEqual(written_state["current_block"], "trasmissione_straordinaria")
         self.assertEqual(written_state["interrupted_block"], "news")
         self.assertEqual(written_state["severity_score"], 95)
-        
-        # Controlla l'azione di riproduzione del jingle straordinario
-        self.assertEqual(action["action"], "PLAY_JINGLE")
-        self.assertEqual(action["label"], "jingle_straordinaria")
 
     @patch("newsica.broadcast.director_agent.get_current_state")
     @patch("newsica.broadcast.director_agent.write_state_files")
     @patch("newsica.broadcast.director_agent.get_current_block_info")
     @patch("newsica.broadcast.director_agent.schedule_deadline")
-    def test_restore_after_interrupt_more_than_40_percent_remaining(self, mock_deadline, mock_block_info, mock_write_state, mock_get_state):
-        # Ipotizziamo che lo slot sia iniziato alle 15:00 e scada alle 15:30.
-        # Durata totale = 30 min (1800 secondi). 40% = 12 minuti.
-        # Se ora sono le 15:05, mancano 25 minuti (>= 40%). Dovrebbe ripristinare.
-        
+    def test_restore_after_interrupt_more_than_threshold_remaining(
+        self, mock_deadline, mock_block_info, mock_write_state, mock_get_state
+    ):
         mock_get_state.return_value = {
             "status": "SPECIAL_BROADCAST",
             "interrupted_slot": "15:00",
             "interrupted_block": "sport",
             "interrupted_title": "Leo Sport",
             "next_block": "Meteo",
-            "next_start": "15:30"
+            "next_start": "15:30",
         }
-        
         mock_block_info.return_value = ("sport", "Leo Sport", "Meteo", "15:30", "15:00", 0)
-        
-        # Imposta la deadline del prossimo blocco a +25 minuti da adesso
-        now = datetime.datetime.now()
-        mock_deadline.return_value = now + datetime.timedelta(minutes=25)
-        
+        mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=25)
+
         self.director.handle_restore_after_interrupt()
-        
-        # Controlla che lo stato sia stato ripristinato a ON_AIR su quel blocco
-        mock_write_state.assert_called_once()
+
         restored_state = mock_write_state.call_args[0][0]
         self.assertEqual(restored_state["status"], "ON_AIR")
         self.assertEqual(restored_state["current_block"], "sport")
         self.assertEqual(restored_state["current_segment"], "music_rotation_until_deadline")
 
-    @patch("newsica.broadcast.director_agent.get_current_state")
-    @patch("newsica.broadcast.director_agent.write_state_files")
-    @patch("newsica.broadcast.director_agent.get_current_block_info")
-    @patch("newsica.broadcast.director_agent.schedule_deadline")
-    def test_restore_after_interrupt_less_than_40_percent_remaining(self, mock_deadline, mock_block_info, mock_write_state, mock_get_state):
-        # Se resta poco tempo, il DirectorAgent ripristina lo slot in rotazione musicale
-        # e lascia al watchdog wallclock il cambio fascia naturale.
-        
-        mock_get_state.return_value = {
-            "status": "SPECIAL_BROADCAST",
-            "interrupted_slot": "15:00",
-            "interrupted_block": "sport",
-            "interrupted_title": "Leo Sport",
-            "next_block": "Meteo",
-            "next_start": "15:30"
-        }
-        
-        mock_block_info.return_value = ("sport", "Leo Sport", "Meteo", "15:30", "15:00", 0)
-        
-        now = datetime.datetime.now()
-        mock_deadline.return_value = now + datetime.timedelta(minutes=5)
-        
-        self.director.handle_restore_after_interrupt()
-        
-        restored_state = mock_write_state.call_args[0][0]
-        self.assertEqual(restored_state["status"], "ON_AIR")
-        self.assertEqual(restored_state["current_block"], "sport")
-        self.assertEqual(restored_state["current_segment"], "music_rotation_until_deadline")
+    def test_handle_podcast_progression_plays_ready_audio_with_event(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ready_dir = os.path.join(tmp, "assets", "ready", "1500")
+            os.makedirs(ready_dir, exist_ok=True)
+            with open(os.path.join(ready_dir, "audio.wav"), "wb") as f:
+                f.write(b"audio")
+            with open(os.path.join(ready_dir, "manifest.json"), "w", encoding="utf-8") as f:
+                json.dump({"character": "podcast", "title": "Newsica Podcast - Focus"}, f)
 
-    @patch("newsica.broadcast.director_agent.get_jingle_for_block")
-    @patch("newsica.broadcast.director_agent.write_state_files")
+            state = {
+                "status": "ON_AIR",
+                "scheduled_slot": "15:00",
+                "current_segment": "intro",
+                "podcast_played": False,
+            }
+
+            with patch("newsica.broadcast.director_agent.RUNTIME_DIR", tmp), patch(
+                "newsica.broadcast.director_agent.write_state_files"
+            ) as mock_write_state:
+                action = self.director._handle_podcast_progression(
+                    state, "Newsica Podcast", "intro", "16:00"
+                )
+
+            self.assertIsInstance(action, PlayVoiceEvent)
+            self.assertEqual(action.character, "podcast")
+            self.assertTrue(state["podcast_played"])
+            mock_write_state.assert_called_once()
+
     @patch("newsica.broadcast.director_agent.schedule_deadline")
-    def test_evening_news_inserts_podcast_when_time_remains(self, mock_deadline, mock_write_state, mock_get_jingle):
-        mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=45)
-        mock_get_jingle.return_value = ("assets/jingles/jingle_podcast.mp3", "jingle podcast")
+    @patch("newsica.broadcast.director_agent.get_wallclock_schedule_key")
+    @patch("newsica.broadcast.director_agent.write_state_files")
+    def test_podcast_rotation_returns_music_event_with_ai_trigger(
+        self, mock_write_state, mock_wallclock, mock_deadline
+    ):
+        mock_wallclock.return_value = "15:00"
+        mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=15)
         state = {
             "status": "ON_AIR",
-            "current_block": "news",
-            "current_title": "Newsica Sera - Completo",
+            "scheduled_slot": "15:00",
             "current_segment": "music_rotation_until_deadline",
-            "scheduled_slot": "20:00",
-            "evening_podcast_inserted": False,
+            "theme": "cinema",
+            "podcast_played": True,
         }
 
-        action = self.director._handle_standard_rubric_progression(
-            state, "news", "Newsica Sera", "music_rotation_until_deadline", "22:00"
+        action = self.director._handle_podcast_progression(
+            state, "Newsica Podcast", "music_rotation_until_deadline", "16:00"
         )
 
-        self.assertEqual(action["action"], "PLAY_JINGLE")
-        self.assertEqual(action["next_segment"], "evening_podcast_generate")
-        self.assertTrue(state["evening_podcast_inserted"])
+        self.assertIsInstance(action, PlayMusicEvent)
+        self.assertEqual(action.file, "assets/music/track_test.mp3")
+        self.assertTrue(action.trigger_ai_music_gen)
+        self.assertEqual(action.theme, "cinema")
 
-    @patch("newsica.broadcast.director_agent.write_state_files")
     @patch("newsica.broadcast.director_agent.schedule_deadline")
-    def test_evening_news_skips_podcast_when_already_inserted(self, mock_deadline, mock_write_state):
-        mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=45)
+    def test_standard_block_progression_uses_deadline_event(self, mock_deadline):
+        mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=10)
         state = {
             "status": "ON_AIR",
-            "current_block": "news",
-            "current_title": "Newsica Sera - Completo",
+            "scheduled_slot": "14:00",
             "current_segment": "music_rotation_until_deadline",
-            "scheduled_slot": "20:00",
-            "evening_podcast_inserted": True,
+            "theme": "calcio",
         }
 
-        action = self.director._handle_standard_rubric_progression(
-            state, "news", "Newsica Sera", "music_rotation_until_deadline", "22:00"
+        action = self.director._progress_current_block(
+            state, "sport", "Pomeriggio Sport", "Meteo", "15:00", "14:00"
         )
 
-        self.assertEqual(action["action"], "PLAY_MUSIC")
+        self.assertIsInstance(action, PlayMusicDeadlineEvent)
+
+    def test_special_broadcast_without_bulletin_waits_with_silence_event(self):
+        state = {"current_segment": "intro"}
+
+        with patch("newsica.broadcast.director_agent.TMP_DIR", self.audit_tmp.name), patch(
+            "newsica.broadcast.director_agent.ASSETS_DIR", self.audit_tmp.name
+        ):
+            action = self.director._handle_special_broadcast(state)
+
+        self.assertIsInstance(action, PlaySilenceFallbackEvent)
+        self.assertEqual(action.seconds, 5)
+
 
 if __name__ == "__main__":
     unittest.main()

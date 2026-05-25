@@ -20,6 +20,7 @@ from newsica.broadcast.director_agent import DirectorAgent
 from newsica.audio.fifo import FifoWriter, is_music_safe_for_chime
 from newsica.broadcast.process_monitor import SubprocessSupervisor
 from newsica.broadcast.control_bus import poll_control_file
+from newsica.domain.playout_events import PlayoutEvent, PlayoutExecutionContext
 
 # Custom print con timestamp per i log della regia
 _original_print = print
@@ -123,8 +124,41 @@ def handle_ordinary_breaking_news(
     restore_fn(prev_state, "breaking news")
 
 
+def trigger_next_block():
+    global manual_block_override_index
+    manual_block_override_index = None
+    schedule_interrupt_event.set()
+    playout.stop_current_process("⏰ Termino il blocco corrente per cambio fascia.")
+    playout.clear_queue()
+    write_state_files({"status": "OFFLINE"})
+
+
+def make_execution_context():
+    def state_updater(**kwargs):
+        state = get_current_state()
+        if state.get("status") != "OFFLINE":
+            state.update(kwargs)
+            write_state_files(state)
+
+    return PlayoutExecutionContext(
+        playout=playout,
+        state_reader=get_current_state,
+        state_updater=state_updater,
+        trigger_next_block=trigger_next_block,
+    )
+
+
+def execute_playout_event(event):
+    global current_active_index
+    if not isinstance(event, PlayoutEvent):
+        raise TypeError(f"Unexpected director event type: {type(event)!r}")
+    if event.active_idx is not None:
+        current_active_index = event.active_idx
+    event.execute(make_execution_context())
+
+
 def generator_worker():
-    global breaking_news_active, manual_block_override_index, current_active_index
+    global breaking_news_active, manual_block_override_index
     print("🤖 Thread Generatore (DirectorAgent Event Loop) avviato.")
     event_queue = []
     
@@ -141,83 +175,18 @@ def generator_worker():
             schedule_interrupt_event.clear()
             
             if event_queue:
-                event_or_dict = event_queue.pop(0)
+                event = event_queue.pop(0)
             else:
-                event_or_dict = director_agent.decide_next_action(manual_block_override_index)
-                if isinstance(event_or_dict, list):
-                    event_queue.extend(event_or_dict)
+                event = director_agent.decide_next_action(manual_block_override_index)
+                if isinstance(event, list):
+                    event_queue.extend(event)
                     continue
             
-            if event_or_dict is None:
+            if event is None:
                 time.sleep(1)
                 continue
-                
-            # Compatibilità ibrida temporanea tra dizionario e oggetto PlayoutEvent
-            if isinstance(event_or_dict, dict):
-                action = event_or_dict.get("action")
-                if "active_idx" in event_or_dict:
-                    current_active_index = event_or_dict["active_idx"]
-                
-                # Gestione nativa del loop esistente
-                if action == "TRIGGER_NEXT_BLOCK":
-                    manual_block_override_index = None
-                    event_queue.clear()
-                    schedule_interrupt_event.set()
-                    playout.stop_current_process("⏰ Termino il blocco corrente per cambio fascia.")
-                    playout.clear_queue()
-                    write_state_files({"status": "OFFLINE"})
-                elif action == "PLAY_JINGLE":
-                    next_segment = event_or_dict.get("next_segment")
-                    if next_segment:
-                        state = get_current_state()
-                        if state.get("status") != "OFFLINE":
-                            state["current_segment"] = next_segment
-                            write_state_files(state)
-                    playout.queue_jingle(
-                        event_or_dict["file"],
-                        event_or_dict.get("label", "jingle"),
-                    )
-                elif action == "PLAY_VOICE":
-                    block_info = {
-                        "status": "ON_AIR",
-                        "current_block": event_or_dict.get("character", ""),
-                        "current_title": (
-                            f"{event_or_dict.get('title', '')} - {event_or_dict.get('segment', '')}"
-                            .strip(" -")
-                        ),
-                        "breaking_news_available": False,
-                    }
-                    playout.queue_pcm_from_file(event_or_dict["file"], block_info)
-                elif action == "PLAY_VOICE_MIX":
-                    block_info = {
-                        "status": "ON_AIR",
-                        "current_block": event_or_dict.get("character", ""),
-                        "current_title": (
-                            f"{event_or_dict.get('title', '')} - {event_or_dict.get('segment', '')}"
-                            .strip(" -")
-                        ),
-                        "breaking_news_available": False,
-                    }
-                    playout.mix_and_queue(
-                        event_or_dict.get("music_file"),
-                        event_or_dict["voice_file"],
-                        block_info,
-                    )
-                elif action == "PLAY_MUSIC":
-                    playout.queue_single_music_track(event_or_dict.get("file"))
-                elif action == "PLAY_SILENCE_FALLBACK":
-                    time.sleep(event_or_dict.get("seconds", 2))
-                else:
-                    # Deleghiamo la gestione dei vecchi dizionari al PlayoutPlanner / DirectorAgent legacy
-                    pass # (Il DirectorAgent verrà refattorizzato per restituire sempre oggetti)
-            else:
-                # È un PlayoutEvent
-                def state_updater(**kwargs):
-                    state = get_current_state()
-                    if state.get("status") != "OFFLINE":
-                        state.update(kwargs)
-                        write_state_files(state)
-                event_or_dict.execute(playout, state_updater)
+            
+            execute_playout_event(event)
                 
         except Exception as e:
             print(f"💥 Errore nel ciclo del generatore DirectorAgent: {e}")
@@ -422,7 +391,9 @@ def main():
                                     schedule_interrupt_event.set()
                                     playout.stop_current_process("🚨 Interruzione per Edizione Straordinaria.")
                                     playout.clear_queue()
-                                    director_agent.notify_interrupt(reason, severity_score)
+                                    special_event = director_agent.notify_interrupt(reason, severity_score)
+                                    if special_event is not None:
+                                        execute_playout_event(special_event)
                                     fade_in_chunks_remaining = 20
                                 else:
                                     handle_ordinary_breaking_news(

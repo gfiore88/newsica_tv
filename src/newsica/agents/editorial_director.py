@@ -875,8 +875,14 @@ Lyrics:
                 if self._is_valid_music_prompt(prompt):
                     parsed_title = " ".join(str(parsed.get("title", "")).split())
                     resolved_language = parsed.get("lyrics_language", lyrics_language)
+                    title_language = parsed.get("title_language", resolved_language)
+                    title_language_matches = title_language == resolved_language
                     
-                    if parsed_title and not self._is_music_title_too_similar(parsed_title, recent_music_titles):
+                    if (
+                        parsed_title
+                        and title_language_matches
+                        and not self._is_music_title_too_similar(parsed_title, recent_music_titles)
+                    ):
                         final_title = parsed_title
                         log_decision(
                             "EditorialDirector",
@@ -888,7 +894,7 @@ Lyrics:
                         log_decision(
                             "EditorialDirector",
                             (
-                                f"Titolo LLM '{parsed_title}' assente, troppo simile o non valido. "
+                                f"Titolo LLM '{parsed_title}' assente, fuori lingua, troppo simile o non valido. "
                                 f"Sostituito con titolo locale '{final_title}' per garantire coerenza con la lingua '{resolved_language}'."
                             ),
                             level="MUSIC",

@@ -129,6 +129,8 @@ Rischio medio-alto: e' la parte piu' delicata per continuita' audio.
 
 - [x] Lasciare nel director solo loop runtime, comandi UI, interruzioni e gestione stato.
 - [x] Spostare schedule, overlay, control file e process supervision in moduli dedicati.
+- [x] Eliminare il doppio protocollo `dict`/eventi: il `DirectorAgent` emette ora solo `PlayoutEvent` tipizzati e il loop live esegue un solo path.
+- [x] Portare i side effect collaterali dei brani musicali (es. trigger `rotation_fill` per la musica AI) dentro gli eventi, evitando che si perdano nei bridge legacy.
 - [ ] Aggiungere test unitari su planner e selector senza avviare FFmpeg.
 
 Rischio medio: da fare quando le fasi precedenti sono stabili.
@@ -150,4 +152,5 @@ Non ha senso usarli prima di avere questa mappa, perche' rischierebbero di lavor
 - Prompt e voce di un character si cambiano senza toccare codice runtime.
 - Le fonti di una rubrica sono dichiarate in un registry, non in funzioni sparse.
 - `director.py` scende sotto 250 righe ed e' leggibile come orchestratore.
+- Il director non contiene piu' branch di compatibilita' per action legacy.
 - Esistono test locali su selezione notizie, schedule, playout planner e overlay state.

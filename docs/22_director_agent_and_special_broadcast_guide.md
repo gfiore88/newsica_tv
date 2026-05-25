@@ -24,6 +24,7 @@ Il sistema è suddiviso in moduli specializzati posizionati nei pacchetti `newsi
 graph TD
     A[director.py -- Runtime Pipe] -->|decide_next_action| B[DirectorAgent]
     B -->|Query Fascia Oraria| C[scheduler.py]
+    B -->|PlayoutEvent tipizzati| A
     B -->|Anti-Ripetizione| D[memory.py -- editorial-memory.json]
     B -->|Scrittura Stato Atomica| E[runtime_state.py -- on-air-state.json]
     F[breaking_news_agent.py] -->|Valuta Gravità| G[gravity_assessor.py]
@@ -47,6 +48,14 @@ Scrive lo stato della messa in onda in `on-air-state.json` tramite **scrittura a
 * **FFmpeg**: legge i testi statici per generare l'overlay a schermo.
 
 Gestisce inoltre l'attivazione degli **accenti grafici** (`accent_news.txt`, `accent_breaking.txt`, ecc.), abilitando l'overlay del colore corretto a seconda del blocco attivo.
+
+### D. Protocollo unico a eventi (`playout_events.py`)
+Il refactor del Director e' stato completato eliminando il vecchio bridge ibrido tra `dict` legacy (`{"action": "PLAY_*"}`) e oggetti evento. Oggi:
+* `DirectorAgent` restituisce solo `PlayoutEvent`;
+* `director.py` esegue solo `PlayoutEvent`;
+* side effect come il trigger della nuova musica AI risiedono negli eventi stessi e non in branch speciali del loop.
+
+Questo ha rimosso una classe di bug in cui lo stato avanzava correttamente ma l'audio, i jingle o la schedulazione dei job collaterali non partivano.
 
 ---
 
@@ -78,9 +87,9 @@ sequenceDiagram
     D->>DA: Notifica interruzione: notify_interrupt(reason, severity)
     DA->>RS: Scrive SPECIAL_BROADCAST in on-air-state.json
     DA->>RS: Attiva accento breaking_news (rosso)
-    DA->>D: Restituisce azione PLAY_JINGLE (jingle_breaking_news.mp3)
+    DA->>D: Restituisce PlayJingleEvent (jingle_breaking_news.mp3)
     D->>TA: Ticker Agent rileva lo stato e scrive "🚨 EDIZIONE STRAORDINARIA"
-    DA->>D: Restituisce azione PLAY_VOICE_MIX (bollettino + tema musicale speciale)
+    DA->>D: Restituisce PlayVoiceMixEvent (bollettino + tema musicale speciale)
     Note over DA, D: Il ciclo speciale prosegue in loop con bollettini e musica solenne
 ```
 
@@ -90,16 +99,20 @@ sequenceDiagram
 
 ---
 
-## 5. Rientro in Palinsesto: La Regola del 40%
+## 5. Rientro in Palinsesto: Soglia Minima Dinamica
 
 Le edizioni straordinarie rimangono attive fino alla loro revoca manuale o automatica. Al rientro, `DirectorAgent` decide come gestire lo slot orario interrotto calcolando la **durata residua**:
 
 $$\text{Durata Residua \%} = \frac{\text{Ora Fine Slot} - \text{Ora Corrente}}{\text{Durata Totale Slot}} \times 100$$
 
-* **Caso 1: $\ge 40\%$ di tempo rimanente**:
-  Se lo slot interrotto ha ancora molto tempo a disposizione (es. mancano 20 minuti alla fine di *Pausa Wellness*), il regista riprende la programmazione dello slot. Lo speaker fa un rientro naturale ed avvia un brano musicale prima dei successivi interventi parlati.
-* **Caso 2: $< 40\%$ di tempo rimanente**:
-  Se lo slot interrotto è quasi scaduto (es. mancano solo 4 minuti), non ha senso riprenderlo. Il `DirectorAgent` decide di saltarlo, imposta lo stato su `OFFLINE` ed attende l'inizio naturale dello slot successivo previsto dal palinsesto per rispetto dello spettatore.
+La soglia runtime attuale non e' piu' un 40% fisso storico. Il rientro usa:
+
+$$\text{soglia} = \max(300s,\; 20\% \text{ della durata slot})$$
+
+* **Caso 1: residuo sopra soglia**:
+  Se lo slot interrotto ha ancora tempo sufficiente, il regista ripristina il blocco in `music_rotation_until_deadline` e lascia che la rubrica rientri in modo naturale.
+* **Caso 2: residuo sotto soglia**:
+  Se il residuo e' troppo basso, il sistema evita un ripristino artificiale della parte 1 e attende il cambio fascia naturale, mantenendo comunque stato coerente fino alla scadenza.
 
 ---
 
@@ -117,4 +130,4 @@ Per terminare la trasmissione straordinaria e rientrare nel normale palinsesto o
 ```bash
 echo "REVOKE_SPECIAL_BROADCAST" > runtime/control.txt
 ```
-La regia rileverà il comando, calcolerà la durata residua dello slot originario e ripristinerà o salterà la programmazione in modo del tutto autonomo.
+La regia rileverà il comando, calcolerà la durata residua dello slot originario con la soglia dinamica e ripristinerà o salterà la programmazione in modo del tutto autonomo.
