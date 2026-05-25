@@ -52,7 +52,7 @@ def send_message(token, chat_id, text):
         print(f"❌ Errore nell'invio del messaggio di cortesia a Telegram: {e}")
 
 
-def process_admin_command(token, chat_id, text):
+def process_admin_command(token, chat_id, text, first_name="Admin"):
     cmd = text.lower().split()[0]
     
     if cmd == "/status":
@@ -105,7 +105,7 @@ def process_admin_command(token, chat_id, text):
     elif cmd in ("/help", "/info"):
         help_text = (
             "👑 NewsicaTV Admin Panel (Remoto)\n"
-            "Benvenuto Giovanni! Puoi gestire l'intera radio con i seguenti comandi:\n\n"
+            f"Benvenuto {first_name}! Puoi gestire l'intera radio con i seguenti comandi:\n\n"
             "🔍 /status - Controlla lo stato di tutti i servizi\n"
             "🚀 /start - Avvia tutti i servizi e vai in onda\n"
             "🔄 /restart - Riavvia la regia, lo stream e la dashboard\n"
@@ -275,10 +275,11 @@ def run_telegram_loop(token):
                         first_name = from_user.get("first_name", "Ascoltatore")
                         text = message.get("text", "").strip()
                         
-                        # Rileva e autentica i comandi remoti dell'amministratore Giovanni
-                        if username == "giovannifiore" and text.startswith("/"):
+                        # Rileva e autentica i comandi remoti dell'amministratore tramite variabile d'ambiente
+                        admin_username = os.getenv("TELEGRAM_ADMIN_USERNAME", "giovannifiore")
+                        if admin_username and username == admin_username and text.startswith("/"):
                             try:
-                                process_admin_command(token, chat_id, text)
+                                process_admin_command(token, chat_id, text, first_name)
                             except Exception as ae:
                                 print(f"❌ Errore durante process_admin_command: {ae}")
                         else:
