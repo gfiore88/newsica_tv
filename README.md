@@ -39,6 +39,31 @@ Il sistema include un Bot Telegram interattivo per creare engagement reale con i
 ### 🎵 AI Music Worker (`ai_music_worker.py`)
 Per riempire in modo creativo ed esente da copyright i momenti di silenzio o di attesa tra i programmi, il sistema integra un worker locale per la musica generativa AI (`newsica-ai-music-worker`). Questo genera tracce procedurali direttamente in locale senza costi e senza alcun rischio di strike Content ID su YouTube.
 
+### 🎼 Importazione Musica Creative Commons (`chart_importer.py`)
+Esiste anche uno script locale per importare brani esterni in `assets/music/`, con focus primario su tracce **Creative Commons BY** recuperate da **Jamendo**. Lo script:
+* scarica i file audio;
+* li converte e normalizza in MP3 standard;
+* genera un manifest JSON per ogni brano con titolo, artista, fonte, URL e licenza.
+
+Uso consigliato:
+```bash
+venv/bin/python3 src/newsica/audio/chart_importer.py --source jamendo --limit 3
+```
+
+Opzioni principali:
+* `--source jamendo`: modalità consigliata, usa brani CC-BY con licenza esplicita.
+* `--source itunes`: modalità solo sperimentale, ad alto rischio copyright/Content ID.
+* `--limit N`: numero massimo di brani da importare dalla chart.
+
+Output atteso:
+* file audio in `assets/music/`
+* manifest affiancati `assets/music/NOME_BRANO.json`
+
+Stato attuale dell'integrazione:
+* lo script esiste ed è usabile da CLI;
+* non è ancora agganciato alla Dashboard;
+* la libreria musicale live oggi scansiona i file audio in `assets/music/`, ma non impone ancora un filtro rigido "solo file con manifest valido".
+
 ### 🛡️ Protezione Anti-Sleep per macOS (`caffeinate`)
 NewsicaTV è progettato per lo streaming continuo H24. Su macchine macOS, all'avvio della live lo script `manage.sh` attiva automaticamente il processo nativo `caffeinate` con asserzioni a livello di kernel. Questo previene lo sleep di sistema, display e dischi rigidi, assicurando:
 * Prestazioni costanti e non ridotte della GPU/MPS per la sintesi vocale TTS (Chatterbox/Kokoro).

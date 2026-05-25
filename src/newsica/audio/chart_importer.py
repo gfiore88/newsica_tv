@@ -7,12 +7,15 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
-# Aggiunge il percorso principale del progetto al sys.path
+# Aggiunge `src/` al sys.path per consentire l'esecuzione standalone:
+# `venv/bin/python3 src/newsica/audio/chart_importer.py ...`
 BASE_DIR = Path(__file__).parent.parent.parent.parent
-sys.path.append(str(BASE_DIR))
+SRC_DIR = BASE_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
-from src.newsica.config.paths import BASE_DIR, TMP_DIR
-from src.newsica.audio.settings import resolve_ffmpeg_cmd
+from newsica.config.paths import BASE_DIR, TMP_DIR
+from newsica.audio.settings import resolve_ffmpeg_cmd
 
 # Costanti
 MUSIC_DIR = BASE_DIR / "assets" / "music"
