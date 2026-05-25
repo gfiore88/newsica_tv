@@ -89,6 +89,9 @@ function do_status() {
   check_status "AI Music Worker" "src/newsica/audio/ai_music_worker.py"
   check_status "Telegram Agent" "src/telegram_agent.py"
   check_status "Watchdog" "src/watchdog.sh"
+  if [ "$(uname)" = "Darwin" ]; then
+    check_status "Anti-Sleep (Caffeinate)" "caffeinate"
+  fi
   echo -e "------------------------------------------------\n"
 }
 
@@ -101,6 +104,15 @@ function do_stop() {
     echo -e "\n${RED}${BOLD}🛑 Spegnimento di tutto l'ecosistema NewsicaTV...${NC}"
   fi
   
+  # Termina caffeinate su macOS se presente
+  if [ "$(uname)" = "Darwin" ]; then
+    local caffeinate_pids=$(get_all_pids "caffeinate")
+    if [ -n "$caffeinate_pids" ]; then
+      echo "  -> Arresto caffeinate..."
+      kill $caffeinate_pids 2>/dev/null || true
+    fi
+  fi
+
   # Termina watchdog prima di tutto
   local watchdog_pids=$(get_all_pids "src/watchdog.sh")
   if [ -n "$watchdog_pids" ]; then
@@ -140,7 +152,7 @@ function do_stop() {
   done
 
   # Chiude eventuali sessioni screen create da manage.sh start.
-  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker")
+  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker" "newsica-caffeinate")
   if [ "$exclude_telegram" = false ]; then
     screens+=("newsica-telegram")
   fi
@@ -172,6 +184,17 @@ function do_start() {
     echo -e "${RED}❌ ERRORE: Ambiente virtuale non trovato in $VENV_PYTHON.${NC}"
     echo -e "Esegui prima: python3 -m venv venv && venv/bin/pip install -r requirements.txt"
     exit 1
+  fi
+
+  # 0. Previene lo standby di macOS (Caffeinate)
+  if [ "$(uname)" = "Darwin" ]; then
+    if [ -z "$(get_pid "caffeinate")" ]; then
+      echo "  -> Avvio Caffeinate (prevenzione sleep macOS)..."
+      screen -dmS newsica-caffeinate caffeinate -dims
+      sleep 1
+    else
+      echo "  [i] Caffeinate già attivo."
+    fi
   fi
 
   # 2. Crea pipe audio se mancante
