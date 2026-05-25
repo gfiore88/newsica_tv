@@ -159,6 +159,15 @@ class DirectorAgent:
             deadline = schedule_deadline(next_time)
             if datetime.datetime.now() >= deadline:
                 return {"action": "TRIGGER_NEXT_BLOCK"}
+                
+            if current_segment == "music_rotation_until_deadline":
+                theme = state.get("theme")
+                music_file = self._select_non_repeated_music(theme=theme)
+                if music_file:
+                    add_music_track(music_file)
+                    from newsica.broadcast.planner import PlayMusicDeadlineEvent
+                    return PlayMusicDeadlineEvent(music_file, deadline, "music_rotation")
+                    
             return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
 
 
@@ -221,12 +230,9 @@ class DirectorAgent:
             music_file = self._select_non_repeated_music(theme=theme)
             if music_file:
                 add_music_track(music_file)
-                return {
-                    "action": "PLAY_MUSIC",
-                    "file": music_file,
-                    "label": "fallback_non_pronto",
-                    "trigger_ai_music_gen": False
-                }
+                from newsica.broadcast.planner import PlayMusicDeadlineEvent
+                deadline = schedule_deadline(next_time)
+                return PlayMusicDeadlineEvent(music_file, deadline, "fallback_non_pronto")
             return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
 
         elif current_segment == "podcast_playing":
