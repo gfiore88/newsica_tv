@@ -195,7 +195,7 @@ def generate_audio():
     speed = float(os.getenv("TTS_SPEED", character.speed))
     
     if not os.path.exists(SCRIPT_FILE):
-        print(f"Errore: File {SCRIPT_FILE} non trovato. Esegui prima llm_processor.py.")
+        print(f"Errore: File {SCRIPT_FILE} non trovato. L'agente di integrazione (AIIntegratorAgent) non ha prodotto il copione in tempo.")
         sys.exit(1)
         
     with open(SCRIPT_FILE, 'r', encoding='utf-8') as f:
