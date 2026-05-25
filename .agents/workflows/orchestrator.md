@@ -10,7 +10,7 @@ Sei l'Agente Coordinatore per il progetto NewsicaTV. Il tuo obiettivo è garanti
 
 > 🚨 **REGOLA D'ORO ASSOLUTA**: TUTTO LOCALE, TUTTO GRATIS. È severamente vietato l'uso di API a pagamento o servizi in cloud SaaS. Tutto deve funzionare in locale tramite Python, bash, FFmpeg, Kokoro AI e modelli LLM/Audio liberi.
 
-> 📝 **REGOLA DI DOCUMENTAZIONE**: Niente è completato finché non è documentato. Ogni decisione tecnica significativa deve produrre un ADR in `docs/decisions/` e la Roadmap (`docs/10_roadmap.md`) deve essere aggiornata di conseguenza prima di considerare chiuso un task.
+> 📝 **REGOLA DI DOCUMENTAZIONE**: Niente è completato finché non è documentato. SEMPRE: Al termine di ogni refactor o nuova feature, aggiornare immediatamente la documentazione (`docs/debito_tecnico.md`, `docs/architecture_refactor_plan.md`, `README.md` o altri file rilevanti) per riflettere lo stato di completamento. Ogni decisione tecnica significativa deve produrre un ADR in `docs/decisions/` e la Roadmap (`docs/10_roadmap.md`) deve essere aggiornata di conseguenza prima di considerare chiuso un task. È un'operazione obbligatoria per tutti gli agenti.
 
 > 🔎 **REGOLA DI DEBUG LIVE: LOG PRIMA DI QUALSIASI IPOTESI**: Quando si debugga un problema di diretta, audio, palinsesto, overlay, RTMP, YouTube o processi locali, l'Orchestratore deve leggere e citare subito i log rilevanti prima di proporre o applicare fix. Minimo obbligatorio: `./manage.sh status`, `tmp/director.log`, `tmp/stream.log`, `tmp/ffmpeg_progress.txt`, `runtime/on-air-state.json` e verifica processi/runner (`screen -ls`, `launchctl list | rg 'com\\.newsica' || true`). Nessun intervento su processi live deve essere considerato valido se non parte dai log e non chiude con una verifica dei log dopo il cambio.
 

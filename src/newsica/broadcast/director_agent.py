@@ -77,11 +77,10 @@ class DirectorAgent:
 
     def _initialize_scheduled_block(self, block_type, title, next_title, next_time, current_time):
         """
-        Prepara il passaggio a un nuovo blocco di palinsesto.
+        Prepara il passaggio a un nuovo blocco di palinsesto e delega al PlayoutPlanner.
         """
         self._clear_transient_audio()
         
-        # Estrattore del tema del blocco orario dal palinsesto
         theme = None
         try:
             from schedule_generator import get_current_schedule
@@ -106,14 +105,21 @@ class DirectorAgent:
         }
         write_state_files(new_state)
         
-        # Ritorna l'azione di play jingle d'apertura rubrica
-        jingle_file, jingle_label = get_jingle_for_block(block_type)
-        return {
-            "action": "PLAY_JINGLE",
-            "file": jingle_file,
-            "label": jingle_label,
-            "next_segment": "intro"
-        }
+        # Se è un podcast serale o un podcast generico, manteniamo la vecchia logica di fallback iterativa per ora
+        if block_type == "podcast" or (block_type == "news" and current_time == EVENING_PODCAST_SLOT):
+            jingle_file, jingle_label = get_jingle_for_block(block_type)
+            return {
+                "action": "PLAY_JINGLE",
+                "file": jingle_file,
+                "label": jingle_label,
+                "next_segment": "intro"
+            }
+        
+        # Generiamo la playlist con il Planner per le rubriche standard e la musica
+        from newsica.broadcast.planner import PlayoutPlanner
+        planner = PlayoutPlanner(self._select_non_repeated_music)
+        events = planner.plan_block(block_type, title, next_time, current_time, theme)
+        return events
 
     def _clear_transient_audio(self):
         """
@@ -136,352 +142,26 @@ class DirectorAgent:
 
     def _progress_current_block(self, state, block_type, title, next_title, next_time, current_time):
         """
-        Gestisce la progressione interna dei segmenti del blocco attivo.
+        Gestisce la progressione interna dei segmenti del blocco attivo (legacy per podcast e fallback).
         """
         current_segment = state.get("current_segment", "init")
         
         if block_type == "music_only":
-            return self._handle_music_only_progression(state, next_time)
+            return {"action": "TRIGGER_NEXT_BLOCK"}
             
-        elif block_type == "podcast":
+        elif block_type == "podcast" or (block_type == "news" and current_time == EVENING_PODCAST_SLOT):
             return self._handle_podcast_progression(state, title, current_segment, next_time)
             
         else:
-            # Rubriche standard: news, sport, meteo, wellness
-            return self._handle_standard_rubric_progression(state, block_type, title, current_segment, next_time)
-
-    def _handle_music_only_progression(self, state, next_time):
-        """
-        Fascia puramente musicale: riproduce brani a ciclo continuo fino alla deadline.
-        """
-        # Check if this is a past manual override block
-        current_slot = state.get("scheduled_slot")
-        wallclock_slot = get_wallclock_schedule_key()
-        if current_slot and wallclock_slot and current_slot != wallclock_slot:
-            if current_slot < wallclock_slot:
-                print(f"⏰ [DirectorAgent] Past override music slot completed. Returning to normal schedule.")
-                return {"action": "TRIGGER_NEXT_BLOCK"}
-
-        deadline = schedule_deadline(next_time)
-        if datetime.datetime.now() >= deadline:
-            return {"action": "TRIGGER_NEXT_BLOCK"}
-            
-        time_remaining = (deadline - datetime.datetime.now()).total_seconds()
-        trigger_ai_music_gen = time_remaining >= 180
-        # Sceglie un brano musicale rispettando la memoria editoriale
-        theme = state.get("theme")
-        music_file = self._select_non_repeated_music(theme=theme)
-        if music_file:
-            add_music_track(music_file)
-            return {
-                "action": "PLAY_MUSIC",
-                "file": music_file,
-                "label": "music_rotation",
-                "trigger_ai_music_gen": trigger_ai_music_gen
-            }
-        else:
-            return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 5}
-
-    def _handle_standard_rubric_progression(self, state, block_type, title, current_segment, next_time):
-        """
-        Progressione per news, sport, meteo, wellness.
-        """
-        scheduled_slot = state.get("scheduled_slot", "").replace(":", "")
-        ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot)
-        
-        voice_file = os.path.join(ready_dir, "audio.wav")
-        multipart_indicator = os.path.join(ready_dir, "is_multipart.txt")
-        manifest_file = os.path.join(ready_dir, "manifest.json")
-        if os.path.exists(ready_dir):
-            try:
-                with open(manifest_file, "r", encoding="utf-8") as f:
-                    manifest = json.load(f)
-                if manifest.get("character") != block_type or manifest.get("title") != title:
-                    print(
-                        f"⚠️ [DirectorAgent] Asset pronto non coerente per {scheduled_slot}: "
-                        f"atteso {block_type}/{title}, trovato {manifest}."
-                    )
-                    voice_file = ""
-                    multipart_indicator = ""
-            except Exception:
-                print(f"⚠️ [DirectorAgent] Asset pronto senza manifest valido per {scheduled_slot}. Attendo rigenerazione.")
-                voice_file = ""
-                multipart_indicator = ""
-        
-        # Determina se il file generato è multi-part o classico singolo
-        is_multipart = False
-        num_parts = 0
-        if os.path.exists(multipart_indicator):
-            try:
-                with open(multipart_indicator, "r") as f:
-                    num_parts = int(f.read().strip())
-                is_multipart = num_parts > 0
-            except Exception:
-                pass
-
-        if current_segment == "intro" or current_segment == "init":
-            voice_duration = 15.0
-            if is_multipart and num_parts > 0:
-                for i in range(1, num_parts + 1):
-                    voice_duration += get_audio_duration(os.path.join(ready_dir, f"audio_part{i}.wav"))
-            else:
-                voice_duration += get_audio_duration(voice_file)
-                
-            deadline = schedule_deadline(next_time)
-            slot_duration = (deadline - datetime.datetime.now()).total_seconds()
-            music_total_time = max(0.0, slot_duration - voice_duration)
-            num_music_blocks = num_parts if is_multipart else 1
-            state["break_target_duration"] = music_total_time / num_music_blocks
-            write_state_files(state)
-
-            # Passiamo alla messa in onda del copione (singolo o multipart)
-            if is_multipart and num_parts > 0:
-                # Iniziamo la prima parte del multi-part
-                next_part_file = os.path.join(ready_dir, "audio_part1.wav")
-                if os.path.exists(next_part_file):
-                    theme = state.get("theme")
-                    music_file = self._select_non_repeated_music(theme=theme)
-                    if music_file:
-                        add_music_track(music_file)
-                    state["current_segment"] = "voice_part_1"
-                    write_state_files(state)
-                    return {
-                        "action": "PLAY_VOICE_MIX",
-                        "voice_file": next_part_file,
-                        "music_file": music_file,
-                        "character": block_type,
-                        "title": title,
-                        "segment": "Parte 1"
-                    }
-            
-            # Flusso classico a parte singola
-            if os.path.exists(voice_file):
-                theme = state.get("theme")
-                music_file = self._select_non_repeated_music(theme=theme)
-                if music_file:
-                    add_music_track(music_file)
-                state["current_segment"] = "meteo_brief_playing" if block_type == "meteo" else "voice_single"
-                write_state_files(state)
-                return {
-                    "action": "PLAY_VOICE_MIX",
-                    "voice_file": voice_file,
-                    "music_file": music_file,
-                    "character": block_type,
-                    "title": title,
-                    "segment": "Completo"
-                }
-            
-            # Se l'audio non è pronto, inneschiamo un fallback musicale.
-            # Questo evita il blocco stream e fa da "attesa".
-            state["current_segment"] = "music_rotation_until_deadline"
-            write_state_files(state)
-            
-            theme = state.get("theme")
-            music_file = self._select_non_repeated_music(theme=theme)
-            if music_file:
-                add_music_track(music_file)
-                return {
-                    "action": "PLAY_MUSIC",
-                    "file": music_file,
-                    "label": "fallback_non_pronto",
-                    "trigger_ai_music_gen": False
-                }
-            return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
-
-        elif current_segment == "meteo_brief_playing":
-            state["current_segment"] = "music_rotation_until_deadline"
-            write_state_files(state)
-            return {
-                "action": "PLAY_JINGLE",
-                "file": self.classic_jingle,
-                "label": "stacco_uscita_meteo",
-                "next_segment": "music_rotation_until_deadline"
-            }
-
-        elif current_segment == "evening_podcast_generate":
-            return {
-                "action": "WAIT_OR_GENERATE",
-                "character": "podcast",
-                "title": EVENING_PODCAST_TITLE,
-                "time_key": state.get("scheduled_slot"),
-                "next_segment": "evening_podcast_ready"
-            }
-
-        elif current_segment == "evening_podcast_ready":
-            if os.path.exists(voice_file):
-                state["current_segment"] = "evening_podcast_playing"
-                state["evening_podcast_inserted"] = True
-                write_state_files(state)
-                return {
-                    "action": "PLAY_VOICE",
-                    "file": voice_file,
-                    "character": "podcast",
-                    "title": EVENING_PODCAST_TITLE,
-                    "segment": "Extra"
-                }
-            return {
-                "action": "WAIT_OR_GENERATE",
-                "character": "podcast",
-                "title": EVENING_PODCAST_TITLE,
-                "time_key": state.get("scheduled_slot"),
-                "next_segment": "evening_podcast_ready"
-            }
-
-        elif current_segment == "evening_podcast_playing":
-            state["current_segment"] = "voice_closing"
-            state["current_block"] = block_type
-            state["current_title"] = title
-            write_state_files(state)
-            return {
-                "action": "PLAY_JINGLE",
-                "file": self.classic_jingle,
-                "label": "stacco_uscita_podcast_serale",
-                "next_segment": "music_rotation_until_deadline"
-            }
-
-        elif current_segment.startswith("voice_part_"):
-            # Gestione del sequenziamento multi-part delle rubriche
-            try:
-                current_part_idx = int(current_segment.split("_")[-1])
-            except ValueError:
-                current_part_idx = 1
-                
-            if current_part_idx < num_parts:
-                next_part_idx = current_part_idx + 1
-                next_part_file = os.path.join(ready_dir, f"audio_part{next_part_idx}.wav")
-                
-                # Prima di mandare in onda la prossima parte, riproduciamo 1 o più brani intermedi di stacco
-                # Per non saltare il sequenziamento, creiamo uno stato intermedio di stacco musicale
-                state["current_segment"] = f"music_stacco_{current_part_idx}_to_{next_part_idx}"
-                break_duration = state.get("break_target_duration", 180.0)
-                state["stacco_deadline"] = (datetime.datetime.now() + datetime.timedelta(seconds=break_duration)).isoformat()
-                write_state_files(state)
-                
-                theme = state.get("theme")
-                music_file = self._select_non_repeated_music(theme=theme)
-                if music_file:
-                    add_music_track(music_file)
-                    return {
-                        "action": "PLAY_MUSIC_DEADLINE",
-                        "file": music_file,
-                        "deadline": state["stacco_deadline"],
-                        "label": "stacco_musicale_rubrica"
-                    }
-            
-            # Finito il multi-part, passiamo alla chiusura
-            state["current_segment"] = "voice_closing"
-            write_state_files(state)
-            return {
-                "action": "PLAY_JINGLE",
-                "file": self.classic_jingle,
-                "label": "stacco_uscita",
-                "next_segment": "music_rotation_until_deadline"
-            }
-
-        elif current_segment.startswith("music_stacco_"):
-            # Controllo se il tempo di stacco è terminato
-            stacco_deadline_str = state.get("stacco_deadline")
-            if stacco_deadline_str:
-                stacco_deadline = datetime.datetime.fromisoformat(stacco_deadline_str)
-                if datetime.datetime.now() < stacco_deadline:
-                    # Riempiamo ancora di musica
-                    theme = state.get("theme")
-                    music_file = self._select_non_repeated_music(theme=theme)
-                    if music_file:
-                        add_music_track(music_file)
-                        return {
-                            "action": "PLAY_MUSIC_DEADLINE",
-                            "file": music_file,
-                            "deadline": stacco_deadline_str,
-                            "label": "stacco_musicale_rubrica"
-                        }
-                    return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
-
-            # Rientriamo dallo stacco musicale alla parte successiva del parlato
-            parts = current_segment.split("_")
-            next_part_idx = int(parts[-1])
-            scheduled_slot = state.get("scheduled_slot", "").replace(":", "")
-            ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot)
-            next_part_file = os.path.join(ready_dir, f"audio_part{next_part_idx}.wav")
-            
-            if os.path.exists(next_part_file):
-                theme = state.get("theme")
-                music_file = self._select_non_repeated_music(theme=theme)
-                if music_file:
-                    add_music_track(music_file)
-                state["current_segment"] = f"voice_part_{next_part_idx}"
-                write_state_files(state)
-                return {
-                    "action": "PLAY_VOICE_MIX",
-                    "voice_file": next_part_file,
-                    "music_file": music_file,
-                    "character": block_type,
-                    "title": title,
-                    "segment": f"Parte {next_part_idx}"
-                }
-            else:
-                # Fallback se la parte non esiste
-                state["current_segment"] = "voice_closing"
-                write_state_files(state)
-                return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
-
-        elif current_segment == "voice_single":
-            # Fine blocco parlato a singola parte -> manda sigla di chiusura
-            state["current_segment"] = "voice_closing"
-            write_state_files(state)
-            return {
-                "action": "PLAY_JINGLE",
-                "file": self.classic_jingle,
-                "label": "stacco_uscita",
-                "next_segment": "music_rotation_until_deadline"
-            }
-
-        elif current_segment == "voice_closing" or current_segment == "music_rotation_until_deadline":
-            # Una volta completato il blocco parlato della rubrica, trasmette musica fino al cambio fascia oraria
-            if self._should_insert_evening_podcast(state, block_type, current_time=state.get("scheduled_slot"), next_time=next_time):
-                state["current_segment"] = "evening_podcast_generate"
-                state["evening_podcast_inserted"] = True
-                write_state_files(state)
-                jingle_file, jingle_label = get_jingle_for_block("podcast")
-                return {
-                    "action": "PLAY_JINGLE",
-                    "file": jingle_file,
-                    "label": jingle_label,
-                    "next_segment": "evening_podcast_generate"
-                }
-
-            # Check if this is a past manual override block
-            current_slot = state.get("scheduled_slot")
-            wallclock_slot = get_wallclock_schedule_key()
-            if current_slot and wallclock_slot and current_slot != wallclock_slot:
-                if current_slot < wallclock_slot:
-                    print(f"⏰ [DirectorAgent] Past override slot '{title}' completed. Returning to normal schedule.")
-                    return {"action": "TRIGGER_NEXT_BLOCK"}
-
-            state["current_segment"] = "music_rotation_until_deadline"
-            write_state_files(state)
-            
+            # Rubriche standard già planate dal PlayoutPlanner:
+            # se arriviamo qui significa che il planner ha svuotato la coda, 
+            # passiamo al prossimo blocco.
             deadline = schedule_deadline(next_time)
             if datetime.datetime.now() >= deadline:
                 return {"action": "TRIGGER_NEXT_BLOCK"}
-                
-            time_remaining = (deadline - datetime.datetime.now()).total_seconds()
-            trigger_ai_music_gen = time_remaining >= 180
-                
-            theme = state.get("theme")
-            music_file = self._select_non_repeated_music(theme=theme)
-            if music_file:
-                add_music_track(music_file)
-                return {
-                    "action": "PLAY_MUSIC",
-                    "file": music_file,
-                    "label": "music_rotation",
-                    "trigger_ai_music_gen": trigger_ai_music_gen
-                }
-            else:
-                return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 5}
-                
-        return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
+            return {"action": "PLAY_SILENCE_FALLBACK", "seconds": 2}
+
+
 
     def _should_insert_evening_podcast(self, state, block_type, current_time, next_time):
         if block_type != "news":

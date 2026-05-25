@@ -119,17 +119,17 @@ Rischio medio: va verificato che ogni rubrica riceva ancora abbastanza contenuti
 
 ### Fase 3 - Isolare audio e playout
 
-- Estrarre music library, jingle selection, mix sidechain e queue PCM.
-- Introdurre oggetti evento come `PlayJingle`, `PlayVoicePart`, `PlayMusicTrack`, `UpdateOverlay`.
-- Far generare al planner una lista di eventi invece di avere il flusso scritto direttamente nel loop.
+- [x] Estrarre music library, jingle selection, mix sidechain e queue PCM.
+- [x] Introdurre oggetti evento come `PlayJingle`, `PlayVoicePart`, `PlayMusicTrack`, `UpdateOverlay`.
+- [x] Far generare al planner una lista di eventi invece di avere il flusso scritto direttamente nel loop.
 
 Rischio medio-alto: e' la parte piu' delicata per continuita' audio.
 
 ### Fase 4 - Ridurre `director.py`
 
-- Lasciare nel director solo loop runtime, comandi UI, interruzioni e gestione stato.
-- Spostare schedule, overlay, control file e process supervision in moduli dedicati.
-- Aggiungere test unitari su planner e selector senza avviare FFmpeg.
+- [x] Lasciare nel director solo loop runtime, comandi UI, interruzioni e gestione stato.
+- [x] Spostare schedule, overlay, control file e process supervision in moduli dedicati.
+- [ ] Aggiungere test unitari su planner e selector senza avviare FFmpeg.
 
 Rischio medio: da fare quando le fasi precedenti sono stabili.
 

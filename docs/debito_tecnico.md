@@ -10,22 +10,22 @@ L'obiettivo è fornire un archivio chiaro e azionabile con checklist per le lavo
 
 ### 📻 A. Playout Event Planner (ADR 0019 - Refactor Fase 3b)
 La logica di riproduzione audio regolare è in `playout.py`, ma il sequenziamento (rubrica classica vs show multi-part) è hardcoded nel thread generatore di `director.py` tramite controlli semaforici (`is_multipart.txt`).
-- [ ] **Sviluppare un PlayoutPlanner a Eventi:** Creare una classe o un modulo che traduca il blocco del palinsesto corrente in una sequenza ordinata di oggetti evento polimorfici:
+- [x] **Sviluppare un PlayoutPlanner a Eventi:** Creare una classe o un modulo che traduca il blocco del palinsesto corrente in una sequenza ordinata di oggetti evento polimorfici:
   ```python
   class PlayJingle(PlayoutEvent): ...
   class PlayVoicePart(PlayoutEvent): ...
   class PlayMusicTrack(PlayoutEvent): ...
   class UpdateOverlay(PlayoutEvent): ...
   ```
-- [ ] **Decoppiare il Generatore dalla Coda:** Il generatore deve inserire eventi nella coda del Playout, e il Playout deve processarli sequenzialmente.
-- [ ] **Rimuovere dipendenze semaforiche dirette** come `is_multipart.txt` a favore di metadati strutturati negli eventi.
+- [x] **Decoppiare il Generatore dalla Coda:** Il generatore deve inserire eventi nella coda del Playout, e il Playout deve processarli sequenzialmente.
+- [x] **Rimuovere dipendenze semaforiche dirette** come `is_multipart.txt` a favore di metadati strutturati negli eventi.
 
 ### ✂️ B. Riduzione e Semplificazione di `director.py` (ADR 0016 - Refactor Fase 4)
 Attualmente `src/director.py` è un file monolitico di oltre 800 righe che fa da supervisore, gestore di rete, controllore FIFO, generatore di segnale orario e player audio sincrono.
-- [ ] **Spostare la gestione del palinsesto (Schedule):** Creare `src/newsica/broadcast/scheduler.py` per gestire l'avanzamento delle fasce orarie e i calcoli delle deadline.
-- [ ] **Spostare la gestione dei file di controllo e overlay:** Creare `src/newsica/broadcast/overlay.py` per isolare la scrittura di `STATE_FILE`, `PROGRAM_FILE`, `NEXT_PROGRAM_FILE` e i file degli accenti colore.
-- [ ] **Spostare la supervisione dei sotto-processi:** Creare un modulo per avviare e monitorare thread o processi secondari (come il ticker).
-- [ ] **Obiettivo finale:** Portare `director.py` sotto le **250 righe di codice** per lasciarlo come puro orchestratore ad alto livello.
+- [x] **Spostare la gestione del palinsesto (Schedule):** Creare `src/newsica/broadcast/scheduler.py` per gestire l'avanzamento delle fasce orarie e i calcoli delle deadline.
+- [x] **Spostare la gestione dei file di controllo e overlay:** Creare `src/newsica/broadcast/overlay.py` per isolare la scrittura di `STATE_FILE`, `PROGRAM_FILE`, `NEXT_PROGRAM_FILE` e i file degli accenti colore.
+- [x] **Spostare la supervisione dei sotto-processi:** Creare un modulo per avviare e monitorare thread o processi secondari (come il ticker).
+- [x] **Obiettivo finale:** Portare `director.py` sotto le **250 righe di codice** per lasciarlo come puro orchestratore ad alto livello.
 - [ ] **Unit Testing:** Implementare test unitari sul planner e sul selettore di notizie simulando la pipeline senza dover avviare FFmpeg.
 
 ---

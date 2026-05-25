@@ -10,31 +10,16 @@ import subprocess
 import time
 import threading
 import queue
-import json
 import datetime
-from newsica.audio.jingles import get_jingle_for_block, CLASSIC_JINGLE_FILE
-from newsica.audio.ai_music_jobs import enqueue_job
-from newsica.audio.ai_music_runtime import launch_ai_music_worker
 from newsica.audio.playout import AudioPlayout
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
-from newsica.domain.characters import get_character
 from newsica.broadcast import scheduler
-from newsica.broadcast.scheduler import (
-    get_current_block_info,
-    get_next_block_info_for_key,
-    schedule_deadline,
-    get_wallclock_schedule_key
-)
-from newsica.broadcast.runtime_state import (
-    ensure_folders,
-    get_current_state,
-    write_state_files,
-    write_accent_files,
-    STATE_FILE,
-    PROGRAM_FILE,
-    NEXT_PROGRAM_FILE
-)
+from newsica.broadcast.scheduler import get_wallclock_schedule_key
+from newsica.broadcast.runtime_state import ensure_folders, get_current_state, write_state_files
 from newsica.broadcast.director_agent import DirectorAgent
+from newsica.audio.fifo import FifoWriter, is_music_safe_for_chime
+from newsica.broadcast.process_monitor import SubprocessSupervisor
+from newsica.broadcast.control_bus import poll_control_file
 
 # Custom print con timestamp per i log della regia
 _original_print = print
@@ -82,10 +67,9 @@ _singleton_lock = None
 def generator_worker():
     global breaking_news_active, manual_block_override_index, current_active_index
     print("🤖 Thread Generatore (DirectorAgent Event Loop) avviato.")
+    event_queue = []
     
     # Aspetta che la FIFO sia aperta da FFmpeg prima di pre-caricare audio.
-    # Senza questo wait, mix_and_queue() riempirebbe la coda (200 chunk) in <0.1s
-    # e il director scriverebbe troppo veloce prima che FFmpeg finisca l'handshake RTMP.
     print("⏸️  Generator in attesa che FFmpeg apra la pipe audio...")
     fifo_connected_event.wait()
     print("▶️  Generator sbloccato — avvio ciclo palinsesto.")
@@ -96,307 +80,52 @@ def generator_worker():
                 time.sleep(1)
                 
             schedule_interrupt_event.clear()
-            action_info = director_agent.decide_next_action(manual_block_override_index)
-            if action_info and "active_idx" in action_info:
-                current_active_index = action_info["active_idx"]
-            action = action_info.get("action")
             
-            if action == "PLAY_JINGLE":
-                jingle_file = action_info["file"]
-                label = action_info["label"]
-                next_segment = action_info.get("next_segment")
+            if event_queue:
+                event_or_dict = event_queue.pop(0)
+            else:
+                event_or_dict = director_agent.decide_next_action(manual_block_override_index)
+                if isinstance(event_or_dict, list):
+                    event_queue.extend(event_or_dict)
+                    continue
+            
+            if event_or_dict is None:
+                time.sleep(1)
+                continue
                 
-                playout.queue_jingle(jingle_file, label)
+            # Compatibilità ibrida temporanea tra dizionario e oggetto PlayoutEvent
+            if isinstance(event_or_dict, dict):
+                action = event_or_dict.get("action")
+                if "active_idx" in event_or_dict:
+                    current_active_index = event_or_dict["active_idx"]
                 
-                state = get_current_state()
-                if state.get("status") != "OFFLINE":
-                    state["current_segment"] = next_segment
-                    write_state_files(state)
-                    
-            elif action == "PLAY_VOICE_MIX":
-                voice_file = action_info["voice_file"]
-                music_file = action_info["music_file"]
-                char = action_info["character"]
-                title = action_info["title"]
-                seg = action_info["segment"]
-                
-                block_info = {
-                    "status": "ON_AIR",
-                    "current_block": char,
-                    "current_title": f"{title} - {seg}",
-                    "next_block": get_current_state().get("next_block", ""),
-                    "next_start": get_current_state().get("next_start", ""),
-                    "scheduled_slot": get_current_state().get("scheduled_slot", ""),
-                    "breaking_news_available": False
-                }
-                
-                if music_file:
-                    playout.mix_and_queue(music_file, voice_file, block_info)
+                # Gestione nativa del loop esistente
+                if action == "TRIGGER_NEXT_BLOCK":
+                    manual_block_override_index = None
+                    event_queue.clear()
+                    schedule_interrupt_event.set()
+                    playout.stop_current_process("⏰ Termino il blocco corrente per cambio fascia.")
+                    playout.clear_queue()
+                    write_state_files({"status": "OFFLINE"})
+                elif action == "PLAY_SILENCE_FALLBACK":
+                    time.sleep(event_or_dict.get("seconds", 2))
                 else:
-                    playout.queue_pcm_from_file(voice_file, block_info)
-                    
-            elif action == "PLAY_VOICE":
-                voice_file = action_info["file"]
-                char = action_info["character"]
-                title = action_info["title"]
-                seg = action_info["segment"]
-                
-                block_info = {
-                    "status": "ON_AIR",
-                    "current_block": char,
-                    "current_title": f"{title} - {seg}",
-                    "next_block": get_current_state().get("next_block", ""),
-                    "next_start": get_current_state().get("next_start", ""),
-                    "scheduled_slot": get_current_state().get("scheduled_slot", ""),
-                    "breaking_news_available": False
-                }
-                playout.queue_pcm_from_file(voice_file, block_info)
-                
-            elif action == "PLAY_MUSIC":
-                music_file = action_info["file"]
-                label = action_info["label"]
-                playout.queue_single_music_track(music_file)
-                if action_info.get("trigger_ai_music_gen"):
-                    job, created = enqueue_job(
-                        job_type="rotation_fill",
-                        source="director",
-                        dedupe_key="rotation_fill",
-                    )
-                    if created:
-                        print(f"🚀 [Director] Accodato job Musica AI persistente: {job['id']}")
-                    else:
-                        print(f"⏭️ [Director] Job Musica AI già attivo: {job['id']}")
-                    threading.Thread(target=launch_ai_music_worker, daemon=True).start()
-                
-            elif action == "PLAY_MUSIC_DEADLINE":
-                music_file = action_info["file"]
-                deadline_str = action_info["deadline"]
-                deadline = datetime.datetime.fromisoformat(deadline_str)
-                playout.queue_music_track(deadline)
-
-            elif action == "TRIGGER_NEXT_BLOCK":
-                manual_block_override_index = None
-                schedule_interrupt_event.set()
-                playout.stop_current_process("⏰ Termino il blocco corrente per cambio fascia.")
-                playout.clear_queue()
-                write_state_files({"status": "OFFLINE"})
-                
-            elif action == "PLAY_SILENCE_FALLBACK":
-                time.sleep(action_info.get("seconds", 2))
+                    # Deleghiamo la gestione dei vecchi dizionari al PlayoutPlanner / DirectorAgent legacy
+                    pass # (Il DirectorAgent verrà refattorizzato per restituire sempre oggetti)
+            else:
+                # È un PlayoutEvent
+                def state_updater(**kwargs):
+                    state = get_current_state()
+                    if state.get("status") != "OFFLINE":
+                        state.update(kwargs)
+                        write_state_files(state)
+                event_or_dict.execute(playout, state_updater)
                 
         except Exception as e:
             print(f"💥 Errore nel ciclo del generatore DirectorAgent: {e}")
             time.sleep(5)
 
-def apply_preventive_fade_out_and_write(fifo_fd):
-    import numpy as np
-    chunks = []
-    while len(chunks) < 10:
-        try:
-            item = audio_queue.get_nowait()
-            if isinstance(item, dict) and item.get("type") == "metadata":
-                audio_queue.task_done()
-                continue
-            data = item["data"] if isinstance(item, dict) else item
-            chunks.append(data)
-            audio_queue.task_done()
-        except queue.Empty:
-            break
-            
-    if not chunks:
-        return
-        
-    num_chunks = len(chunks)
-    for idx in range(num_chunks):
-        data = chunks[idx]
-        samples = np.frombuffer(data, dtype=np.int16).copy()
-        start_factor = (num_chunks - idx) / num_chunks
-        end_factor = (num_chunks - idx - 1) / num_chunks
-        factors = np.linspace(start_factor, end_factor, len(samples))
-        faded_data = (samples * factors).astype(np.int16).tobytes()
-        try:
-            write_fifo_chunk(fifo_fd, faded_data)
-        except BrokenPipeError:
-            raise
 
-def write_fifo_chunk(fifo_fd, data, blocking=True):
-    view = memoryview(data)
-    written_total = 0
-    while written_total < len(view):
-        try:
-            written = os.write(fifo_fd, view[written_total:])
-            if written == 0:
-                raise BrokenPipeError
-            written_total += written
-        except BlockingIOError:
-            if not blocking:
-                return False
-            time.sleep(0.02)
-    return True
-
-def apply_display_metadata(metadata_item):
-    _DISPLAY_FIELDS = {
-        "current_block", "current_title", "next_block",
-        "next_start", "breaking_news_available", "last_update",
-        "current_music_title", "requested_by", "requested_title",
-    }
-    existing_state = get_current_state()
-    for field in _DISPLAY_FIELDS:
-        if field in metadata_item["state"]:
-            existing_state[field] = metadata_item["state"][field]
-    write_state_files(existing_state)
-
-def is_music_safe_for_chime(state):
-    if not state or state.get("status") != "ON_AIR":
-        return False
-    return (
-        state.get("current_block") == "music_only"
-        or state.get("current_segment") == "music_rotation_until_deadline"
-    )
-
-def get_next_audio_chunk_for_overlay(silence):
-    while True:
-        try:
-            item = audio_queue.get_nowait()
-        except queue.Empty:
-            return silence
-
-        try:
-            if isinstance(item, dict) and item.get("type") == "metadata":
-                apply_display_metadata(item)
-                continue
-
-            return item["data"] if isinstance(item, dict) else item
-        finally:
-            audio_queue.task_done()
-
-def mix_pcm_chunks(base_data, overlay_data, base_volume=0.78, overlay_volume=1.0):
-    import numpy as np
-
-    if len(base_data) < len(overlay_data):
-        base_data = base_data + (b"\x00" * (len(overlay_data) - len(base_data)))
-    elif len(base_data) > len(overlay_data):
-        base_data = base_data[:len(overlay_data)]
-
-    base = np.frombuffer(base_data, dtype=np.int16).astype(np.float32)
-    overlay = np.frombuffer(overlay_data, dtype=np.int16).astype(np.float32)
-    mixed = (base * base_volume) + (overlay * overlay_volume)
-    return np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
-
-def overlay_chime_on_music(fifo_fd, chime_file, silence):
-    cmd_ffmpeg = [
-        FFMPEG_CMD,
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", chime_file,
-        "-f", "s16le",
-        "-ar", str(PCM_SAMPLE_RATE),
-        "-ac", str(PCM_CHANNELS),
-        "pipe:1"
-    ]
-    proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE)
-    
-    import numpy as np
-    
-    # Parametri Sidechain / Ducking
-    threshold = 0.02
-    ratio = 20.0
-    chunk_dur = 2048.0 / 24000.0  # Durata di un chunk (~85.3ms)
-    
-    # Coefficienti per Attack (~50ms) e Release (~800ms)
-    attack_coef = 1.0 - np.exp(-chunk_dur / 0.05)   # ~0.82
-    release_coef = 1.0 - np.exp(-chunk_dur / 0.8)    # ~0.10
-    
-    envelope = 0.0
-    current_gain = 0.78  # Volume base normale della musica
-    normal_gain = 0.78
-    min_gain = 0.15      # Volume minimo a cui viene abbassata la musica
-    overlay_volume = 1.3 # Boost per rendere la voce del segnale orario nitida e chiara
-    
-    chunks = 0
-    try:
-        while True:
-            chime_chunk = proc.stdout.read(PCM_CHUNK_BYTES)
-            if not chime_chunk:
-                break
-                
-            music_chunk = get_next_audio_chunk_for_overlay(silence[:len(chime_chunk)])
-            min_len = min(len(music_chunk), len(chime_chunk))
-            
-            if min_len > 0:
-                base = np.frombuffer(music_chunk[:min_len], dtype=np.int16).astype(np.float32)
-                overlay = np.frombuffer(chime_chunk[:min_len], dtype=np.int16).astype(np.float32)
-                
-                # Calcola il picco della voce normalizzato in [0, 1]
-                voice_peak = np.max(np.abs(overlay)) / 32768.0
-                
-                # Aggiorna l'inviluppo con l'inseguitore
-                if voice_peak > envelope:
-                    envelope += attack_coef * (voice_peak - envelope)
-                else:
-                    envelope += release_coef * (voice_peak - envelope)
-                    
-                # Calcola il gain di sidechain basato sull'inviluppo
-                if envelope > threshold:
-                    env_clamped = max(envelope, 1e-5)
-                    input_db = 20.0 * np.log10(env_clamped)
-                    thresh_db = 20.0 * np.log10(threshold)
-                    over_db = input_db - thresh_db
-                    attenuation_db = over_db * (1.0 - 1.0 / ratio)
-                    target_gain_factor = 10.0 ** (-attenuation_db / 20.0)
-                    target_gain = min_gain + (normal_gain - min_gain) * target_gain_factor
-                    target_gain = min(target_gain, normal_gain)
-                else:
-                    target_gain = normal_gain
-                    
-                # Rampa lineare di gain all'interno del chunk per evitare pop/click
-                gains = np.linspace(current_gain, target_gain, len(base), dtype=np.float32)
-                current_gain = target_gain
-                
-                # Mix dei segnali
-                mixed = (base * gains) + (overlay * overlay_volume)
-                mixed_bytes = np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
-                
-                write_fifo_chunk(fifo_fd, mixed_bytes)
-            else:
-                write_fifo_chunk(fifo_fd, music_chunk)
-                
-            chunks += 1
-            
-        # --- Fase di rilascio post-chime ---
-        # Riporta gradualmente la musica al volume originale se il file vocale è finito
-        # ma l'inviluppo era ancora attivo (es. musica ancora parzialmente attenuata).
-        while current_gain < (normal_gain - 0.01):
-            music_chunk = get_next_audio_chunk_for_overlay(silence)
-            base = np.frombuffer(music_chunk, dtype=np.int16).astype(np.float32)
-            
-            # La voce è ora totalmente silenziosa
-            voice_peak = 0.0
-            envelope += release_coef * (voice_peak - envelope)
-            
-            if envelope > threshold:
-                env_clamped = max(envelope, 1e-5)
-                input_db = 20.0 * np.log10(env_clamped)
-                thresh_db = 20.0 * np.log10(threshold)
-                over_db = input_db - thresh_db
-                attenuation_db = over_db * (1.0 - 1.0 / ratio)
-                target_gain_factor = 10.0 ** (-attenuation_db / 20.0)
-                target_gain = min_gain + (normal_gain - min_gain) * target_gain_factor
-                target_gain = min(target_gain, normal_gain)
-            else:
-                target_gain = normal_gain
-                
-            gains = np.linspace(current_gain, target_gain, len(base), dtype=np.float32)
-            current_gain = target_gain
-            
-            mixed = base * gains
-            mixed_bytes = np.clip(mixed, -32768, 32767).astype(np.int16).tobytes()
-            write_fifo_chunk(fifo_fd, mixed_bytes)
-            chunks += 1
-            
-    finally:
-        proc.wait()
-    print(f"🔔 Segnale orario mixato sopra la musica ({chunks} chunks con sidechain).")
 
 def restore_after_interrupt(prev_state, label):
     state = prev_state if prev_state and prev_state.get("current_block") not in {"chime", "breaking_news"} else get_current_state()
@@ -457,11 +186,8 @@ def main():
     write_state_files({"status": "OFFLINE"})
     
     threading.Thread(target=generator_worker, daemon=True).start()
-    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "preparation_agent.py")]), daemon=True).start()
-    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "ticker_agent.py")]), daemon=True).start()
-    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "overlay_agent.py")]), daemon=True).start()
-    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "hourly_chime_agent.py")]), daemon=True).start()
-    threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "chat_agent.py")]), daemon=True).start()
+    supervisor = SubprocessSupervisor(PYTHON_EXEC, BASE_DIR)
+    supervisor.start_all()
     
     silence = b'\x00' * PCM_CHUNK_BYTES
     last_schedule_key = get_wallclock_schedule_key()
@@ -477,6 +203,7 @@ def main():
             audio_queue.put({"type": "metadata", "state": get_current_state()})
             fade_in_chunks_remaining = 0
             next_write_time = time.time()
+            fifo_writer = FifoWriter(fifo_fd, audio_queue)
             while True:
                 if manual_block_override_index is None:
                     current_schedule_key = get_wallclock_schedule_key()
@@ -488,13 +215,11 @@ def main():
                         last_schedule_key = current_schedule_key
                         write_state_files({"status": "OFFLINE"})
 
-                if os.path.exists(CONTROL_FILE):
+                # Control Bus processing
+                cmd_event = poll_control_file(CONTROL_FILE)
+                if cmd_event:
                     try:
-                        with open(CONTROL_FILE, "r") as f:
-                            cmd = f.read().strip()
-                        os.remove(CONTROL_FILE)
-                        
-                        if cmd == "FORCE_NEXT":
+                        if cmd_event.name == "FORCE_NEXT":
                             schedule_interrupt_event.set()
                             schedule_data = scheduler.get_current_schedule()
                             times = sorted(schedule_data.keys())
@@ -502,9 +227,9 @@ def main():
                             playout.stop_current_process("⏭️ Termino il processo audio corrente per skip.")
                             playout.clear_queue()
                             write_state_files({"status": "OFFLINE"})
-                        elif cmd.startswith("FORCE_INDEX_"):
+                        elif cmd_event.name == "FORCE_INDEX":
                             try:
-                                target_idx = int(cmd.split("_")[2])
+                                target_idx = cmd_event.kwargs["target_idx"]
                                 schedule_interrupt_event.set()
                                 manual_block_override_index = target_idx
                                 playout.stop_current_process("⏭️ Termino il processo audio corrente per cambio manuale.")
@@ -512,50 +237,43 @@ def main():
                                 write_state_files({"status": "OFFLINE"})
                             except Exception as e:
                                 print(f"⚠️ Errore FORCE_INDEX: {e}")
-                        elif cmd == "REGEN_SCHEDULE":
+                        elif cmd_event.name == "REGEN_SCHEDULE":
                             schedule_interrupt_event.set()
                             manual_block_override_index = None
                             last_schedule_key = get_wallclock_schedule_key()
                             from schedule_generator import generate_schedule
                             generate_schedule()
                             write_state_files({"status": "OFFLINE"})
-                        elif cmd.startswith("HOURLY_CHIME_READY"):
-                            parts = cmd.split("|")
-                            chime_file = parts[1] if len(parts) > 1 else CHIME_AUDIO_FILE
-
+                        elif cmd_event.name == "HOURLY_CHIME_READY":
+                            chime_file = cmd_event.kwargs["chime_file"] or CHIME_AUDIO_FILE
                             if os.path.exists(chime_file):
                                 current_state = get_current_state()
                                 if not is_music_safe_for_chime(current_state):
                                     block = current_state.get("current_block", "unknown")
                                     segment = current_state.get("current_segment", "unknown")
-                                    print(
-                                        "🔕 Segnale orario saltato: "
-                                        f"non interrompo speaker o contenuto parlato ({block}/{segment})."
-                                    )
+                                    print(f"🔕 Segnale orario saltato: non interrompo speaker o contenuto parlato ({block}/{segment}).")
                                     continue
-
                                 try:
-                                    overlay_chime_on_music(fifo_fd, chime_file, silence)
+                                    fifo_writer.overlay_chime_on_music(chime_file, silence)
                                 except Exception as e:
                                     print(f"⚠️ Errore chime: {e}")
                             else:
                                 print(f"⚠️ File segnale orario non trovato: {chime_file}")
-                        elif cmd == "TRIGGER_BREAKING_NEWS":
+                        elif cmd_event.name == "TRIGGER_BREAKING_NEWS":
                             threading.Thread(target=lambda: subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")])).start()
-                        elif cmd == "TRIGGER_SPECIAL_BROADCAST_TEST":
+                        elif cmd_event.name == "TRIGGER_SPECIAL_BROADCAST_TEST":
                             def run_forced_breaking_news():
                                 env = os.environ.copy()
                                 env["FORCE_SEVERITY"] = "95"
                                 subprocess.run([PYTHON_EXEC, os.path.join(BASE_DIR, "src", "breaking_news_agent.py")], env=env)
                             threading.Thread(target=run_forced_breaking_news).start()
-                        elif cmd.startswith("PLAY_PODCAST_IMMEDIATE"):
-                            parts = cmd.split("|", 2)
-                            podcast_file = parts[1] if len(parts) > 1 else os.path.join(TMP_DIR, "audio.wav")
-                            podcast_title = parts[2] if len(parts) > 2 else "Newsica Podcast"
+                        elif cmd_event.name == "PLAY_PODCAST_IMMEDIATE":
+                            podcast_file = cmd_event.kwargs["podcast_file"] or os.path.join(TMP_DIR, "audio.wav")
+                            podcast_title = cmd_event.kwargs["podcast_title"]
 
                             if os.path.exists(podcast_file):
                                 print(f"🎙️ [Director] Podcast immediato richiesto: {podcast_title}")
-                                apply_preventive_fade_out_and_write(fifo_fd)
+                                fifo_writer.apply_preventive_fade_out_and_write()
                                 prev_state = get_current_state()
                                 podcast_info = {
                                     "status": "ON_AIR",
@@ -586,7 +304,7 @@ def main():
                                         chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
                                         if not chunk_data:
                                             break
-                                        write_fifo_chunk(fifo_fd, chunk_data)
+                                        fifo_writer.write_chunk(chunk_data)
                                     proc.wait()
                                 except Exception as e:
                                     print(f"⚠️ Errore podcast immediato: {e}")
@@ -594,23 +312,22 @@ def main():
                                 fade_in_chunks_remaining = 20
                             else:
                                 print(f"⚠️ Podcast immediato non trovato: {podcast_file}")
-                        elif cmd.startswith("BREAKING_NEWS_READY"):
-                            parts = cmd.split("|")
-                            bn_file = parts[1] if len(parts) > 1 else ""
-                            severity_score = int(parts[2]) if len(parts) > 2 else 0
-                            reason = parts[3] if len(parts) > 3 else "Valutazione ordinaria"
+                        elif cmd_event.name == "BREAKING_NEWS_READY":
+                            bn_file = cmd_event.kwargs["bn_file"]
+                            severity_score = cmd_event.kwargs["severity_score"]
+                            reason = cmd_event.kwargs["reason"]
                             
                             if os.path.exists(bn_file):
                                 if severity_score >= 90:
                                     print(f"🚨 [Director] Innesco Edizione Straordinaria (Score {severity_score}): {reason}")
-                                    apply_preventive_fade_out_and_write(fifo_fd)
+                                    fifo_writer.apply_preventive_fade_out_and_write()
                                     schedule_interrupt_event.set()
                                     playout.stop_current_process("🚨 Interruzione per Edizione Straordinaria.")
                                     playout.clear_queue()
                                     director_agent.notify_interrupt(reason, severity_score)
                                     fade_in_chunks_remaining = 20
                                 else:
-                                    apply_preventive_fade_out_and_write(fifo_fd)
+                                    fifo_writer.apply_preventive_fade_out_and_write()
                                     bn_info = {
                                         "status": "ON_AIR",
                                         "current_block": "breaking_news",
@@ -638,13 +355,13 @@ def main():
                                             chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
                                             if not chunk_data:
                                                 break
-                                            write_fifo_chunk(fifo_fd, chunk_data)
+                                            fifo_writer.write_chunk(chunk_data)
                                         proc.wait()
                                     except Exception as e:
                                         print(f"⚠️ Errore breaking news: {e}")
                                     restore_after_interrupt(prev_state, "breaking news")
                                     fade_in_chunks_remaining = 20
-                        elif cmd == "REVOKE_SPECIAL_BROADCAST" or cmd == "END_SPECIAL_BROADCAST":
+                        elif cmd_event.name == "REVOKE_SPECIAL_BROADCAST":
                             print("🚨 [Director] Ricevuto comando di fine Edizione Straordinaria. Ripristino palinsesto.")
                             schedule_interrupt_event.set()
                             playout.stop_current_process("🚨 Fine Edizione Straordinaria.")
@@ -692,7 +409,7 @@ def main():
                         except Exception as e:
                             print(f"⚠️ Errore fade-in: {e}")
                             
-                    write_fifo_chunk(fifo_fd, data)
+                    fifo_writer.write_chunk(data)
                     audio_queue.task_done()
                     
                     chunk_duration = len(data) / (2 * PCM_SAMPLE_RATE)
@@ -711,7 +428,7 @@ def main():
                         write_state_files({"status": "OFFLINE"})
                         
                     try:
-                        if not write_fifo_chunk(fifo_fd, silence, blocking=False):
+                        if not fifo_writer.write_chunk(silence, blocking=False):
                             time.sleep(0.02)
                         else:
                             chunk_duration = len(silence) / (2 * PCM_SAMPLE_RATE)
