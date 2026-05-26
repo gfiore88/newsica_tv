@@ -11,7 +11,7 @@ import signal
 import subprocess
 import time
 from schedule_generator import get_current_schedule, generate_schedule
-from newsica.audio.ai_music_jobs import enqueue_job
+from newsica.storage.repositories.ai_music_jobs_repository import enqueue_job
 from newsica.audio.ai_music_runtime import resolve_ace_step_python
 from newsica.audio.settings import resolve_ffmpeg_cmd
 from newsica.audio.music_library import MusicLibrary
@@ -538,7 +538,7 @@ def inject_chat_mock():
 # API per la gestione dei Vocali Telegram
 @app.route('/api/telegram-voices', methods=['GET'])
 def get_telegram_voices():
-    from newsica.audio.telegram_voices import list_voices
+    from newsica.storage.repositories.telegram_repository import list_voices
     try:
         voices = list_voices()
         return jsonify({"status": "OK", "voices": voices})
@@ -548,7 +548,7 @@ def get_telegram_voices():
 
 @app.route('/api/telegram-voices/approve/<voice_id>', methods=['POST'])
 def approve_telegram_voice(voice_id):
-    from newsica.audio.telegram_voices import approve_voice
+    from newsica.storage.repositories.telegram_repository import approve_voice
     try:
         res = approve_voice(voice_id)
         if res:
@@ -560,7 +560,7 @@ def approve_telegram_voice(voice_id):
 
 @app.route('/api/telegram-voices/reject/<voice_id>', methods=['POST'])
 def reject_telegram_voice(voice_id):
-    from newsica.audio.telegram_voices import reject_voice
+    from newsica.storage.repositories.telegram_repository import reject_voice
     try:
         res = reject_voice(voice_id)
         if res:
@@ -572,7 +572,7 @@ def reject_telegram_voice(voice_id):
 
 @app.route('/api/telegram-voices/play/<voice_id>', methods=['GET'])
 def play_telegram_voice(voice_id):
-    from newsica.audio.telegram_voices import get_voice
+    from newsica.storage.repositories.telegram_repository import get_voice
     try:
         voice = get_voice(voice_id)
         if voice and voice.get("converted_path"):
@@ -595,7 +595,7 @@ def get_telegram_status():
 
 @app.route('/api/ai_music_jobs', methods=['GET'])
 def get_ai_music_jobs():
-    from newsica.audio.ai_music_jobs import list_jobs
+    from newsica.storage.repositories.ai_music_jobs_repository import list_jobs
     try:
         jobs = list_jobs()
         return jsonify({"status": "OK", "jobs": jobs})

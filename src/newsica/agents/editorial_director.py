@@ -5,7 +5,7 @@ import logging
 import requests
 from itertools import product
 from datetime import date
-from newsica.editorial.memory import add_music_title, get_recent_music_titles
+from newsica.storage.repositories.editorial_memory_repository import add_music_title, get_recent_music_titles
 from newsica.editorial.title_rules import is_general_news_title, normalize_title
 from newsica.utils.audit_logger import log_decision
 

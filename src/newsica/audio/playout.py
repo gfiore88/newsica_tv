@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from newsica.audio.music_library import MusicLibrary
-from newsica.audio.chat_music_requests import consume_next_ready_request
+from newsica.storage.repositories.chat_music_requests_repository import consume_next_ready_request
 from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, read_music_mode
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 from newsica.config.paths import BASE_DIR, TMP_DIR
@@ -595,7 +595,7 @@ class AudioPlayout:
 
         # 1. Controlla prima se c'è un vocale Telegram approvato
         try:
-            from newsica.audio.telegram_voices import consume_next_approved_voice, mark_played
+            from newsica.storage.repositories.telegram_repository import consume_next_approved_voice, mark_played
             tg_voice = consume_next_approved_voice()
         except Exception as e:
             print(f"⚠️ Errore durante il recupero dei vocali Telegram: {e}")
@@ -880,7 +880,7 @@ class AudioPlayout:
 
         # 1. Controlla prima se c'è un vocale Telegram approvato
         try:
-            from newsica.audio.telegram_voices import consume_next_approved_voice, mark_played
+            from newsica.storage.repositories.telegram_repository import consume_next_approved_voice, mark_played
             tg_voice = consume_next_approved_voice()
         except Exception as e:
             print(f"⚠️ Errore durante il recupero dei vocali Telegram: {e}")

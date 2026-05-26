@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from newsica.audio.ai_music_jobs import enqueue_job
+from newsica.storage.repositories.ai_music_jobs_repository import enqueue_job
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 TMP_DIR = BASE_DIR / "tmp"

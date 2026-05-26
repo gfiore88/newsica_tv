@@ -76,3 +76,14 @@ def get_voice_by_id(id: str):
         print(f"⚠️ Errore db in get_voice_by_id: {e}")
         return None
 
+def consume_next_approved_voice():
+    voices = get_voices_by_status("approved")
+    if voices:
+        voice = voices[0]
+        update_status(voice["id"], "playing")
+        return voice
+    return None
+
+def mark_played(id: str):
+    return update_status(id, "played")
+

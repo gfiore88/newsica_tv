@@ -10,9 +10,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
 
 from newsica.audio.ai_music_generator import generate_track, get_handlers
-from newsica.audio.ai_music_jobs import get_next_pending_job, mark_done, mark_failed, mark_running
-from newsica.audio.chat_music_requests import mark_failed as mark_chat_failed
-from newsica.audio.chat_music_requests import get_request, mark_generating, mark_ready
+from newsica.storage.repositories.ai_music_jobs_repository import get_next_pending_job, mark_done, mark_failed, mark_running
+from newsica.storage.repositories.chat_music_requests_repository import mark_failed as mark_chat_failed
+from newsica.storage.repositories.chat_music_requests_repository import get_request, mark_generating, mark_ready
 
 logging.basicConfig(
     level=logging.INFO,

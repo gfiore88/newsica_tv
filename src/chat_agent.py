@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 import requests
 import pytchat
-from newsica.audio.ai_music_jobs import enqueue_job
+from newsica.storage.repositories.ai_music_jobs_repository import enqueue_job
 from newsica.audio.ai_music_runtime import launch_ai_music_worker
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -193,7 +193,7 @@ def maybe_enqueue_music_request(author, message):
     if not intent:
         return None
 
-    from newsica.audio.chat_music_requests import enqueue_request
+    from newsica.storage.repositories.chat_music_requests_repository import enqueue_request
 
     request = enqueue_request(
         author=author,

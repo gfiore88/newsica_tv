@@ -31,7 +31,7 @@ from newsica.broadcast.scheduler import (
     get_wallclock_schedule_key
 )
 from newsica.broadcast.runtime_state import get_current_state, write_state_files
-from newsica.editorial.memory import (
+from newsica.storage.repositories.editorial_memory_repository import (
     add_title,
     add_rubric,
     add_music_track,

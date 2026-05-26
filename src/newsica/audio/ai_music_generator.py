@@ -17,7 +17,7 @@ from pathlib import Path
 # Aggiungiamo src al path per poter importare gli agenti
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "src"))
 from newsica.agents.editorial_director import EditorialDirectorAgent
-from newsica.audio.chat_music_requests import (
+from newsica.storage.repositories.chat_music_requests_repository import (
     get_next_request_by_status,
     mark_failed,
     mark_generating,

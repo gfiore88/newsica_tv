@@ -14,7 +14,7 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 # Importiamo il nostro gestore code
 sys.path.append(os.path.join(BASE_DIR, "src"))
 from newsica.audio.settings import resolve_ffmpeg_cmd
-from newsica.audio.telegram_voices import enqueue_voice
+from newsica.storage.repositories.telegram_repository import enqueue_voice
 
 TMP_DIR = Path(BASE_DIR) / "tmp"
 RUNTIME_DIR = Path(BASE_DIR) / "runtime"
