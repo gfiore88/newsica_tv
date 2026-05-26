@@ -210,7 +210,23 @@ def trigger_next_block():
     schedule_interrupt_event.set()
     playout.stop_current_process("⏰ Termino il blocco corrente per cambio fascia.")
     playout.clear_queue()
-    write_state_files({"status": "OFFLINE"})
+
+
+def merge_display_state(existing_state, incoming_state):
+    existing = dict(existing_state or {})
+    incoming = dict(incoming_state or {})
+    if existing.get("status") == "OFFLINE":
+        return existing
+
+    display_fields = {
+        "current_block", "current_title", "next_block",
+        "next_start", "breaking_news_available", "last_update",
+        "current_music_title", "requested_by", "requested_title",
+    }
+    for field in display_fields:
+        if field in incoming:
+            existing[field] = incoming[field]
+    return existing
 
 
 def make_execution_context():
@@ -384,7 +400,6 @@ def main():
                         playout.stop_current_process("⏰ Termino il processo audio corrente per cambio fascia.")
                         playout.clear_queue()
                         last_schedule_key = current_schedule_key
-                        write_state_files({"status": "OFFLINE"})
 
                 # Control Bus processing
                 cmd_event = poll_control_file(CONTROL_FILE)
@@ -397,7 +412,6 @@ def main():
                             manual_block_override_index = (current_active_index + 1) % len(times)
                             playout.stop_current_process("⏭️ Termino il processo audio corrente per skip.")
                             playout.clear_queue()
-                            write_state_files({"status": "OFFLINE"})
                         elif cmd_event.name == "FORCE_INDEX":
                             try:
                                 target_idx = cmd_event.kwargs["target_idx"]
@@ -405,7 +419,6 @@ def main():
                                 manual_block_override_index = target_idx
                                 playout.stop_current_process("⏭️ Termino il processo audio corrente per cambio manuale.")
                                 playout.clear_queue()
-                                write_state_files({"status": "OFFLINE"})
                             except Exception as e:
                                 print(f"⚠️ Errore FORCE_INDEX: {e}")
                         elif cmd_event.name == "REGEN_SCHEDULE":
@@ -519,24 +532,12 @@ def main():
                 try:
                     item = audio_queue.get_nowait()
                     if isinstance(item, dict) and item.get("type") == "metadata":
-                        # Aggiorna solo i campi "display" — quelli che la Dashboard legge
-                        # per mostrare titolo, blocco attivo, prossimo programma, ecc.
-                        # I campi della macchina a stati (status, current_segment,
-                        # scheduled_slot, interrupted_*) sono gestiti ESCLUSIVAMENTE
-                        # dal DirectorAgent e non devono mai essere sovrascritti da
-                        # block_info, che ha "status": "ON_AIR" hardcoded e non include
-                        # current_segment — causando reset del loop E perdita del
-                        # SPECIAL_BROADCAST durante l'edizione straordinaria.
-                        _DISPLAY_FIELDS = {
-                            "current_block", "current_title", "next_block",
-                            "next_start", "breaking_news_available", "last_update",
-                            "current_music_title", "requested_by", "requested_title",
-                        }
+                        # Aggiorna solo i campi display e non consolidare OFFLINE
+                        # transitori come fonte di verita' runtime.
                         existing_state = get_current_state()
-                        for _field in _DISPLAY_FIELDS:
-                            if _field in item["state"]:
-                                existing_state[_field] = item["state"][_field]
-                        write_state_files(existing_state)
+                        merged_state = merge_display_state(existing_state, item["state"])
+                        if merged_state.get("status") != "OFFLINE":
+                            write_state_files(merged_state)
                         audio_queue.task_done()
                         continue
                         

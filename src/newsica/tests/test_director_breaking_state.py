@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 
 import director
-from director import build_ordinary_breaking_state, handle_ordinary_breaking_news
+from director import build_ordinary_breaking_state, handle_ordinary_breaking_news, merge_display_state
 
 
 class TestDirectorBreakingState(unittest.TestCase):
@@ -72,6 +72,49 @@ class TestDirectorBreakingState(unittest.TestCase):
         self.assertEqual(written_states[0]["scheduled_slot"], "14:00")
         self.assertEqual(restored, [(prev_state, "breaking news")])
         self.assertFalse(director.breaking_news_active)
+
+    def test_merge_display_state_preserves_runtime_machine_fields(self):
+        existing_state = {
+            "status": "ON_AIR",
+            "current_block": "news",
+            "current_title": "Pranzo News",
+            "current_segment": "voice_part_1",
+            "scheduled_slot": "13:00",
+            "next_block": "Baila Newsica",
+        }
+        incoming_state = {
+            "status": "ON_AIR",
+            "current_block": "music_only",
+            "current_title": "Baila Newsica",
+            "next_block": "Oggi alle 14",
+            "next_start": "14:30",
+            "scheduled_slot": "13:30",
+            "current_segment": "music_rotation_until_deadline",
+        }
+
+        merged = merge_display_state(existing_state, incoming_state)
+
+        self.assertEqual(merged["status"], "ON_AIR")
+        self.assertEqual(merged["current_block"], "music_only")
+        self.assertEqual(merged["current_title"], "Baila Newsica")
+        self.assertEqual(merged["next_block"], "Oggi alle 14")
+        self.assertEqual(merged["scheduled_slot"], "13:00")
+        self.assertEqual(merged["current_segment"], "voice_part_1")
+
+    def test_merge_display_state_does_not_write_into_offline_state(self):
+        existing_state = {
+            "status": "OFFLINE",
+            "last_update": "2026-05-26T13:30:00",
+        }
+        incoming_state = {
+            "current_block": "music_only",
+            "current_title": "Baila Newsica",
+            "next_block": "Oggi alle 14",
+        }
+
+        merged = merge_display_state(existing_state, incoming_state)
+
+        self.assertEqual(merged, existing_state)
 
 
 if __name__ == "__main__":

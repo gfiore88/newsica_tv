@@ -47,3 +47,4 @@
 | 44 | /orchestrator | ✅ Done | Ripristino post-migrazione DB: schema SQLite completato, compatibilità repository legacy, restart dashboard/regia e riattivazione agenti ticker/overlay/chime |
 | 45 | /orchestrator | ✅ Done | Diagnostica dashboard per rotazione musica: tab dedicata con finestra recente e candidati scartati, fix selezione dry-run e allineamento ADR 0043 |
 | 46 | /orchestrator | ✅ Done | Overlay `A seguire` allineato alla single source of truth runtime/DB: rimosso il coupling con `schedule_next.txt` e `current_program.txt` per la timeline live |
+| 47 | /orchestrator | ✅ Done | Hardening director state machine: rimosso reset `OFFLINE` superfluo nei cambi fascia/skip e protetto il merge metadati display da sovrascritture dello stato runtime |
