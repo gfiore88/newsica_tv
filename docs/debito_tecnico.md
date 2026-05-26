@@ -40,6 +40,7 @@ Il caricamento e l'alternanza dei brani da `assets/ai_music/` sono pronti in `Mu
 - [x] **Integrazione ACE-Step v1.5:** Creare uno script di background (es. `src/newsica/audio/music_generator.py` o analogo bash) che utilizzi ACE-Step localmente.
 - [x] **Generazione offline:** Lo script deve generare in anticipo brani da 30-60 secondi nei momenti di minore carico della CPU (o come task schedulato).
 - [x] **Pipeline di normalizzazione:** Convertire e normalizzare l'audio generato (16-bit PCM, 24kHz o 44.1kHz mono/stereo coerente) prima di salvarlo in `assets/ai_music/` per evitare sbalzi di volume o frequenza in onda.
+- [x] **History anti-ripetizione persistente:** `MusicLibrary` salva gli ultimi brani andati in onda in `runtime/music_rotation_history.json` e preferisce candidati freschi quando il pool lo consente.
 
 ### 🚨 B. Agente Breaking News Autonomo (MVP 3)
 Il meccanismo di interruzione sincrona a "zero buchi" è stabile nel regista, ma l'innesco è prettamente manuale dalla Dashboard.

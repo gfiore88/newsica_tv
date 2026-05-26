@@ -72,6 +72,39 @@ class TestMusicLibraryModes(unittest.TestCase):
         self.assertTrue(sidecar.exists())
         self.assertIn("Cosmic Drift", sidecar.read_text(encoding="utf-8"))
 
+    def test_recent_rotation_history_avoids_immediate_repeats_within_window(self):
+        extra_library_track = self.music_dir / "library_track_2.mp3"
+        extra_ai_track = self.ai_music_dir / "ai_track_2.wav"
+        extra_library_track.write_bytes(b"library-2")
+        extra_ai_track.write_bytes(b"ai-2")
+
+        history_file = self.base / "runtime" / "music_rotation_history.json"
+        with patch("newsica.audio.music_library.ROTATION_HISTORY_FILE", history_file):
+            library = MusicLibrary(self.music_dir, self.ai_music_dir)
+            library._recent_tracks.clear()
+            library._recent_tracks.extend(
+                [
+                    str(self.library_track),
+                    str(extra_library_track),
+                    str(self.ai_track),
+                ]
+            )
+
+            with patch("newsica.audio.music_library.read_music_mode", return_value=MUSIC_MODE_MIXED):
+                with patch("newsica.audio.music_library.random.choice", side_effect=lambda seq: seq[0]):
+                    selected = library.get_random_track()
+
+        self.assertEqual(Path(selected).name, "ai_track_2.wav")
+
+    def test_recent_rotation_history_is_loaded_by_new_instance(self):
+        history_file = self.base / "runtime" / "music_rotation_history.json"
+        with patch("newsica.audio.music_library.ROTATION_HISTORY_FILE", history_file):
+            first = MusicLibrary(self.music_dir, self.ai_music_dir)
+            first._remember_track(self.library_track)
+            second = MusicLibrary(self.music_dir, self.ai_music_dir)
+
+        self.assertIn(str(self.library_track), list(second._recent_tracks))
+
 
 if __name__ == "__main__":
     unittest.main()

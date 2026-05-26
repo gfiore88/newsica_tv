@@ -39,6 +39,8 @@ Il sistema include un Bot Telegram interattivo per creare engagement reale con i
 ### 🎵 AI Music Worker (`ai_music_worker.py`)
 Per riempire in modo creativo ed esente da copyright i momenti di silenzio o di attesa tra i programmi, il sistema integra un worker locale per la musica generativa AI (`newsica-ai-music-worker`). Questo genera tracce procedurali direttamente in locale senza costi e senza alcun rischio di strike Content ID su YouTube.
 
+La rotazione musicale live mantiene anche una memoria persistente degli ultimi brani mandati in onda in `runtime/music_rotation_history.json`, cosi' la regia evita ripetizioni troppo ravvicinate anche dopo restart tecnici. La finestra recente e' regolabile via `MUSIC_ROTATION_RECENT_WINDOW` (default `8`).
+
 ### 🎛️ Director Runtime & Playout Events
 La regia live usa ora un solo protocollo interno: il `DirectorAgent` restituisce esclusivamente `PlayoutEvent` tipizzati, che `src/director.py` esegue sequenzialmente tramite un runtime unico.
 

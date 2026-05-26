@@ -35,6 +35,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] **Stabilizzazione Chime Orario**: introdotto arrotondamento all'ora più vicina per evitare collisioni sui confini temporali di inizio fascia palinsesto e risolti import linter.
 - [x] **Segnale Orario Non Interrompente (ADR 0033)**: il chime viene schedulato una volta l'ora a minuto casuale e può andare solo come overlay sopra musica, mai sopra speaker o contenuti parlati.
 - [x] **Modalità Rotazione Musica da Dashboard (ADR 0034)**: flag UI persistente per scegliere tra solo `assets/ai_music/` oppure mix `assets/music/` + `assets/ai_music/`.
+- [x] **History Persistente Anti-Ripetizione Musica (ADR 0043)**: la regia salva gli ultimi brani riprodotti e filtra il pool candidato prima della scelta della sorgente per ridurre replay ravvicinati anche dopo restart del director.
 - [x] **Encoder Hardware Live su macOS (ADR 0035)**: `stream.sh` usa `h264_videotoolbox` quando disponibile per evitare stream sotto realtime con overlay dinamico e audio live.
 - [x] **Worker Persistente Musica AI (ADR 0036)**: la generazione ACE-Step passa da script one-shot a servizio residente con coda locale e prewarm dei modelli, per evitare bootstrap ripetuti durante la diretta H24.
 - [x] **Prompt Multilingua Musica AI (ADR 0037)**: la generazione dei brani privilegia l'italiano, mantiene l'inglese come seconda lingua e usa lo spagnolo come default forte per i blocchi latin/reggaeton/dembow.
