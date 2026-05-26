@@ -16,7 +16,6 @@ RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 OVERLAY_PIPE = os.path.join(TMP_DIR, "overlay_pipe")
 PROGRAM_FILE = os.path.join(TMP_DIR, "current_program.txt")
 NEXT_PROGRAM_FILE = os.path.join(TMP_DIR, "next_program.txt")
-SCHEDULE_FILE = os.path.join(TMP_DIR, "schedule_next.txt")
 
 WIDTH = int(os.getenv("STREAM_WIDTH", "1280"))
 HEIGHT = int(os.getenv("STREAM_HEIGHT", "720"))
@@ -62,50 +61,98 @@ def read_text(path, default=""):
         return default
 
 
-def read_schedule_items(max_items=5):
+def normalize_schedule_title(block, max_chars=80):
+    block_type = (block or {}).get("type", "")
+    title = ((block or {}).get("title") or "").strip()
+
+    if title:
+        if block_type == "podcast" and not title.lower().startswith("podcast"):
+            compact = f"Podcast: {title}"
+        elif block_type == "flash_60s" and not title.lower().startswith("flash"):
+            compact = f"Flash News: {title}"
+        else:
+            compact = title
+    else:
+        compact = block_type or "Trasmissione"
+
+    compact = " ".join(compact.split())
+    if len(compact) > max_chars:
+        compact = compact[: max_chars - 1].rstrip() + "…"
+    return compact
+
+
+def load_schedule_data():
     try:
-        with open(SCHEDULE_FILE, "r", encoding="utf-8") as f:
-            raw = f.read().strip()
-    except OSError:
+        from schedule_generator import get_current_schedule
+
+        return get_current_schedule()
+    except Exception:
+        return {}
+
+
+def get_schedule_anchor_index(state, times):
+    next_start = (state or {}).get("next_start")
+    if next_start in times:
+        return times.index(next_start)
+
+    current_slot = (state or {}).get("scheduled_slot")
+    if current_slot in times:
+        return (times.index(current_slot) + 1) % len(times)
+
+    now_str = datetime.now().strftime("%H:%M")
+    for idx, slot in enumerate(times):
+        if slot >= now_str:
+            return idx
+    return 0
+
+
+def read_current_program(state, schedule_data):
+    current_title = " ".join(((state or {}).get("current_title") or "").split())
+    if current_title:
+        return current_title
+
+    if not schedule_data:
+        return read_text(PROGRAM_FILE, "NEWSICA TV")
+
+    times = sorted(schedule_data.keys())
+    if not times:
+        return read_text(PROGRAM_FILE, "NEWSICA TV")
+
+    current_slot = (state or {}).get("scheduled_slot")
+    if current_slot not in times:
+        now_str = datetime.now().strftime("%H:%M")
+        current_slot = times[0]
+        for slot in times:
+            if slot <= now_str:
+                current_slot = slot
+            else:
+                break
+
+    return normalize_schedule_title(schedule_data.get(current_slot, {})) or read_text(PROGRAM_FILE, "NEWSICA TV")
+
+
+def read_schedule_items(state, schedule_data, max_items=5):
+    if not schedule_data:
         return []
 
-    if not raw:
+    times = sorted(schedule_data.keys())
+    if not times:
         return []
 
-    raw = raw.replace("\r\n", "\n").replace("\r", "\n")
-
-    lines = [" ".join(line.split()) for line in raw.splitlines() if line.strip()]
-
-    if lines and lines[0].upper() == "PROSSIMI EVENTI":
-        lines = lines[1:]
-
-    entries = []
-
-    for line in lines:
-        parts = [part.strip() for part in line.split("|") if part.strip()]
-        entries.extend(parts)
+    start_idx = get_schedule_anchor_index(state, times)
 
     items = []
-
-    for entry in entries[:max_items]:
-        parts = entry.split(" ", 1)
-
-        if len(parts) == 2 and ":" in parts[0]:
-            time_part = parts[0].strip()
-            title_part = parts[1].strip()
-        else:
-            time_part = "--:--"
-            title_part = entry.strip()
-
-        if not title_part:
+    for offset in range(min(max_items, len(times))):
+        idx = (start_idx + offset) % len(times)
+        slot_time = times[idx]
+        block = schedule_data.get(slot_time, {})
+        title = normalize_schedule_title(block)
+        if not title:
             continue
-
-        items.append(
-            {
-                "time": time_part,
-                "title": title_part,
-            }
-        )
+        items.append({
+            "time": slot_time,
+            "title": title,
+        })
 
     return items
 
@@ -904,8 +951,9 @@ def render_frame():
     if now_mono - _last_disk_read_time >= 1.0:
         _last_disk_read_time = now_mono
         _cached_state = read_state()
-        _cached_program = read_text(PROGRAM_FILE, "NEWSICA TV")
-        _cached_schedule_items = read_schedule_items()
+        schedule_data = load_schedule_data()
+        _cached_program = read_current_program(_cached_state, schedule_data)
+        _cached_schedule_items = read_schedule_items(_cached_state, schedule_data)
         _cached_ticker_text = read_text(TICKER_FILE)
         
     state = _cached_state
