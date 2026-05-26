@@ -70,6 +70,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] **Pre-Produzione Multi-Agente (ADR 0027)**: Introdotto Content Buffer, PreparationAgent e classi Agente (Strategist, Integrator, SysAdmin) per disaccoppiare generazione e messa in onda.
 - [x] **Riepilogo in 60 Secondi**: Bollettino orario rotante (es. "Mondo in 60 secondi", "Sport Flash") per dare la sensazione di un canale live costante. (Implementato in `flash_60s.md`)
 - [x] **Ingestion Musica Esterna a Licenza Verificata**: Studiare e integrare una API gratuita per scaricare brani in `assets/music/`, con filtro licenze, download consentito e manifest per ogni file. (Implementato via Jamendo CC-BY in `chart_importer.py`)
+- [x] **Readiness Musica Tematica (ADR 0047)**: Gli slot `music_only` con `theme` ora pre-accodano brani AI coerenti e degradano a titolo generico se il catalogo tematico minimo non e' pronto.
 - [ ] **Generatore Automatico di Format**: Agente che settimanalmente propone nuovi format documentati (durata, tono, jingle) da inserire in scaletta.
 - [x] **Dashboard Locale di Controllo**: Pannello per monitorare stato stream, uso risorse, buffer news e con pulsanti di interazione ("forza breaking", "salta").
 - [x] **Archivio Automatico Contenuti & Memoria SQLite (ADR 0044)**: Tutto lo storico (log decisioni, history di messa in onda, code AI Jobs, moderazione Telegram e storico editoriale) è stato migrato su DB SQLite (`runtime/newsica.db`), risolvendo race conditions ed espandendo la memoria all'infinito rispetto ai file JSON.

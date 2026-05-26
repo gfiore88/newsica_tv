@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from newsica.broadcast.director_agent import DirectorAgent
+from newsica.audio.music_library import GENERIC_THEMELESS_MUSIC_TITLE
 from newsica.domain.playout_events import (
     PlayJingleEvent,
     PlayMusicDeadlineEvent,
@@ -178,6 +179,21 @@ class TestDirectorAgent(unittest.TestCase):
 
         self.assertIsInstance(action, PlaySilenceFallbackEvent)
         self.assertEqual(action.seconds, 5)
+
+    def test_music_slot_guardrail_degrades_title_when_theme_catalog_missing(self):
+        mock_library = MagicMock()
+        mock_library.has_minimum_theme_catalog.return_value = False
+        mock_library.count_ai_tracks_for_theme.return_value = 1
+
+        with patch("newsica.broadcast.director_agent.MusicLibrary", return_value=mock_library):
+            title, theme = self.director._resolve_music_slot_editorial_guardrail(
+                "music_only",
+                "Rock & Roll Arena",
+                "rock",
+            )
+
+        self.assertEqual(title, GENERIC_THEMELESS_MUSIC_TITLE)
+        self.assertIsNone(theme)
 
 
 if __name__ == "__main__":

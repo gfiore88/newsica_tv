@@ -16,6 +16,8 @@ ROTATION_HISTORY_FILE = RUNTIME_DIR / "music_rotation_history.json"
 ROTATION_BLOCKS_FILE = RUNTIME_DIR / "music_rotation_blocks.json"
 DEFAULT_RECENT_WINDOW = int(os.getenv("MUSIC_ROTATION_RECENT_WINDOW", "20"))
 DEFAULT_BLOCK_LOG_LIMIT = int(os.getenv("MUSIC_ROTATION_BLOCK_LOG_LIMIT", "20"))
+DEFAULT_THEMED_MIN_TRACKS = int(os.getenv("MUSIC_THEME_MIN_TRACKS", "3"))
+GENERIC_THEMELESS_MUSIC_TITLE = os.getenv("NEWSICA_GENERIC_MUSIC_TITLE", "Newsica Music Flow")
 
 
 class MusicLibrary:
@@ -135,6 +137,30 @@ class MusicLibrary:
         if track_path.with_suffix(".meta").exists():
             return True
         return get_metadata(str(track_path.resolve())) is not None
+
+    @staticmethod
+    def _normalize_theme(theme: str | None) -> str:
+        return " ".join(str(theme or "").lower().strip().split())
+
+    def count_ai_tracks_for_theme(self, theme: str | None) -> int:
+        normalized_theme = self._normalize_theme(theme)
+        if not normalized_theme:
+            return 0
+
+        self.refresh()
+        count = 0
+        for path in self._tracks_by_source.get("ai", []):
+            meta_row = get_metadata(str(path.resolve()))
+            if not meta_row or not meta_row.get("metadata"):
+                continue
+            track_theme = self._normalize_theme(meta_row["metadata"].get("theme"))
+            if track_theme == normalized_theme:
+                count += 1
+        return count
+
+    def has_minimum_theme_catalog(self, theme: str | None, minimum: int | None = None) -> bool:
+        minimum = DEFAULT_THEMED_MIN_TRACKS if minimum is None else max(0, int(minimum))
+        return self.count_ai_tracks_for_theme(theme) >= minimum
 
     def get_counts(self):
         self.refresh()

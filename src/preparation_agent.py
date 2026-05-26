@@ -13,6 +13,9 @@ sys.path.append(str(BASE_DIR))
 from newsica.agents.content_strategist import ContentStrategistAgent
 from newsica.agents.ai_integrator import AIIntegratorAgent
 from newsica.agents.system_admin import SystemAdminAgent, ASSETS_DIR
+from newsica.audio.ai_music_runtime import schedule_rotation_fill_job
+from newsica.audio.music_library import DEFAULT_THEMED_MIN_TRACKS, MusicLibrary
+from newsica.storage.repositories.ai_music_jobs_repository import count_active_jobs
 
 RUNTIME_DIR = BASE_DIR / "runtime"
 _singleton_lock = None
@@ -67,6 +70,31 @@ def get_future_slots(hours_ahead=2, current_grace_minutes=30):
 def is_complex_block(character):
     # Tutti i tipi di blocco, incluso music_only, ora vengono preparati (music_only riceve l'intro vocale)
     return True
+
+
+def ensure_theme_music_ready(theme):
+    normalized_theme = " ".join(str(theme or "").strip().lower().split())
+    if not normalized_theme:
+        return
+
+    library = MusicLibrary()
+    ready_count = library.count_ai_tracks_for_theme(normalized_theme)
+    active_jobs = count_active_jobs(job_type="rotation_fill", theme=normalized_theme)
+    missing = max(0, DEFAULT_THEMED_MIN_TRACKS - (ready_count + active_jobs))
+
+    if missing <= 0:
+        return
+
+    for _ in range(missing):
+        job, created = schedule_rotation_fill_job("preparation_agent", theme=normalized_theme)
+        if created:
+            print(
+                f"🎸 [PreparationAgent] Accodato job musica tematica per theme='{normalized_theme}' "
+                f"({ready_count} pronti, {active_jobs} attivi, target {DEFAULT_THEMED_MIN_TRACKS}) | job={job['id']}"
+            )
+            active_jobs += 1
+        else:
+            break
 
 def run_loop():
     print("🚀 [PreparationAgent] Avviato in background. Orchestrazione multi-agente in corso...")
@@ -130,6 +158,18 @@ def run_loop():
             # 1. Manutenzione di sistema
             sysadmin.cleanup_old_assets(max_age_hours=24)
 
+            try:
+                from newsica.broadcast.runtime_state import get_current_state
+                current_state = get_current_state()
+                if (
+                    current_state.get("status") == "ON_AIR"
+                    and current_state.get("current_block") == "music_only"
+                    and current_state.get("theme")
+                ):
+                    ensure_theme_music_ready(current_state.get("theme"))
+            except Exception as e:
+                print(f"⚠️ [PreparationAgent] Errore controllo tema corrente live: {e}")
+
             # 2. Riconciliazione stato asset con il palinsesto corrente
             from schedule_generator import get_current_schedule
             schedule_data = get_current_schedule()
@@ -143,6 +183,10 @@ def run_loop():
                 title = block_info.get("title", "")
                 
                 if is_complex_block(character):
+                    theme = block_info.get("theme")
+                    if character == "music_only" and theme:
+                        ensure_theme_music_ready(theme)
+
                     # Richiediamo lo spazio di lavoro al SysAdmin
                     preparing_dir, status = sysadmin.prepare_slot(slot_time, character=character, title=title)
                     if not preparing_dir:
@@ -152,7 +196,6 @@ def run_loop():
                     print(f"🎬 [PreparationAgent] Orchestrazione per slot {slot_time} ({character})")
                     try:
                         # Fase 1: Strategia e Contenuto
-                        theme = block_info.get("theme")
                         content_data = strategist.prepare_content(character, title, theme=theme)
                         
                         # Fase 2: Integrazione AI (LLM -> TTS -> Audio) - Usiamo la cartella di preparazione isolata

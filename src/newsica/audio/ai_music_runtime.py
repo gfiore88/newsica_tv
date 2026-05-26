@@ -46,11 +46,13 @@ def launch_ai_music_worker() -> subprocess.Popen:
 
 
 def schedule_rotation_fill_job(source: str, *, theme: str | None = None) -> tuple[dict, bool]:
+    normalized_theme = " ".join(str(theme or "").strip().lower().split()) or None
+    dedupe_key = "rotation_fill" if normalized_theme is None else None
     job, created = enqueue_job(
         job_type="rotation_fill",
         source=source,
-        theme=theme,
-        dedupe_key="rotation_fill",
+        theme=normalized_theme,
+        dedupe_key=dedupe_key,
     )
     launch_ai_music_worker()
     return job, created

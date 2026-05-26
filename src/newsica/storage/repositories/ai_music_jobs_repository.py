@@ -123,6 +123,29 @@ def get_running_jobs():
         return []
 
 
+def count_active_jobs(job_type: str = None, theme: str = None):
+    try:
+        query = "SELECT COUNT(*) FROM ai_music_jobs WHERE status IN ('pending', 'running')"
+        params = []
+        if job_type:
+            query += " AND job_type = ?"
+            params.append(job_type)
+        if theme is None:
+            query += " AND theme IS NULL"
+        else:
+            query += " AND theme = ?"
+            params.append(theme)
+
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
+    except Exception as e:
+        print(f"⚠️ Errore db in count_active_jobs: {e}")
+        return 0
+
+
 def mark_running(id: str):
     return update_job(id, status="running", started_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
 

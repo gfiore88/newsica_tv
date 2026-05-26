@@ -41,6 +41,7 @@ from newsica.storage.repositories.editorial_memory_repository import (
     update_last_intro
 )
 from newsica.audio.jingles import get_jingle_for_block, CLASSIC_JINGLE_FILE
+from newsica.audio.music_library import DEFAULT_THEMED_MIN_TRACKS, GENERIC_THEMELESS_MUSIC_TITLE, MusicLibrary
 
 EVENING_PODCAST_SLOT = "20:00"
 EVENING_PODCAST_TITLE = "Newsica Podcast - Dopo Sera"
@@ -51,6 +52,28 @@ class DirectorAgent:
         self.playout = playout
         # Carica percorsi jingle
         self.classic_jingle = str(CLASSIC_JINGLE_FILE)
+
+    def _resolve_music_slot_editorial_guardrail(self, block_type, title, theme):
+        if block_type != "music_only" or not theme:
+            return title, theme
+
+        library = MusicLibrary()
+        if library.has_minimum_theme_catalog(theme, minimum=DEFAULT_THEMED_MIN_TRACKS):
+            return title, theme
+
+        available = library.count_ai_tracks_for_theme(theme)
+        print(
+            f"⚠️ [DirectorAgent] Catalogo tematico insufficiente per '{title}' "
+            f"(theme={theme}, disponibili={available}, richiesti={DEFAULT_THEMED_MIN_TRACKS}). "
+            f"Degrado editoriale a fascia musicale generica."
+        )
+        log_decision(
+            "DirectorAgent",
+            f"Catalogo tematico insufficiente per '{title}' (theme={theme}, disponibili={available}, "
+            f"richiesti={DEFAULT_THEMED_MIN_TRACKS}). Degrado a fascia musicale generica.",
+            level="PLAYOUT",
+        )
+        return GENERIC_THEMELESS_MUSIC_TITLE, None
         
     def decide_next_action(self, manual_block_override_index=None):
         """
@@ -103,6 +126,8 @@ class DirectorAgent:
                 print(f"🎬 [DirectorAgent] Rilevato tema per lo show '{title}': {theme}")
         except Exception as e:
             print(f"⚠️ Errore lettura tema dal palinsesto: {e}")
+
+        title, theme = self._resolve_music_slot_editorial_guardrail(block_type, title, theme)
 
         new_state = {
             "status": "ON_AIR",

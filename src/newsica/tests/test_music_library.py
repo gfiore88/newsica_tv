@@ -125,6 +125,23 @@ class TestMusicLibraryModes(unittest.TestCase):
         self.assertTrue(selected)
         self.assertEqual(list(library._recent_tracks), [])
 
+    def test_count_ai_tracks_for_theme_uses_metadata_theme(self):
+        themed_track = self.ai_music_dir / "ai_track_rock.wav"
+        themed_track.write_bytes(b"ai-rock")
+        library = MusicLibrary(self.music_dir, self.ai_music_dir)
+
+        def fake_metadata(path):
+            if path.endswith("ai_track_rock.wav"):
+                return {"metadata": {"theme": "rock"}}
+            if path.endswith("ai_track.wav"):
+                return {"metadata": {"theme": "synthwave"}}
+            return None
+
+        with patch("newsica.audio.music_library.get_metadata", side_effect=fake_metadata):
+            self.assertEqual(library.count_ai_tracks_for_theme("rock"), 1)
+            self.assertFalse(library.has_minimum_theme_catalog("rock", minimum=2))
+            self.assertTrue(library.has_minimum_theme_catalog("rock", minimum=1))
+
 
 if __name__ == "__main__":
     unittest.main()
