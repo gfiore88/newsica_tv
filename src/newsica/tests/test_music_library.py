@@ -40,6 +40,17 @@ class TestMusicLibraryModes(unittest.TestCase):
 
         self.assertEqual(selected, {"music", "ai_music"})
 
+    def test_scan_includes_tracks_in_nested_subfolders(self):
+        nested_dir = self.music_dir / "archive" / "set_a"
+        nested_dir.mkdir(parents=True)
+        nested_track = nested_dir / "nested_track.mp3"
+        nested_track.write_bytes(b"nested")
+
+        library = MusicLibrary(self.music_dir, self.ai_music_dir)
+        scanned = library._scan(self.music_dir)
+
+        self.assertIn(nested_track, scanned)
+
     def test_ai_only_without_ai_tracks_returns_none(self):
         self.ai_track.unlink()
         library = MusicLibrary(self.music_dir, self.ai_music_dir)

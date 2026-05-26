@@ -52,3 +52,7 @@ tmp/ticker.txt
 # AI Music Generated Tracks and Metadata
 assets/ai_music/*
 !assets/ai_music/.gitkeep
+
+# Local music library and nested working files
+assets/music/**
+!assets/music/.gitkeep

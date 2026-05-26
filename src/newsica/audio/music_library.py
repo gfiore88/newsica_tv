@@ -127,11 +127,14 @@ class MusicLibrary:
     def _scan(self, directory):
         if not directory.exists():
             return []
-        return [
-            path
-            for path in directory.iterdir()
-            if path.is_file() and path.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS
-        ]
+        return sorted(
+            [
+                path
+                for path in directory.rglob("*")
+                if path.is_file() and path.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS
+            ],
+            key=lambda path: str(path).lower(),
+        )
 
     def _has_local_metadata(self, track_path: Path) -> bool:
         if track_path.with_suffix(".meta").exists():
