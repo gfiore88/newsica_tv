@@ -33,6 +33,19 @@ class PlayoutPlanner:
         events.append(PlayJingleEvent(jingle_file, jingle_label, next_segment=jingle_next_seg))
         
         if block_type == "music_only":
+            ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot.replace(":", ""))
+            voice_file = os.path.join(ready_dir, "audio.wav")
+            if os.path.exists(voice_file):
+                music_file = self.music_selector(theme)
+                events.append(PlayVoiceMixEvent(
+                    voice_file=voice_file,
+                    music_file=music_file,
+                    character=block_type,
+                    title=title,
+                    segment="intro",
+                    next_segment="music_rotation"
+                ))
+            
             # Per la musica continua, semplicemente aggiungiamo eventi di musica fino alla deadline
             events.append(self._create_music_until_deadline(next_time, theme))
             return events

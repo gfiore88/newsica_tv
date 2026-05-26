@@ -240,7 +240,7 @@ export default function Tools() {
               <div key={job.id} className="bg-slate-900/80 px-3 py-2 rounded border border-slate-800 flex justify-between items-center">
                 <span className="text-[11px] text-slate-300 font-mono truncate mr-2">{job.id.substring(0,8)}</span>
                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-                  job.status === 'completed' ? 'bg-green-900/30 text-green-400' :
+                  (job.status === 'completed' || job.status === 'done') ? 'bg-green-900/30 text-green-400' :
                   job.status === 'failed' ? 'bg-red-900/30 text-red-400' :
                   'bg-amber-900/30 text-amber-400 animate-pulse'
                 }`}>{job.status}</span>

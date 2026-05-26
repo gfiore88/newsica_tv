@@ -65,7 +65,8 @@ def get_future_slots(hours_ahead=2, current_grace_minutes=30):
     return sorted(future_slots, key=lambda x: x[0])
 
 def is_complex_block(character):
-    return character not in ["music_only"]
+    # Tutti i tipi di blocco, incluso music_only, ora vengono preparati (music_only riceve l'intro vocale)
+    return True
 
 def run_loop():
     print("🚀 [PreparationAgent] Avviato in background. Orchestrazione multi-agente in corso...")
@@ -151,7 +152,8 @@ def run_loop():
                     print(f"🎬 [PreparationAgent] Orchestrazione per slot {slot_time} ({character})")
                     try:
                         # Fase 1: Strategia e Contenuto
-                        content_data = strategist.prepare_content(character, title)
+                        theme = block_info.get("theme")
+                        content_data = strategist.prepare_content(character, title, theme=theme)
                         
                         # Fase 2: Integrazione AI (LLM -> TTS -> Audio) - Usiamo la cartella di preparazione isolata
                         slot_integrator = AIIntegratorAgent(work_dir=preparing_dir)

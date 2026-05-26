@@ -169,20 +169,32 @@ class ContentStrategistAgent:
         ]
         return random.choice(FALLBACK_TOPICS)
 
-    def prepare_content(self, character_id, title=None, force_fetch=False):
+    def prepare_content(self, character_id, title=None, theme=None, force_fetch=False):
         """
         Prepara le istruzioni e il contesto per l'AI Integrator.
         Restituisce un dizionario con i dati strutturati.
         """
         character = get_character(character_id)
-        all_news = self._collect_news(force_fetch)
+        
+        if character_id == "music_only":
+            filtered_news = []
+            fallback_script = f"Benvenuti su NewsicaTV. È il momento di {title or 'Musica Senza Interruzioni'}. Buon ascolto."
+            prompt = (
+                f"TEMA EDITORIALE DELLA RUBRICA MUSICALE:\n"
+                f"Titolo dello show: {title}\n"
+                f"Tema musicale di riferimento: {theme or 'generale / pop moderno'}\n\n"
+                "Istruzione: Scrivi un testo di introduzione radiofonica cortissimo (15-25 parole) in italiano. "
+                "Il testo deve presentare lo show e invitare all'ascolto dei brani in tema. "
+                "Usa un tono caldo, accattivante, profondo ed estremamente professionale da speaker radiofonico."
+            )
+        else:
+            all_news = self._collect_news(force_fetch)
+            filtered_news = filter_items_for_character(all_news, character)
+            if not filtered_news:
+                print(f"⚠️ Nessuna notizia specifica per '{character.id}'. Uso quelle generali.")
+                filtered_news = fallback_general_news(all_news)
 
-        filtered_news = filter_items_for_character(all_news, character)
-        if not filtered_news:
-            print(f"⚠️ Nessuna notizia specifica per '{character.id}'. Uso quelle generali.")
-            filtered_news = fallback_general_news(all_news)
-
-        fallback_script = build_fallback_script(character.id, filtered_news, title=title)
+            fallback_script = build_fallback_script(character.id, filtered_news, title=title)
 
         # LOGICA SPECIALE PODCAST CON STUDIO E RICERCA WEB DINAMICA
         if character_id == "podcast":
