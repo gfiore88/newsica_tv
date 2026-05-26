@@ -232,6 +232,58 @@ class TestDirectorAgent(unittest.TestCase):
         self.assertEqual(title, GENERIC_THEMELESS_MUSIC_TITLE)
         self.assertIsNone(theme)
 
+    @patch("newsica.broadcast.director_agent.write_state_files")
+    @patch("schedule_generator.get_current_schedule")
+    @patch("newsica.broadcast.director_agent.get_current_block_info")
+    @patch("newsica.broadcast.director_agent.get_wallclock_schedule_key")
+    def test_restore_after_immediate_event_realigns_to_scheduled_theme(
+        self,
+        mock_wallclock,
+        mock_block_info,
+        mock_schedule,
+        mock_write_state,
+    ):
+        mock_wallclock.return_value = "17:00"
+        mock_block_info.return_value = ("music_only", "Rock & Roll Arena", "Newsica Podcast", "18:30", "17:00", 0)
+        mock_schedule.return_value = {
+            "17:00": {"title": "Rock & Roll Arena", "type": "music_only", "theme": "rock"},
+            "18:30": {"title": "Newsica Podcast", "type": "podcast"},
+        }
+
+        with patch.object(
+            self.director,
+            "_resolve_music_slot_editorial_guardrail",
+            return_value=("Rock & Roll Arena", "rock"),
+        ):
+            self.director.restore_after_immediate_event(
+                {
+                    "scheduled_slot": "17:00",
+                    "current_block": "wellness",
+                    "current_title": "Pausa Benessere",
+                }
+            )
+
+        restored_state = mock_write_state.call_args[0][0]
+        self.assertEqual(restored_state["current_block"], "music_only")
+        self.assertEqual(restored_state["current_title"], "Rock & Roll Arena")
+        self.assertEqual(restored_state["theme"], "rock")
+        self.assertEqual(restored_state["current_segment"], "music_rotation_until_deadline")
+
+    @patch("newsica.broadcast.director_agent.write_state_files")
+    @patch("newsica.broadcast.director_agent.get_wallclock_schedule_key")
+    def test_restore_after_immediate_event_goes_offline_if_slot_changed(self, mock_wallclock, mock_write_state):
+        mock_wallclock.return_value = "18:30"
+
+        self.director.restore_after_immediate_event(
+            {
+                "scheduled_slot": "17:00",
+                "current_block": "wellness",
+                "current_title": "Pausa Benessere",
+            }
+        )
+
+        mock_write_state.assert_called_once_with({"status": "OFFLINE"})
+
 
 if __name__ == "__main__":
     unittest.main()
