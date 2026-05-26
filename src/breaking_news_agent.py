@@ -232,6 +232,8 @@ def run_daemon():
         print("💤 [Daemon] Riposo per 15 minuti...")
         time.sleep(900)
 
+_singleton_lock = None
+
 def check_singleton(name):
     import fcntl
     lock_file_path = os.path.join(RUNTIME_DIR, f"{name}.lock")

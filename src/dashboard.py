@@ -650,6 +650,8 @@ def catch_all(path):
         return app.send_static_file('index.html')
     return app.send_static_file(path)
 
+_singleton_lock = None
+
 def check_singleton(name):
     import fcntl
     lock_file_path = os.path.join(RUNTIME_DIR, f"{name}.lock")
