@@ -230,10 +230,10 @@ class DirectorAgent:
                 meta_row = get_metadata(voice_file)
                 if meta_row and meta_row.get("metadata"):
                     manifest = meta_row["metadata"]
-                    if manifest.get("character") != "podcast" or not manifest.get("title", "").startswith(title):
+                    if manifest.get("character") != "podcast":
                         print(
                             f"⚠️ [DirectorAgent] Podcast pronto non coerente per {scheduled_slot}: "
-                            f"atteso podcast/{title}, trovato {manifest}."
+                            f"atteso podcast, trovato {manifest}."
                         )
                         has_valid_audio = False
             except Exception:
@@ -255,6 +255,7 @@ class DirectorAgent:
             # Se l'audio non è pronto, inneschiamo un fallback musicale.
             print(f"⚠️ [DirectorAgent] Podcast non pronto per slot {scheduled_slot}. Uso musica finché l'asset non arriva.")
             state["current_segment"] = "music_rotation_until_deadline"
+            state["current_title"] = "Intervallo Musicale - In attesa del Podcast"
             write_state_files(state)
             
             theme = state.get("theme")

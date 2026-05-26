@@ -67,6 +67,24 @@ class PlayoutPlanner:
 
         if not audio_parts:
             # Fallback se non c'è audio
+            try:
+                from newsica.broadcast.runtime_state import get_current_state, write_state_files
+                state = get_current_state()
+                if state and state.get("status") != "OFFLINE":
+                    block_labels = {
+                        "news": "Notiziario",
+                        "sport": "Rubrica Sportiva",
+                        "meteo": "Meteo Update",
+                        "wellness": "Rubrica Wellness",
+                        "podcast": "Podcast Speciale",
+                        "flash_60s": "Flash News",
+                    }
+                    label = block_labels.get(block_type, block_type.title())
+                    state["current_title"] = f"Rotazione Musicale - In attesa di {label}"
+                    write_state_files(state)
+            except Exception as e:
+                print(f"⚠️ [PlayoutPlanner] Errore aggiornamento stato in fallback: {e}")
+
             events.append(PlaySilenceFallbackEvent(2))
             music_file = self.music_selector(theme)
             if music_file:

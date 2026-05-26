@@ -29,6 +29,9 @@ class SystemAdminAgent:
             return False
         if character and manifest.get("character") != character:
             return False
+        # Per il podcast, allentiamo il controllo sul titolo perché è dinamico e tematico
+        if character == "podcast" or manifest.get("character") == "podcast":
+            return True
         if title and manifest.get("title") != title:
             return False
         return True
@@ -53,7 +56,10 @@ class SystemAdminAgent:
             preparing_dir = ASSETS_DIR / "preparing" / slot_id
             expected = schedule_data.get(slot_time)
 
-            if not expected or expected.get("type") != character or expected.get("title") != title:
+            is_podcast = (character == "podcast" or (expected and expected.get("type") == "podcast"))
+            title_mismatch = False if is_podcast else (expected.get("title") != title)
+
+            if not expected or expected.get("type") != character or title_mismatch:
                 if preparing_dir.exists():
                     self._archive_dir(preparing_dir, "schedule_mismatch")
                 if ready_dir.exists():

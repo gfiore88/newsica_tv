@@ -150,8 +150,10 @@ class TestDirectorAgent(unittest.TestCase):
         self.assertTrue(action.trigger_ai_music_gen)
         self.assertEqual(action.theme, "cinema")
 
+    @patch("newsica.broadcast.director_agent.get_wallclock_schedule_key")
     @patch("newsica.broadcast.director_agent.schedule_deadline")
-    def test_standard_block_progression_uses_deadline_event(self, mock_deadline):
+    def test_standard_block_progression_uses_deadline_event(self, mock_deadline, mock_wallclock):
+        mock_wallclock.return_value = "14:00"
         mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=10)
         state = {
             "status": "ON_AIR",
