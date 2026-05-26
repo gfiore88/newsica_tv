@@ -42,6 +42,11 @@ def poll_control_file(control_file):
             podcast_file = parts[1] if len(parts) > 1 else None
             podcast_title = parts[2] if len(parts) > 2 else "Newsica Podcast"
             return ControlCommand("PLAY_PODCAST_IMMEDIATE", podcast_file=podcast_file, podcast_title=podcast_title)
+        elif cmd_raw.startswith("PLAY_NEWS_IMMEDIATE"):
+            parts = cmd_raw.split("|", 2)
+            news_file = parts[1] if len(parts) > 1 else None
+            news_title = parts[2] if len(parts) > 2 else "TG Newsica"
+            return ControlCommand("PLAY_NEWS_IMMEDIATE", news_file=news_file, news_title=news_title)
         elif cmd_raw.startswith("BREAKING_NEWS_READY"):
             parts = cmd_raw.split("|")
             bn_file = parts[1] if len(parts) > 1 else ""
