@@ -1,5 +1,6 @@
 import time
 import datetime
+import shutil
 import sys
 import os
 import fcntl
@@ -11,7 +12,7 @@ sys.path.append(str(BASE_DIR))
 # Agents
 from newsica.agents.content_strategist import ContentStrategistAgent
 from newsica.agents.ai_integrator import AIIntegratorAgent
-from newsica.agents.system_admin import SystemAdminAgent
+from newsica.agents.system_admin import SystemAdminAgent, ASSETS_DIR
 
 RUNTIME_DIR = BASE_DIR / "runtime"
 _singleton_lock = None
@@ -72,19 +73,57 @@ def run_loop():
     strategist = ContentStrategistAgent()
     sysadmin = SystemAdminAgent()
 
-    # Al boot, ripuliamo eventuali residui orfani in preparing per garantire self-healing immediato
-    from newsica.agents.system_admin import ASSETS_DIR
+    # Al boot: puliamo le cartelle "preparing" orfane, MA preserviamo quelle
+    # per slot futuri validi con generazione in corso (es. podcast già a metà Chatterbox).
+    # Regola: rimuoviamo solo se lo slot è passato o la cartella è vuota/stale.
+    from schedule_generator import get_current_schedule
+    now_boot = datetime.datetime.now()
+    try:
+        boot_schedule = get_current_schedule()
+    except Exception:
+        boot_schedule = {}
+
     preparing_root = ASSETS_DIR / "preparing"
     if preparing_root.exists():
-        import shutil
         for p_dir in preparing_root.iterdir():
-            if p_dir.is_dir():
+            if not p_dir.is_dir():
+                continue
+            slot_id = p_dir.name  # es. "1430"
+            try:
+                slot_time_str = f"{slot_id[:2]}:{slot_id[2:]}" if len(slot_id) == 4 else ""
+            except Exception:
+                slot_time_str = ""
+
+            # Controlliamo se lo slot è futuro (o in grace da 30 min) nel palinsesto corrente
+            is_future_valid = False
+            if slot_time_str and slot_time_str in boot_schedule:
+                try:
+                    h, m = map(int, slot_time_str.split(":"))
+                    slot_dt = now_boot.replace(hour=h, minute=m, second=0, microsecond=0)
+                    elapsed = (now_boot - slot_dt).total_seconds()
+                    if slot_dt >= now_boot or elapsed <= 30 * 60:
+                        # Verifica che non sia stale (vuota o vecchissima)
+                        age_sec = now_boot.timestamp() - p_dir.stat().st_mtime
+                        is_empty = not any(p_dir.iterdir())
+                        is_stale = is_empty or age_sec > SystemAdminAgent.STALE_PREPARING_SECONDS
+                        if not is_stale:
+                            print(
+                                f"⏭️ [PreparationAgent] Conservo preparing/{p_dir.name}: "
+                                f"slot futuro {slot_time_str} con generazione in corso "
+                                f"(età {int(age_sec/60)} min)."
+                            )
+                            is_future_valid = True
+                except Exception:
+                    pass
+
+            if not is_future_valid:
                 try:
                     shutil.rmtree(p_dir)
                     print(f"🧹 [PreparationAgent] Pulito residuo orfano al boot: {p_dir.name}")
                 except Exception as e:
                     print(f"⚠️ Errore pulizia residuo {p_dir.name}: {e}")
-    
+
+
     while True:
         try:
             # 1. Manutenzione di sistema
