@@ -306,6 +306,14 @@ def generator_worker():
 
 
 def restore_after_interrupt(prev_state, label):
+    if label.startswith("evento immediato") or label in {"podcast immediato", "TG News immediato"}:
+        try:
+            director_agent.restore_after_immediate_event(prev_state)
+        except Exception as e:
+            print(f"⚠️ Errore ripristino scheduler dopo {label}: {e}")
+            write_state_files({"status": "OFFLINE"})
+        return
+
     state = prev_state if prev_state and prev_state.get("current_block") not in {"chime", "breaking_news"} else get_current_state()
     try:
         write_state_files(state)

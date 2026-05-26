@@ -524,6 +524,60 @@ class DirectorAgent:
         print("⏭️ [DirectorAgent] Lo slot interrotto è quasi scaduto (<40% residuo). Salto direttamente alla programmazione successiva.")
         write_state_files({"status": "OFFLINE"})
 
+    def restore_after_immediate_event(self, previous_state=None):
+        """
+        Riallinea la regia al blocco schedulato corrente dopo un evento immediato.
+        Evita di ripristinare ciecamente uno stato stantio che può perdere theme/titolo.
+        """
+        previous_state = dict(previous_state or {})
+        wallclock_slot = get_wallclock_schedule_key()
+        previous_slot = previous_state.get("scheduled_slot")
+
+        if previous_slot and previous_slot != wallclock_slot:
+            print(
+                f"⏭️ [DirectorAgent] Evento immediato terminato su slot cambiato "
+                f"({previous_slot} -> {wallclock_slot}). Reinizializzo dal palinsesto."
+            )
+            write_state_files({"status": "OFFLINE"})
+            return
+
+        block_type, title, next_title, next_time, current_time, _ = get_current_block_info()
+        theme = None
+        try:
+            from schedule_generator import get_current_schedule
+            schedule_data = get_current_schedule()
+            theme = schedule_data.get(current_time, {}).get("theme")
+        except Exception:
+            theme = None
+
+        title, theme = self._resolve_music_slot_editorial_guardrail(block_type, title, theme)
+
+        restored_state = {
+            "status": "ON_AIR",
+            "current_block": block_type,
+            "current_title": title,
+            "current_segment": "music_rotation_until_deadline",
+            "next_block": next_title,
+            "next_start": next_time,
+            "scheduled_slot": current_time,
+            "theme": theme,
+            "breaking_news_available": False,
+            "last_update": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        if block_type == "podcast":
+            restored_state["podcast_played"] = True
+
+        print(
+            f"🔄 [DirectorAgent] Ripristino dopo evento immediato sul blocco schedulato "
+            f"{current_time} ({title})."
+        )
+        log_decision(
+            "DirectorAgent",
+            f"Ripristino dopo evento immediato sul blocco schedulato {current_time} ({title}).",
+            level="RESTORE",
+        )
+        write_state_files(restored_state)
+
     def _select_non_repeated_music(self, theme=None):
         """
         Seleziona un brano musicale randomico che non è presente nella memoria recente.
