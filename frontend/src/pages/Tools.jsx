@@ -1,27 +1,43 @@
-import React, { useState, useEffect } from 'react'
-import { Mic, Music, MessageSquare, Play, Check, X, Tv } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { FileAudio, Music, MessageSquare, Play, Check, X } from 'lucide-react'
 
 export default function Tools() {
-  const [podcastTopic, setPodcastTopic] = useState('')
-  const [newsTopic, setNewsTopic] = useState('')
+  const [manualFormats, setManualFormats] = useState([])
+  const [selectedFormatId, setSelectedFormatId] = useState('news')
+  const [manualTitle, setManualTitle] = useState('')
+  const [manualBrief, setManualBrief] = useState('')
+  const [manualLoading, setManualLoading] = useState(false)
   const [musicMode, setMusicMode] = useState({ mode: 'mixed', counts: {} })
   const [telegramVoices, setTelegramVoices] = useState([])
   const [aiJobs, setAiJobs] = useState([])
-  
-  // Chat Overlay state
-  const [ytVideoId, setYtVideoId] = useState('')
-  const [mockMessage, setMockMessage] = useState('')
-  const [mockAuthor, setMockAuthor] = useState('')
-  const [mockRole, setMockRole] = useState('regular')
 
   useEffect(() => {
     fetchMusicMode()
-    const int1 = setInterval(fetchTelegramVoices, 10000)
-    const int2 = setInterval(fetchAiJobs, 10000)
+    fetchManualFormats()
     fetchTelegramVoices()
     fetchAiJobs()
-    return () => { clearInterval(int1); clearInterval(int2) }
+    const telegramInterval = setInterval(fetchTelegramVoices, 10000)
+    const jobsInterval = setInterval(fetchAiJobs, 10000)
+    return () => {
+      clearInterval(telegramInterval)
+      clearInterval(jobsInterval)
+    }
   }, [])
+
+  const selectedFormat = manualFormats.find((item) => item.id === selectedFormatId) || null
+
+  const fetchManualFormats = async () => {
+    try {
+      const res = await fetch('/api/manual-event-formats')
+      if (!res.ok) return
+      const data = await res.json()
+      const formats = data.formats || []
+      setManualFormats(formats)
+      if (formats.length > 0 && !formats.some((item) => item.id === selectedFormatId)) {
+        setSelectedFormatId(formats[0].id)
+      }
+    } catch (e) {}
+  }
 
   const fetchMusicMode = async () => {
     try {
@@ -44,42 +60,44 @@ export default function Tools() {
   const triggerMusicGen = async () => {
     try {
       await fetch('/api/music_gen', { method: 'POST' })
-      alert("Generazione musica AI avviata in background.")
+      alert('Generazione musica AI avviata in background.')
       fetchAiJobs()
     } catch (e) {}
   }
 
-  const launchPodcast = async () => {
-    if (!podcastTopic.trim()) {
-      alert("Inserisci un topic per il podcast!")
+  const launchManualEvent = async () => {
+    if (!selectedFormat) {
+      alert('Nessun format disponibile.')
       return
     }
-    try {
-      await fetch('/api/podcast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: podcastTopic })
-      })
-      alert("Richiesta Podcast inviata!")
-      setPodcastTopic('')
-    } catch (e) {}
-  }
+    if (selectedFormat.requires_brief && !manualBrief.trim()) {
+      alert('Questo format richiede un tema o un brief.')
+      return
+    }
 
-  const launchNews = async () => {
+    setManualLoading(true)
     try {
-      const res = await fetch('/api/news', {
+      const res = await fetch('/api/manual-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: newsTopic })
+        body: JSON.stringify({
+          character_id: selectedFormat.id,
+          title: manualTitle,
+          brief: manualBrief,
+        })
       })
+      const data = await res.json()
       if (res.ok) {
-        alert("Generazione e playout del TG News avviato!")
+        alert(`Generazione avviata: ${data.title}`)
+        setManualTitle('')
+        setManualBrief('')
       } else {
-        alert("Errore nella generazione del TG News.")
+        alert(data.message || 'Errore nella generazione del format.')
       }
-      setNewsTopic('')
     } catch (e) {
-      alert("Errore nell'invio della richiesta news.")
+      alert('Errore nell\'invio della richiesta.')
+    } finally {
+      setManualLoading(false)
     }
   }
 
@@ -112,46 +130,89 @@ export default function Tools() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
-      
-      {/* Podcast */}
-      <div className="glass rounded-xl p-6 border border-purple-900/50 flex flex-col">
-        <h2 className="text-sm uppercase tracking-widest text-purple-400 font-bold flex items-center gap-2 mb-4">
-          <Mic size={18} /> Newsica Podcast al Volo
-        </h2>
-        <p className="text-sm text-slate-400 mb-4">
-          Digita una tematica. Ollama formulerà il copione e Chatterbox darà voce a Giulia & Marco. Verrà accodato alla fine del blocco corrente.
-        </p>
-        <textarea 
-          value={podcastTopic}
-          onChange={e => setPodcastTopic(e.target.value)}
-          rows={3} 
-          className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-lg p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition resize-none mb-4"
-          placeholder="Es: il futuro del lavoro remoto..."/>
-        <button onClick={launchPodcast} className="mt-auto w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm py-3 px-4 rounded-lg transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)] flex justify-center items-center gap-2">
-          <Play size={16} /> Genera e Manda in Onda
+      <div className="glass rounded-xl p-6 border border-amber-900/50 flex flex-col lg:col-span-2">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-sm uppercase tracking-widest text-amber-400 font-bold flex items-center gap-2 mb-2">
+              <FileAudio size={18} /> Genera Evento al Volo
+            </h2>
+            <p className="text-sm text-slate-400">
+              Un solo pannello per provare i prompt editoriali supportati dalla regia immediata, incluso `Flash 60 Secondi`.
+            </p>
+          </div>
+          {selectedFormat && (
+            <span className="text-[10px] px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold uppercase tracking-wide">
+              Voce: {selectedFormat.display_name}
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-4 mb-4">
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider text-slate-500 font-bold mb-2">
+              Format
+            </label>
+            <select
+              value={selectedFormatId}
+              onChange={(e) => setSelectedFormatId(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg px-3 py-3 text-sm text-slate-200 focus:outline-none transition"
+            >
+              {manualFormats.map((format) => (
+                <option key={format.id} value={format.id}>
+                  {format.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="rounded-lg bg-slate-900/60 border border-slate-800 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold mb-2">
+              Profilo selezionato
+            </div>
+            <div className="text-sm text-slate-200 font-semibold">
+              {selectedFormat?.label || '...'}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {selectedFormat?.description || 'Nessuna descrizione disponibile.'}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider text-slate-500 font-bold mb-2">
+              Titolo editoriale
+            </label>
+            <input
+              value={manualTitle}
+              onChange={(e) => setManualTitle(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg px-3 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition"
+              placeholder={selectedFormat?.title_placeholder || 'Titolo opzionale'}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider text-slate-500 font-bold mb-2">
+              Brief / Focus
+            </label>
+            <textarea
+              value={manualBrief}
+              onChange={(e) => setManualBrief(e.target.value)}
+              rows={3}
+              className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition resize-none"
+              placeholder={selectedFormat?.brief_placeholder || 'Brief opzionale'}
+            />
+          </div>
+        </div>
+
+        <button
+          onClick={launchManualEvent}
+          disabled={manualLoading || !selectedFormat}
+          className="mt-auto w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-sm py-3 px-4 rounded-lg transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] flex justify-center items-center gap-2"
+        >
+          <Play size={16} /> {manualLoading ? 'Generazione in corso...' : 'Genera e Manda in Onda'}
         </button>
       </div>
 
-      {/* TG News */}
-      <div className="glass rounded-xl p-6 border border-amber-900/50 flex flex-col">
-        <h2 className="text-sm uppercase tracking-widest text-amber-400 font-bold flex items-center gap-2 mb-4">
-          <Tv size={18} /> TG News al Volo (Chiara)
-        </h2>
-        <p className="text-sm text-slate-400 mb-4">
-          Genera un notiziario all'istante con Chiara. Digita una tematica o lascia vuoto per raccogliere le notizie RSS del momento.
-        </p>
-        <textarea 
-          value={newsTopic}
-          onChange={e => setNewsTopic(e.target.value)}
-          rows={3} 
-          className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition resize-none mb-4"
-          placeholder="Lascia vuoto per notizie generali o descrivi un focus tematico..."/>
-        <button onClick={launchNews} className="mt-auto w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-sm py-3 px-4 rounded-lg transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] flex justify-center items-center gap-2">
-          <Play size={16} /> Genera e Manda in Onda
-        </button>
-      </div>
-
-      {/* Telegram Voices */}
       <div className="glass rounded-xl p-6 border border-sky-900/50 flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm uppercase tracking-widest text-sky-400 font-bold flex items-center gap-2">
@@ -165,7 +226,7 @@ export default function Tools() {
           {telegramVoices.length === 0 ? (
             <p className="text-sm text-slate-500 text-center py-8">Nessun vocale in attesa.</p>
           ) : (
-            telegramVoices.map(v => (
+            telegramVoices.map((v) => (
               <div key={v.id} className="bg-slate-900/80 p-3 rounded-lg border border-slate-700 flex flex-col gap-2">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-bold text-slate-200">{v.author || 'Ascoltatore'}</span>
@@ -207,15 +268,14 @@ export default function Tools() {
         </div>
       </div>
 
-      {/* Musica AI */}
       <div className="glass rounded-xl p-6 border border-pink-900/50 flex flex-col">
         <h2 className="text-sm uppercase tracking-widest text-pink-400 font-bold flex items-center gap-2 mb-4">
           <Music size={18} /> Musica AI (ACE-Step)
         </h2>
-        
+
         <div className="mb-6 p-4 rounded-lg bg-slate-900/50 border border-slate-800">
           <div className="flex justify-between text-xs mb-3">
-            <span className="text-slate-400 font-bold uppercase tracking-wide">Modalità Rotazione</span>
+            <span className="text-slate-400 font-bold uppercase tracking-wide">Modalita Rotazione</span>
             <span className="text-slate-500 font-mono">Dischi: {musicMode.counts?.library || 0} | AI: {musicMode.counts?.ai || 0}</span>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -236,9 +296,9 @@ export default function Tools() {
           {aiJobs.length === 0 ? (
             <p className="text-xs text-slate-500 text-center py-4">Nessun job in corso.</p>
           ) : (
-            aiJobs.map(job => (
+            aiJobs.map((job) => (
               <div key={job.id} className="bg-slate-900/80 px-3 py-2 rounded border border-slate-800 flex justify-between items-center">
-                <span className="text-[11px] text-slate-300 font-mono truncate mr-2">{job.id.substring(0,8)}</span>
+                <span className="text-[11px] text-slate-300 font-mono truncate mr-2">{job.id.substring(0, 8)}</span>
                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
                   (job.status === 'completed' || job.status === 'done') ? 'bg-green-900/30 text-green-400' :
                   job.status === 'failed' ? 'bg-red-900/30 text-red-400' :
@@ -249,7 +309,6 @@ export default function Tools() {
           )}
         </div>
       </div>
-
     </div>
   )
 }

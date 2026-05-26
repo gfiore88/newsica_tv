@@ -88,6 +88,20 @@ NewsicaTV è progettato per lo streaming continuo H24. Su macchine macOS, all'av
 * Banda passante e connessione RTMP a YouTube ininterrotta senza cadute di rete.
 * Riavvi da remoto stabili (impedisce che il PC ritorni in stop subito dopo l'avvio via Telegram).
 
+### 🧪 Test Prompt da Dashboard
+La pagina `Tools` della dashboard include un pannello unico `Genera Evento al Volo`.
+
+Da qui puoi selezionare il format editoriale da un dropdown e lanciare test on-demand per:
+* `news`
+* `flash_60s`
+* `sport`
+* `meteo`
+* `wellness`
+* `podcast`
+* `breaking_news`
+
+Il pannello usa la pipeline locale esistente e invia alla regia un playout immediato coerente con il `character_id`, cosi' overlay, ticker e stato runtime riflettono il format reale in onda.
+
 ## 🚀 Esecuzione e Gestione
 
 Per semplificare l'avvio, l'arresto e il monitoraggio di tutti i servizi in locale (Dashboard, Regia, Ticker, Chime e Streamer FFmpeg), è disponibile il tool unificato **`manage.sh`** nella root del progetto.

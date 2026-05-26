@@ -39,6 +39,8 @@ def ensure_folders():
 def write_accent_files(block_type):
     if block_type == "trasmissione_straordinaria":
         active_key = "breaking_news"
+    elif block_type == "flash_60s":
+        active_key = "news"
     else:
         active_key = block_type if block_type in ACCENT_FILES else "news"
     for key, accent_file in ACCENT_FILES.items():

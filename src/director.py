@@ -549,6 +549,52 @@ def main():
                                 fade_in_chunks_remaining = 20
                             else:
                                 print(f"⚠️ TG News immediato non trovato: {news_file}")
+                        elif cmd_event.name == "PLAY_EVENT_IMMEDIATE":
+                            event_file = cmd_event.kwargs.get("event_file") or os.path.join(TMP_DIR, "audio.wav")
+                            event_title = cmd_event.kwargs.get("event_title") or "NewsicaTV"
+                            character_id = cmd_event.kwargs.get("character_id") or "news"
+
+                            if os.path.exists(event_file):
+                                print(f"🎙️ [Director] Evento immediato richiesto: {character_id} | {event_title}")
+                                fifo_writer.apply_preventive_fade_out_and_write()
+                                prev_state = get_current_state()
+                                event_info = {
+                                    "status": "ON_AIR",
+                                    "current_block": character_id,
+                                    "current_title": event_title,
+                                    "current_segment": f"{character_id}_immediate",
+                                    "next_block": prev_state.get("next_block", ""),
+                                    "next_start": prev_state.get("next_start", ""),
+                                    "scheduled_slot": prev_state.get("scheduled_slot"),
+                                    "breaking_news_available": False,
+                                    "last_update": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                }
+                                write_state_files(event_info)
+
+                                cmd_ffmpeg = [
+                                    FFMPEG_CMD,
+                                    "-hide_banner",
+                                    "-loglevel", "error",
+                                    "-i", event_file,
+                                    "-f", "s16le",
+                                    "-ar", str(PCM_SAMPLE_RATE),
+                                    "-ac", str(PCM_CHANNELS),
+                                    "pipe:1"
+                                ]
+                                try:
+                                    proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                                    while True:
+                                        chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
+                                        if not chunk_data:
+                                            break
+                                        fifo_writer.write_chunk(chunk_data)
+                                    proc.wait()
+                                except Exception as e:
+                                    print(f"⚠️ Errore evento immediato: {e}")
+                                restore_after_interrupt(prev_state, f"evento immediato {character_id}")
+                                fade_in_chunks_remaining = 20
+                            else:
+                                print(f"⚠️ File evento immediato non trovato: {event_file}")
                         elif cmd_event.name == "BREAKING_NEWS_READY":
                             bn_file = cmd_event.kwargs["bn_file"]
                             severity_score = cmd_event.kwargs["severity_score"]
