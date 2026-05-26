@@ -163,7 +163,7 @@ class AudioPlayout:
         if not request:
             return None
 
-        audio_path = request.get("audio_path")
+        audio_path = request.get("asset_path")
         if not audio_path or not Path(audio_path).exists():
             print(
                 f"⚠️ Richiesta musicale {request.get('id')} pronta ma senza file valido: {audio_path}"
@@ -807,7 +807,7 @@ class AudioPlayout:
         music_file = None
         is_requested = False
         if request:
-            music_file = request.get("audio_path")
+            music_file = request.get("asset_path")
             if music_file and Path(music_file).exists():
                 is_requested = True
                 print(
@@ -1110,7 +1110,7 @@ class AudioPlayout:
         request = consume_next_ready_request()
         is_requested = False
         if request:
-            music_file = request.get("audio_path")
+            music_file = request.get("asset_path")
             if music_file and Path(music_file).exists():
                 is_requested = True
                 print(

@@ -82,7 +82,7 @@ def process_job(job: dict) -> None:
 
         mark_done(job_id, audio_path=str(audio_file), title=title)
         if request_id:
-            mark_ready(request_id, audio_path=str(audio_file), title=title)
+            mark_ready(request_id, asset_path=str(audio_file), title=title)
         logger.info("Job %s completato: %s", job_id, audio_file.name)
     except Exception as e:
         message = str(e)
