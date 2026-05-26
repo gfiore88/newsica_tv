@@ -20,21 +20,54 @@ class SystemAdminAgent:
             (ASSETS_DIR / d).mkdir(parents=True, exist_ok=True)
             
     def _manifest_matches(self, ready_dir, character=None, title=None):
+        # 1. Prova a caricare il manifest.json (fallback)
         manifest_path = ready_dir / "manifest.json"
-        if not manifest_path.exists():
-            return False
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if character and manifest.get("character") != character:
+                    return False
+                if character == "podcast" or manifest.get("character") == "podcast":
+                    return True
+                if title and manifest.get("title") != title:
+                    return False
+                return True
+            except Exception:
+                pass
+
+        # 2. Prova a verificare tramite il database SQLite delle asset_slots
         try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
-            return False
-        if character and manifest.get("character") != character:
-            return False
-        # Per il podcast, allentiamo il controllo sul titolo perché è dinamico e tematico
-        if character == "podcast" or manifest.get("character") == "podcast":
-            return True
-        if title and manifest.get("title") != title:
-            return False
-        return True
+            slot_id = ready_dir.name
+            slot_time = f"{slot_id[:2]}:{slot_id[2:]}" if len(slot_id) == 4 else ""
+            if slot_time:
+                for row in asset_slots_repository.list_slots():
+                    if row.get("slot_time") == slot_time and row.get("character") == character and row.get("status") == "ready":
+                        if character == "podcast":
+                            return True
+                        if title and row.get("title") == title:
+                            return True
+        except Exception as e:
+            print(f"⚠️ Errore durante il riscontro di _manifest_matches via DB slots: {e}")
+
+        # 3. Prova a caricare i metadati dal database audio_metadata
+        for audio_file in [ready_dir / "audio.wav", ready_dir / "audio_part1.wav"]:
+            if audio_file.exists():
+                try:
+                    from newsica.storage.repositories.audio_metadata_repository import get_metadata
+                    meta_row = get_metadata(str(audio_file.resolve()))
+                    if meta_row and meta_row.get("metadata"):
+                        meta = meta_row["metadata"]
+                        if character and meta.get("character") != character:
+                            return False
+                        if character == "podcast" or meta.get("character") == "podcast":
+                            return True
+                        if title and meta.get("title") != title:
+                            return False
+                        return True
+                except Exception:
+                    pass
+
+        return False
 
     def _archive_dir(self, source_dir: Path, suffix: str):
         if not source_dir.exists():

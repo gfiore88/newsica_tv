@@ -50,7 +50,7 @@ def get_future_slots(hours_ahead=2, current_grace_minutes=30):
             if slot_dt < now:
                 elapsed = (now - slot_dt).total_seconds()
                 if elapsed <= current_grace_minutes * 60:
-                    pass
+                    slot_dt = now
                 elif now.hour >= 22 and hour <= 2:
                     slot_dt += datetime.timedelta(days=1)
                 else:
