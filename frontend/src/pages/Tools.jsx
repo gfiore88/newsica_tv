@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { Mic, Music, MessageSquare, Play, Check, X } from 'lucide-react'
+import { Mic, Music, MessageSquare, Play, Check, X, Tv } from 'lucide-react'
 
 export default function Tools() {
   const [podcastTopic, setPodcastTopic] = useState('')
+  const [newsTopic, setNewsTopic] = useState('')
   const [musicMode, setMusicMode] = useState({ mode: 'mixed', counts: {} })
   const [telegramVoices, setTelegramVoices] = useState([])
   const [aiJobs, setAiJobs] = useState([])
@@ -64,6 +65,24 @@ export default function Tools() {
     } catch (e) {}
   }
 
+  const launchNews = async () => {
+    try {
+      const res = await fetch('/api/news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: newsTopic })
+      })
+      if (res.ok) {
+        alert("Generazione e playout del TG News avviato!")
+      } else {
+        alert("Errore nella generazione del TG News.")
+      }
+      setNewsTopic('')
+    } catch (e) {
+      alert("Errore nell'invio della richiesta news.")
+    }
+  }
+
   const fetchTelegramVoices = async () => {
     try {
       const res = await fetch('/api/telegram-voices')
@@ -109,6 +128,25 @@ export default function Tools() {
           className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-lg p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition resize-none mb-4"
           placeholder="Es: il futuro del lavoro remoto..."/>
         <button onClick={launchPodcast} className="mt-auto w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm py-3 px-4 rounded-lg transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)] flex justify-center items-center gap-2">
+          <Play size={16} /> Genera e Manda in Onda
+        </button>
+      </div>
+
+      {/* TG News */}
+      <div className="glass rounded-xl p-6 border border-amber-900/50 flex flex-col">
+        <h2 className="text-sm uppercase tracking-widest text-amber-400 font-bold flex items-center gap-2 mb-4">
+          <Tv size={18} /> TG News al Volo (Chiara)
+        </h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Genera un notiziario all'istante con Chiara. Digita una tematica o lascia vuoto per raccogliere le notizie RSS del momento.
+        </p>
+        <textarea 
+          value={newsTopic}
+          onChange={e => setNewsTopic(e.target.value)}
+          rows={3} 
+          className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition resize-none mb-4"
+          placeholder="Lascia vuoto per notizie generali o descrivi un focus tematico..."/>
+        <button onClick={launchNews} className="mt-auto w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-sm py-3 px-4 rounded-lg transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] flex justify-center items-center gap-2">
           <Play size={16} /> Genera e Manda in Onda
         </button>
       </div>

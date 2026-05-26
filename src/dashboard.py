@@ -517,6 +517,167 @@ def trigger_podcast():
         "tts_seconds": round(tts_seconds, 1),
     })
 
+@app.route('/api/news', methods=['POST'])
+def trigger_news():
+    """Genera il notiziario Chiara via Ollama, lo sintetizza e lo manda in onda."""
+    total_start = time.perf_counter()
+    data = request.json or {}
+    topic = data.get("topic", "").strip()
+
+    # 1. Carica il prompt di sistema di Chiara (news.md)
+    prompt_path = os.path.join(BASE_DIR, "src", "newsica", "editorial", "prompts", "news.md")
+    system_prompt = ""
+    if os.path.exists(prompt_path):
+        try:
+            with open(prompt_path, "r", encoding="utf-8") as pf:
+                system_prompt = pf.read()
+        except Exception as e:
+            print(f"⚠️ Impossibile leggere il prompt delle news: {e}")
+    
+    if not system_prompt:
+        system_prompt = "Sei Chiara, la conduttrice di NewsicaTV. Genera un notiziario fluido e professionale."
+
+    # 2. Raccoglie notizie in base alla presenza di un topic
+    news_text = ""
+    title = "TG Newsica - Edizione Straordinaria"
+    if topic:
+        title = f"TG Newsica: {topic[:30] + '...' if len(topic) > 30 else topic}"
+        # Ricerca web opzionale per il topic
+        from newsica.agents.content_strategist import ContentStrategistAgent
+        try:
+            strategist = ContentStrategistAgent()
+            results = strategist.search_internet(topic, num_results=4)
+            if results:
+                news_text = "Ecco i dettagli emersi dalla ricerca sul tema:\n\n"
+                for idx, res in enumerate(results):
+                    news_text += f"- {res['title']}: {res['snippet']}\n"
+            else:
+                news_text = f"Sviluppa un notiziario incentrato su questo tema: {topic}\n"
+        except Exception as e:
+            news_text = f"Sviluppa un notiziario incentrato su questo tema: {topic}\n"
+    else:
+        # Recupera news di default dall'RSS
+        from newsica.agents.content_strategist import ContentStrategistAgent
+        try:
+            strategist = ContentStrategistAgent()
+            news_items = strategist._collect_news(force_fetch=True)
+            news_text = "Ecco le ultime notizie dell'ora da sintetizzare:\n\n"
+            for item in news_items[:5]:
+                news_text += f"- {item.get('title', '')}: {item.get('summary', '')}\n"
+        except Exception as e:
+            news_text = "Sviluppa un notiziario generale con aggiornamenti dell'ultima ora."
+
+    # 3. Prepara il prompt per Ollama
+    user_prompt = f"""
+{news_text}
+
+Istruzioni speciali:
+- Scrivi un copione per Chiara in lingua italiana con accenti grafici corretti.
+- IMPORTANTE: Non includere MAI tag come [MUSIC_BREAK] o interruzioni musicali. Sviluppa un discorso continuo, fluido e professionale da notiziario televisivo.
+- Il testo deve essere di circa 300-400 parole, diviso in paragrafi per la lettura naturale.
+- Titolo della trasmissione: {title}
+"""
+
+    # 4. Interroga Ollama
+    import requests
+    ollama_url = "http://localhost:11434/api/generate"
+    model_name = os.getenv("OLLAMA_MODEL", "gemma3:12b")
+    
+    payload = {
+        "model": model_name,
+        "system": system_prompt,
+        "prompt": user_prompt,
+        "stream": False,
+        "keep_alive": "30m",
+        "options": {
+            "temperature": 0.4,
+            "num_predict": 700,
+        },
+    }
+
+    script_text = ""
+    llm_start = time.perf_counter()
+    try:
+        response = requests.post(ollama_url, json=payload, timeout=60)
+        response.raise_for_status()
+        script_text = response.json().get("response", "").strip()
+    except Exception as e:
+        return jsonify({
+            "status": "ERROR",
+            "message": f"Errore di connessione a Ollama: {e}",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
+    llm_seconds = time.perf_counter() - llm_start
+
+    if not script_text:
+        return jsonify({
+            "status": "ERROR",
+            "message": "Ollama ha restituito un copione news vuoto.",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
+
+    # Rimuoviamo eventuali tag [MUSIC_BREAK] spuri se generati per errore dall'LLM
+    script_text = script_text.replace("[MUSIC_BREAK]", "\n\n")
+
+    # 5. Scrivi il copione in tmp/script.txt
+    script_file = os.path.join(TMP_DIR, "script.txt")
+    try:
+        with open(script_file, "w", encoding="utf-8") as sf:
+            sf.write(script_text)
+    except Exception as e:
+        return jsonify({
+            "status": "ERROR",
+            "message": f"Scrittura copione fallita: {e}",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
+
+    # 6. Genera l'audio via tts_generator.py per Chiara (news)
+    tts_start = time.perf_counter()
+    try:
+        subprocess.run(
+            [PYTHON_EXEC, os.path.join(BASE_DIR, "src", "tts_generator.py"), "news"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        return jsonify({
+            "status": "ERROR", 
+            "message": "Sintesi audio delle news fallita.", 
+            "details": e.stderr,
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
+    tts_seconds = time.perf_counter() - tts_start
+
+    news_audio_file = os.path.join(TMP_DIR, "audio.wav")
+    if not os.path.exists(news_audio_file):
+        return jsonify({
+            "status": "ERROR",
+            "message": "Audio delle news non trovato dopo la sintesi.",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
+
+    # 7. Invia comando alla regia
+    cmd = f"PLAY_NEWS_IMMEDIATE|{news_audio_file}|{title}"
+    try:
+        with open(CONTROL_FILE, "w") as f:
+            f.write(cmd)
+    except Exception as e:
+        return jsonify({
+            "status": "ERROR",
+            "message": f"Scrittura comando regia fallita: {e}",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }), 500
+
+    total_seconds = time.perf_counter() - total_start
+    return jsonify({
+        "status": "OK",
+        "title": title,
+        "generation_seconds": round(total_seconds, 1),
+        "llm_seconds": round(llm_seconds, 1),
+        "tts_seconds": round(tts_seconds, 1),
+    })
+
 def find_pids(patterns):
     pids = set()
     for pattern in patterns:

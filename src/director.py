@@ -504,6 +504,51 @@ def main():
                                 fade_in_chunks_remaining = 20
                             else:
                                 print(f"⚠️ Podcast immediato non trovato: {podcast_file}")
+                        elif cmd_event.name == "PLAY_NEWS_IMMEDIATE":
+                            news_file = cmd_event.kwargs.get("news_file") or os.path.join(TMP_DIR, "audio.wav")
+                            news_title = cmd_event.kwargs.get("news_title") or "TG Newsica"
+
+                            if os.path.exists(news_file):
+                                print(f"🎙️ [Director] TG News immediato richiesto: {news_title}")
+                                fifo_writer.apply_preventive_fade_out_and_write()
+                                prev_state = get_current_state()
+                                news_info = {
+                                    "status": "ON_AIR",
+                                    "current_block": "news",
+                                    "current_title": news_title,
+                                    "current_segment": "news_immediate",
+                                    "next_block": prev_state.get("next_block", ""),
+                                    "next_start": prev_state.get("next_start", ""),
+                                    "scheduled_slot": prev_state.get("scheduled_slot"),
+                                    "breaking_news_available": False,
+                                    "last_update": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                }
+                                write_state_files(news_info)
+
+                                cmd_ffmpeg = [
+                                    FFMPEG_CMD,
+                                    "-hide_banner",
+                                    "-loglevel", "error",
+                                    "-i", news_file,
+                                    "-f", "s16le",
+                                    "-ar", str(PCM_SAMPLE_RATE),
+                                    "-ac", str(PCM_CHANNELS),
+                                    "pipe:1"
+                                ]
+                                try:
+                                    proc = subprocess.Popen(cmd_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                                    while True:
+                                        chunk_data = proc.stdout.read(PCM_CHUNK_BYTES)
+                                        if not chunk_data:
+                                            break
+                                        fifo_writer.write_chunk(chunk_data)
+                                    proc.wait()
+                                except Exception as e:
+                                    print(f"⚠️ Errore TG News immediato: {e}")
+                                restore_after_interrupt(prev_state, "TG News immediato")
+                                fade_in_chunks_remaining = 20
+                            else:
+                                print(f"⚠️ TG News immediato non trovato: {news_file}")
                         elif cmd_event.name == "BREAKING_NEWS_READY":
                             bn_file = cmd_event.kwargs["bn_file"]
                             severity_score = cmd_event.kwargs["severity_score"]
