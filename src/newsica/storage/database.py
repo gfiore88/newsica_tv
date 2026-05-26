@@ -91,11 +91,49 @@ def init_schema():
         failed_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS chat_music_requests (
+        id TEXT PRIMARY KEY,
+        video_id TEXT NOT NULL,
+        author TEXT NOT NULL,
+        title TEXT,
+        prompt TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        asset_path TEXT,
+        error TEXT,
+        received_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS daily_schedules (
+        target_date TEXT PRIMARY KEY,
+        schedule_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS news_articles (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT,
+        category TEXT NOT NULL,
+        published_at TEXT NOT NULL,
+        is_breaking INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS editorial_memory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         memory_type TEXT NOT NULL,
         value TEXT NOT NULL,
         metadata TEXT,
+        created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS audio_metadata (
+        file_path TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        artist TEXT,
+        album TEXT,
+        duration INTEGER,
+        metadata_json TEXT,
         created_at TEXT NOT NULL
     );
     """

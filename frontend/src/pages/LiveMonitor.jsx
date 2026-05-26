@@ -4,6 +4,37 @@ import { AlertTriangle, SkipForward, RefreshCw, Bell, MonitorPlay, Volume2, Shie
 
 export default function LiveMonitor() {
   const { state } = useOutletContext()
+  const [chatStatus, setChatStatus] = React.useState({ video_id: '', is_running: false })
+
+  React.useEffect(() => {
+    let cancelled = false
+
+    const loadChatStatus = async () => {
+      try {
+        const response = await fetch('/api/chat/status')
+        if (!response.ok) {
+          return
+        }
+        const data = await response.json()
+        if (!cancelled) {
+          setChatStatus({
+            video_id: data.video_id || '',
+            is_running: Boolean(data.is_running),
+          })
+        }
+      } catch (err) {
+        console.error('Errore caricamento chat status:', err)
+      }
+    }
+
+    loadChatStatus()
+    const intervalId = window.setInterval(loadChatStatus, 15000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [])
 
   const sendCommandSafe = async (cmd, msg) => {
     if (confirm(msg)) {
@@ -26,10 +57,15 @@ export default function LiveMonitor() {
   }
 
   const activateLiveAudio = () => {
-    // Il player iframe YT è bloccato per autoplay muto dal browser,
-    // richiede interazione utente complessa. In React è meglio indirizzare alla pagina.
-    window.open(`https://www.youtube.com/@newsicaTV/live`, '_blank')
+    const targetUrl = chatStatus.video_id
+      ? `https://www.youtube.com/watch?v=${chatStatus.video_id}`
+      : 'https://www.youtube.com/@newsicaTV/live'
+    window.open(targetUrl, '_blank')
   }
+
+  const embedUrl = chatStatus.video_id
+    ? `https://www.youtube.com/embed/${chatStatus.video_id}?autoplay=1&mute=1&enablejsapi=1`
+    : null
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
@@ -55,17 +91,26 @@ export default function LiveMonitor() {
           </div>
           
           <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-slate-700 bg-black shadow-inner">
-            <iframe 
-              className="absolute inset-0 w-full h-full" 
-              src={`https://www.youtube.com/embed/live_stream?channel=UCjS4T4x_k9t5Qe7V0U-pE3A&autoplay=1&mute=1&enablejsapi=1`}
-              frameBorder="0" 
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-              allowFullScreen>
-            </iframe>
+            {embedUrl ? (
+              <iframe
+                className="absolute inset-0 w-full h-full"
+                src={embedUrl}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-slate-400">
+                Nessun video live rilevato al momento dal sistema di discovery YouTube.
+              </div>
+            )}
           </div>
           
           <div className="mt-4 flex items-center justify-between">
-             <span className="text-xs text-slate-400">Canale: <strong className="text-slate-200">@newsicaTV</strong></span>
+             <span className="text-xs text-slate-400">
+               Canale: <strong className="text-slate-200">@newsicaTV</strong>
+               {chatStatus.video_id ? ` • Video ID: ${chatStatus.video_id}` : ''}
+             </span>
              <button onClick={activateLiveAudio} className="flex items-center gap-2 text-xs font-bold text-red-400 hover:text-red-300 bg-red-950/30 px-3 py-1.5 rounded-lg border border-red-900/50 transition">
                <MonitorPlay size={14} /> Apri su YouTube
              </button>

@@ -48,6 +48,10 @@ def get_request_by_id(id: str):
         print(f"⚠️ Errore db in get_request_by_id: {e}")
         return None
 
+
+def get_request(id: str):
+    return get_request_by_id(id)
+
 def get_next_request_by_status(status: str):
     try:
         with get_connection() as conn:

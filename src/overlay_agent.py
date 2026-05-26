@@ -719,12 +719,12 @@ def draw_chat_overlay(image, accent):
                 data = json.loads(val)
                 msg_timestamp = data.get("timestamp", 0.0)
                 if msg_timestamp > _chat_last_checked_msg_timestamp:
-                        _chat_last_checked_msg_timestamp = msg_timestamp
-                        _chat_msg_data = data
-                        _chat_state = CHAT_STATE_FADE_IN
-                        _chat_state_start_time = now_mono
-            except Exception:
-                pass
+                    _chat_last_checked_msg_timestamp = msg_timestamp
+                    _chat_msg_data = data
+                    _chat_state = CHAT_STATE_FADE_IN
+                    _chat_state_start_time = now_mono
+        except Exception:
+            pass
                 
     # 2. Aggiornamento macchina a stati
     if _chat_state == CHAT_STATE_IDLE:

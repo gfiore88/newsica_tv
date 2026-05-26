@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template_string, request, send_file
+from flask import Flask, jsonify, render_template_string, request, send_file, send_from_directory
 import os
 from dotenv import load_dotenv
 
@@ -23,9 +23,10 @@ from newsica.audio.music_mode import (
 )
 from newsica.storage.database import get_connection
 
-app = Flask(__name__, static_folder=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend/dist"), static_url_path="/")
+app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND_DIST_DIR = os.path.join(BASE_DIR, "frontend", "dist")
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
@@ -644,11 +645,10 @@ def get_db_assets():
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def catch_all(path):
-    import os
-    # Serve index.html per la root o file non trovati
-    if path == '' or not os.path.exists(os.path.join(app.static_folder, path)):
-        return app.send_static_file('index.html')
-    return app.send_static_file(path)
+    asset_path = os.path.join(FRONTEND_DIST_DIR, path)
+    if path and os.path.exists(asset_path) and os.path.isfile(asset_path):
+        return send_from_directory(FRONTEND_DIST_DIR, path)
+    return send_from_directory(FRONTEND_DIST_DIR, 'index.html')
 
 _singleton_lock = None
 

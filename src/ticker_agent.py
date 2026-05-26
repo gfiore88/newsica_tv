@@ -157,19 +157,19 @@ def update_ticker():
             from newsica.storage.repositories.news_articles_repository import get_recent_articles
             all_news = get_recent_articles(limit=10)
 
-            if all_news:
-                stable_news = all_news[:6]
-                items = []
+            try:
+                if all_news:
+                    stable_news = all_news[:6]
+                    items = []
 
-                for news in stable_news:
-                    item = format_ticker_news_item(news)
+                    for news in stable_news:
+                        item = format_ticker_news_item(news)
+                        if item:
+                            items.append(item)
 
-                    if item:
-                                items.append(item)
-
-                        flash_text = "  •  ".join(items)
-                except Exception as e:
-                    print(f"⚠️ Errore caricamento notizie per ticker: {e}")
+                    flash_text = "  •  ".join(items)
+            except Exception as e:
+                print(f"⚠️ Errore caricamento notizie per ticker: {e}")
 
             if not flash_text:
                 items = []

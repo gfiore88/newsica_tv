@@ -75,6 +75,24 @@ def write_state_files(state):
         set_memory("on_air_state", json.dumps(state, ensure_ascii=False))
     except Exception as e:
         print(f"⚠️ Errore scrittura SQLite on_air_state: {e}")
+
+    # Manteniamo anche il file JSON per dashboard, overlay e tooling legacy.
+    try:
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            dir=os.path.dirname(STATE_FILE),
+            prefix=os.path.basename(STATE_FILE) + ".",
+            suffix=".tmp",
+            delete=False,
+            encoding="utf-8",
+        ) as sf:
+            json.dump(state, sf, ensure_ascii=False, indent=2)
+            sf.write("\n")
+            temp_state = sf.name
+        os.replace(temp_state, STATE_FILE)
+    except Exception as e:
+        print(f"⚠️ Errore scrittura atomica STATE_FILE: {e}")
         
     # Scrittura atomica di current_program.txt (per FFmpeg)
     try:

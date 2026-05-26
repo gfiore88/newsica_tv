@@ -55,6 +55,7 @@ def write_track_metadata(
 ):
     from newsica.storage.repositories.audio_metadata_repository import save_metadata
     payload = {
+        "title": title,
         "prompt": prompt,
         "mode": mode,
         "language": language,
@@ -64,6 +65,11 @@ def write_track_metadata(
         "request_id": request_id,
         "request_text": request_text,
     }
+    sidecar_path = audio_file.with_suffix(".meta")
+    sidecar_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     save_metadata(
         file_path=str(audio_file.resolve()),
         title=title,

@@ -87,3 +87,22 @@ def consume_next_approved_voice():
 def mark_played(id: str):
     return update_status(id, "played")
 
+
+def enqueue_voice(author_username: str, author_first_name: str, file_id: str, duration: int, original_path: str, converted_path: str, status: str = "pending"):
+    return add_request(author_username, author_first_name, file_id, duration, original_path, converted_path, status=status)
+
+
+def list_voices():
+    return get_all_voices()
+
+
+def get_voice(id: str):
+    return get_voice_by_id(id)
+
+
+def approve_voice(id: str):
+    return update_status(id, "approved")
+
+
+def reject_voice(id: str):
+    return update_status(id, "rejected")

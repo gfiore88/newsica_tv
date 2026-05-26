@@ -44,3 +44,4 @@
 | 41 | /orchestrator | ✅ Done | Policy prompt multilingua per Musica AI: preferenza italiano, supporto inglese e spagnolo latin con ADR 0037 |
 | 42 | /orchestrator | ✅ Done | Hardening prompt Musica AI: lyrics senza placeholder e titolo sempre coerente con la lingua del brano con ADR 0038 |
 | 43 | /orchestrator | ✅ Done | History persistente anti-ripetizione per la rotazione musica live con ADR 0043 |
+| 44 | /orchestrator | ✅ Done | Ripristino post-migrazione DB: schema SQLite completato, compatibilità repository legacy, restart dashboard/regia e riattivazione agenti ticker/overlay/chime |

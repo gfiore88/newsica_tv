@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import queue
+import random
 import subprocess
 import time
 from functools import lru_cache
@@ -241,6 +242,16 @@ class AudioPlayout:
         except Exception:
             return ""
 
+        sidecar_path = track_path.with_suffix(".meta")
+        if sidecar_path.exists():
+            try:
+                payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                title = " ".join(str(payload.get("title", "")).split())
+                if title:
+                    return title
+            except Exception:
+                pass
+
         return self.get_track_title(str(track_path))
 
     def build_music_metadata(self, music_file, current_state=None):
@@ -395,6 +406,21 @@ class AudioPlayout:
             return ""
         except Exception:
             return ""
+
+    def _get_fallback_ai_track(self, theme=None):
+        try:
+            candidates = self.music_library._scan(self.music_library.ai_music_dir)
+            if theme:
+                themed_candidates = [
+                    path for path in candidates if self._ai_track_matches_theme(str(path), theme)
+                ]
+                if themed_candidates:
+                    candidates = themed_candidates
+            if not candidates:
+                return None
+            return str(random.choice(candidates))
+        except Exception:
+            return None
 
     def _ensure_music_allowed_by_mode(self, music_file):
         if not music_file:

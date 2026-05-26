@@ -8,6 +8,7 @@ from pathlib import Path
 
 from newsica.config.paths import ASSETS_DIR, MUSIC_DIR, RUNTIME_DIR
 from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, read_music_mode
+from newsica.storage.repositories.audio_metadata_repository import get_metadata
 
 AI_MUSIC_DIR = ASSETS_DIR / "ai_music"
 SUPPORTED_AUDIO_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg")
@@ -81,6 +82,11 @@ class MusicLibrary:
             if path.is_file() and path.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS
         ]
 
+    def _has_local_metadata(self, track_path: Path) -> bool:
+        if track_path.with_suffix(".meta").exists():
+            return True
+        return get_metadata(str(track_path.resolve())) is not None
+
     def get_counts(self):
         self.refresh()
         return {
@@ -112,7 +118,6 @@ class MusicLibrary:
                 if theme:
                     normalized_theme = " ".join(theme.lower().strip().split())
                     thematic_candidates = []
-                    from newsica.storage.repositories.audio_metadata_repository import get_metadata
                     for path in candidates:
                         meta_row = get_metadata(str(path.resolve()))
                         if meta_row and meta_row.get("metadata"):
@@ -128,7 +133,7 @@ class MusicLibrary:
                     else:
                         print(f"⚠️ Nessun brano corrispondente trovato per il tema '{theme}'. Fallback a tutte le tracce AI.")
 
-                candidates_with_metadata = [path for path in candidates if get_metadata(str(path.resolve())) is not None]
+                candidates_with_metadata = [path for path in candidates if self._has_local_metadata(path)]
                 if candidates_with_metadata:
                     candidates = candidates_with_metadata
 

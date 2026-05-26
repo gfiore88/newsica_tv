@@ -153,7 +153,7 @@ function do_stop() {
   done
 
   # Chiude eventuali sessioni screen create da manage.sh start.
-  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker" "newsica-bn-daemon" "newsica-caffeinate")
+  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker" "newsica-ticker" "newsica-overlay" "newsica-chime" "newsica-bn-daemon" "newsica-caffeinate")
   if [ "$exclude_telegram" = false ]; then
     screens+=("newsica-telegram")
   fi
@@ -235,6 +235,31 @@ function do_start() {
     sleep 2
   else
     echo "  [i] AI Music Worker già attivo."
+  fi
+
+  # 5.5 Avvia gli agenti di supporto allo stream
+  if [ -z "$(get_pid "src/ticker_agent.py")" ]; then
+    echo "  -> Avvio Ticker Agent..."
+    screen -dmS newsica-ticker bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/ticker_agent.py' > '$TMP_DIR/ticker_agent.log' 2>&1"
+    sleep 1
+  else
+    echo "  [i] Ticker Agent già attivo."
+  fi
+
+  if [ -z "$(get_pid "src/overlay_agent.py")" ]; then
+    echo "  -> Avvio Overlay Agent..."
+    screen -dmS newsica-overlay bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/overlay_agent.py' > '$TMP_DIR/overlay_agent.log' 2>&1"
+    sleep 1
+  else
+    echo "  [i] Overlay Agent già attivo."
+  fi
+
+  if [ -z "$(get_pid "src/hourly_chime_agent.py")" ]; then
+    echo "  -> Avvio Hourly Chime Agent..."
+    screen -dmS newsica-chime bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/hourly_chime_agent.py' > '$TMP_DIR/hourly_chime_agent.log' 2>&1"
+    sleep 1
+  else
+    echo "  [i] Hourly Chime Agent già attivo."
   fi
 
   # 6. Avvia il Bot Telegram

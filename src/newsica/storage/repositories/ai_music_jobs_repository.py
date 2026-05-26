@@ -1,5 +1,28 @@
 import time
+import uuid
 from newsica.storage.database import get_connection
+
+def enqueue_job(job_type: str, source: str, theme: str = None, custom_brief: str = None, request_id: str = None, dedupe_key: str = None):
+    if dedupe_key:
+        active = get_active_job(job_type=job_type, dedupe_key=dedupe_key)
+        if active:
+            return active, False
+            
+    job_id = str(uuid.uuid4())[:8]
+    job = add_job(
+        id=job_id,
+        job_type=job_type,
+        source=source,
+        theme=theme,
+        custom_brief=custom_brief,
+        request_id=request_id,
+        dedupe_key=dedupe_key,
+        status="pending"
+    )
+    return job, True
+
+def list_jobs():
+    return get_all_jobs()
 
 def add_job(id: str, job_type: str, source: str, theme: str = None, custom_brief: str = None, request_id: str = None, dedupe_key: str = None, status: str = "pending"):
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -98,3 +121,29 @@ def get_running_jobs():
     except Exception as e:
         print(f"⚠️ Errore db in get_running_jobs: {e}")
         return []
+
+
+def mark_running(id: str):
+    return update_job(id, status="running", started_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
+
+
+def mark_done(id: str, audio_path: str, title: str):
+    now = time.strftime("%Y-%m-%dT%H:%M:%S")
+    return update_job(
+        id,
+        status="done",
+        audio_path=audio_path,
+        generated_title=title,
+        completed_at=now,
+        failed_at=None,
+        error=None,
+    )
+
+
+def mark_failed(id: str, error: str):
+    return update_job(
+        id,
+        status="failed",
+        error=error,
+        failed_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+    )
