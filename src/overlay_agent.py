@@ -91,19 +91,23 @@ def load_schedule_data():
 
 
 def get_schedule_anchor_index(state, times):
-    next_start = (state or {}).get("next_start")
-    if next_start in times:
-        return times.index(next_start)
-
     current_slot = (state or {}).get("scheduled_slot")
     if current_slot in times:
-        return (times.index(current_slot) + 1) % len(times)
+        return times.index(current_slot)
+
+    next_start = (state or {}).get("next_start")
+    if next_start in times:
+        prev_index = times.index(next_start) - 1
+        return prev_index if prev_index >= 0 else len(times) - 1
 
     now_str = datetime.now().strftime("%H:%M")
+    current_idx = 0
     for idx, slot in enumerate(times):
-        if slot >= now_str:
-            return idx
-    return 0
+        if slot <= now_str:
+            current_idx = idx
+        else:
+            break
+    return current_idx
 
 
 def read_current_program(state, schedule_data):
@@ -446,12 +450,12 @@ def draw_schedule_timeline(draw, xy, items, accent):
 
     for index, item in enumerate(items):
         marker_x = marker_positions[index]
-        is_next = index == 0
+        is_current = index == 0
 
-        marker_radius = 7 if is_next else 5
-        marker_fill = accent if is_next else (226, 232, 240, 230)
+        marker_radius = 7 if is_current else 5
+        marker_fill = accent if is_current else (226, 232, 240, 230)
 
-        if is_next:
+        if is_current:
             glow = accent[:3] + (70,)
             draw.ellipse(
                 (
@@ -487,7 +491,7 @@ def draw_schedule_timeline(draw, xy, items, accent):
             fill=text_primary,
         )
 
-        title_font = FONT_TIMELINE_TITLE_BOLD if is_next else FONT_TIMELINE_TITLE
+        title_font = FONT_TIMELINE_TITLE_BOLD if is_current else FONT_TIMELINE_TITLE
 
         title_lines = wrap_text_lines(
             draw,
