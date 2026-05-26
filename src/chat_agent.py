@@ -18,7 +18,6 @@ RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 
 LIVE_VIDEO_ID_FILE = os.path.join(TMP_DIR, "live_video_id.txt")
 LIVE_VIDEO_CACHE_FILE = os.path.join(TMP_DIR, "live_video_cache.txt")
-LATEST_CHAT_FILE = os.path.join(TMP_DIR, "latest_chat.json")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "UCQOA9AoLRA8XG2g9ruogE1g")
 YOUTUBE_HANDLE = os.getenv("YOUTUBE_HANDLE", "@NewsicaTV")
@@ -481,12 +480,14 @@ def write_latest_chat(author, message, is_moderator=False, is_owner=False, is_sp
         "is_owner": is_owner,
         "is_sponsor": is_sponsor
     }
+    
+    from newsica.storage.repositories.editorial_memory_repository import set_memory
+    import json
     try:
-        with open(LATEST_CHAT_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"💬 [LIVE CHAT] Scritto messaggio di {author}: \"{message}\"")
+        set_memory("latest_chat", json.dumps(data, ensure_ascii=False))
+        print(f"💬 [LIVE CHAT] Scritto messaggio in DB di {author}: \"{message}\"")
     except Exception as e:
-        print(f"❌ Errore nella scrittura di latest_chat.json: {e}")
+        print(f"❌ Errore nella scrittura di latest_chat in DB: {e}")
 
 
 def run_api_loop(api_key, chat_id):

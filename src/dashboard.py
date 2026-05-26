@@ -28,7 +28,6 @@ app = Flask(__name__, static_folder=os.path.join(os.path.dirname(os.path.dirname
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 TMP_DIR = os.path.join(BASE_DIR, "tmp")
-STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 CONTROL_FILE = os.path.join(RUNTIME_DIR, "control.txt")
 HOUR_CHIME_JINGLE_FILE = os.path.join(BASE_DIR, "assets", "jingles", "jingle_ora_esatta.mp3")
 HOUR_CHIME_OUTPUT_FILE = os.path.join(TMP_DIR, "hourly_chime.wav")
@@ -101,15 +100,10 @@ def get_state():
         print(f"⚠️ Errore caricamento palinsesto: {e}")
         schedule_list = []
 
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            try:
-                state = json.load(f)
-                state["schedule"] = schedule_list
-                return jsonify(state)
-            except:
-                return jsonify({"status": "ERROR", "schedule": schedule_list})
-    return jsonify({"status": "OFFLINE", "schedule": schedule_list})
+    from newsica.broadcast.runtime_state import get_current_state
+    state = get_current_state()
+    state["schedule"] = schedule_list
+    return jsonify(state)
 
 @app.route('/api/command', methods=['POST'])
 def send_command():
@@ -519,7 +513,6 @@ def inject_chat_mock():
     is_owner = role == "owner"
     is_sponsor = role == "sponsor"
     
-    latest_chat_file = os.path.join(TMP_DIR, "latest_chat.json")
     chat_data = {
         "author": author,
         "message": message,
@@ -529,8 +522,12 @@ def inject_chat_mock():
         "is_sponsor": is_sponsor
     }
     
-    with open(latest_chat_file, "w", encoding="utf-8") as f:
-        json.dump(chat_data, f, ensure_ascii=False, indent=2)
+    from newsica.storage.repositories.editorial_memory_repository import set_memory
+    import json
+    try:
+        set_memory("latest_chat", json.dumps(chat_data, ensure_ascii=False))
+    except Exception as e:
+        print(f"⚠️ Errore db saving chat: {e}")
         
     return jsonify({"status": "OK", "message": f"Messaggio di {author} iniettato"})
 

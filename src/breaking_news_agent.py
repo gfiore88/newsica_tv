@@ -3,7 +3,7 @@ import sys
 import time
 import argparse
 import subprocess
-import json
+
 import requests
 import re
 from kokoro_onnx import Kokoro
@@ -24,20 +24,23 @@ def generate_breaking_news(force=True):
     print("🚨 Avvio pipeline Breaking News...")
     character = get_character("breaking_news")
     
-    # 1. Recupero la prima notizia di ultimora da raw_news.json
-    raw_news_path = os.path.join(TMP_DIR, "raw_news.json")
+    # 1. Recupero la prima notizia di ultimora dal DB
+    from newsica.storage.repositories.news_articles_repository import get_recent_articles
     notizia = None
-    if os.path.exists(raw_news_path):
-        try:
-            with open(raw_news_path, "r", encoding="utf-8") as f:
-                news_items = json.load(f)
-                # Cerca ansa_ultimora
-                for item in news_items:
-                    if "ansa_ultimora" in item.get("source", ""):
-                        notizia = item
-                        break
-        except Exception as e:
-            print(f"⚠️ Errore nel caricamento delle news: {e}")
+    try:
+        news_items = get_recent_articles(limit=50)
+        for item in news_items:
+            # L'attributo source nel DB al momento è salvato se passiamo il dictionary.
+            # get_recent_articles restituisce {title, description, publishedAt}
+            # Se vogliamo controllare 'ansa_ultimora', possiamo controllare il testo o il titolo
+            # oppure dovremmo salvare il 'source'. Mappiamo source = category per semplicità.
+            if "ultimora" in item.get("title", "").lower() or "ultim'ora" in item.get("title", "").lower() or item.get("is_breaking") == 1:
+                notizia = item
+                # Rinominiano description in summary per la retrocompatibilità
+                notizia["summary"] = notizia.get("description", "")
+                break
+    except Exception as e:
+        print(f"⚠️ Errore nel caricamento delle news da DB: {e}")
 
     if not notizia:
         if force:
@@ -203,25 +206,23 @@ def generate_breaking_news(force=True):
 
 def run_daemon():
     print("🕵️‍♂️ [Daemon] Agente Breaking News Autonomo avviato. Controllo ogni 15 minuti...")
+    from newsica.storage.repositories.news_articles_repository import save_articles
+    
     while True:
         try:
             print("⏳ [Daemon] Avvio ciclo di controllo ultim'ora...")
             
-            # Controlla l'età del file raw_news.json
-            raw_news_path = os.path.join(TMP_DIR, "raw_news.json")
-            if not os.path.exists(raw_news_path) or (time.time() - os.path.getmtime(raw_news_path) > 900):
-                print("🔄 [Daemon] Cache obsoleta o assente, avvio aggiornamento feed (collector)...")
-                try:
-                    from newsica.sources.collector import collect_news_items
-                    all_news = collect_news_items()
-                    with open(raw_news_path, "w", encoding="utf-8") as f:
-                        json.dump(all_news, f, ensure_ascii=False, indent=4)
-                    print(f"✅ [Daemon] Cache aggiornata con {len(all_news)} notizie.")
-                except ImportError:
-                    print("⚠️ [Daemon] Impossibile importare collector, salto l'aggiornamento.")
-                except Exception as e:
-                    print(f"⚠️ [Daemon] Errore nell'aggiornamento cache: {e}")
-                    
+            print("🔄 [Daemon] Aggiornamento feed (collector)...")
+            try:
+                from newsica.sources.collector import collect_news_items
+                all_news = collect_news_items()
+                save_articles(all_news, category="news", is_breaking=False)
+                print(f"✅ [Daemon] Cache aggiornata con {len(all_news)} notizie nel database.")
+            except ImportError:
+                print("⚠️ [Daemon] Impossibile importare collector, salto l'aggiornamento.")
+            except Exception as e:
+                print(f"⚠️ [Daemon] Errore nell'aggiornamento cache: {e}")
+                
             # Esegue la logica senza forzatura manuale
             generate_breaking_news(force=False)
             

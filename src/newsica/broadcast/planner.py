@@ -33,15 +33,17 @@ class PlayoutPlanner:
             events.append(self._create_music_until_deadline(next_time, theme))
             return events
 
-        # 2. Leggi il manifest per il contenuto testuale
+        # 2. Leggi il manifest per il contenuto testuale dal DB
         ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot.replace(":", ""))
-        manifest_file = os.path.join(ready_dir, "manifest.json")
+        voice_file = os.path.join(ready_dir, "audio.wav")
         
         manifest = {}
-        if os.path.exists(manifest_file):
+        if os.path.exists(voice_file):
+            from newsica.storage.repositories.audio_metadata_repository import get_metadata
             try:
-                with open(manifest_file, "r", encoding="utf-8") as f:
-                    manifest = json.load(f)
+                meta_row = get_metadata(voice_file)
+                if meta_row and meta_row.get("metadata"):
+                    manifest = meta_row["metadata"]
             except Exception:
                 pass
                 

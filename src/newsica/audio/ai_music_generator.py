@@ -53,23 +53,23 @@ def write_track_metadata(
     request_id: str | None = None,
     request_text: str | None = None,
 ):
-    metadata_file = audio_file.with_suffix(".json")
+    from newsica.storage.repositories.audio_metadata_repository import save_metadata
     payload = {
-        "title": title,
         "prompt": prompt,
-        "duration": duration,
         "mode": mode,
         "language": language,
         "theme": theme,
-        "generated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "audio_file": audio_file.name,
         "requested_by": requested_by,
         "request_id": request_id,
         "request_text": request_text,
     }
-    metadata_file.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    save_metadata(
+        file_path=str(audio_file.resolve()),
+        title=title,
+        artist="Newsica AI",
+        duration=int(duration),
+        metadata=payload
     )
 
 def get_time_of_day():
@@ -249,7 +249,7 @@ def generate_track(*, theme: str | None = None, custom_brief: str | None = None,
             logger.info(f"Cache limit reached ({len(current_tracks)}/{MAX_TRACKS}). Deleting oldest track: {oldest_track.name}")
             try:
                 oldest_track.unlink(missing_ok=True)
-                oldest_track.with_suffix(".json").unlink(missing_ok=True)
+                from newsica.storage.repositories.audio_metadata_repository import delete_metadata; delete_metadata(str(oldest_track.resolve()))
             except Exception as e:
                 logger.error(f"Failed to delete oldest track {oldest_track.name}: {e}")
         

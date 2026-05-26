@@ -89,26 +89,30 @@ class SystemAdminAgent:
                 dest = preparing_dir / f.name
                 if f.resolve() != dest.resolve():
                     shutil.copy(f, dest)
-            if metadata:
-                (preparing_dir / "manifest.json").write_text(
-                    json.dumps(metadata, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
                 
             if ready_dir.exists():
                 shutil.rmtree(ready_dir)
             preparing_dir.rename(ready_dir)
             
             # Logging to SQLite
-            manifest_path_str = str(ready_dir / "manifest.json") if metadata else None
             asset_slots_repository.upsert_slot(
                 slot_time=slot_time,
                 character=metadata.get("character", "unknown") if metadata else "unknown",
                 title=metadata.get("title", "unknown") if metadata else "unknown",
                 status="ready",
                 ready_dir=str(ready_dir),
-                manifest_path=manifest_path_str
+                manifest_path=None
             )
+            
+            # Salviamo il metadata nel DB audio in modo che il regista non debba leggere file
+            if metadata:
+                from newsica.storage.repositories.audio_metadata_repository import save_metadata
+                save_metadata(
+                    file_path=str(ready_dir / "audio.wav"),
+                    title=metadata.get("title", "Podcast"),
+                    artist=metadata.get("character", "unknown"),
+                    metadata=metadata
+                )
             
             print(f"✅ [SystemAdminAgent] Asset per {slot_time} pronto in {ready_dir.name}")
         except Exception as e:

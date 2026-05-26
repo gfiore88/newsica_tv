@@ -17,7 +17,6 @@ OVERLAY_PIPE = os.path.join(TMP_DIR, "overlay_pipe")
 PROGRAM_FILE = os.path.join(TMP_DIR, "current_program.txt")
 NEXT_PROGRAM_FILE = os.path.join(TMP_DIR, "next_program.txt")
 SCHEDULE_FILE = os.path.join(TMP_DIR, "schedule_next.txt")
-STATE_FILE = os.path.join(RUNTIME_DIR, "on-air-state.json")
 
 WIDTH = int(os.getenv("STREAM_WIDTH", "1280"))
 HEIGHT = int(os.getenv("STREAM_HEIGHT", "720"))
@@ -112,11 +111,8 @@ def read_schedule_items(max_items=5):
 
 
 def read_state():
-    try:
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return {}
+    from newsica.broadcast.runtime_state import get_current_state
+    return get_current_state()
 
 
 def font(size, bold=False):
@@ -716,13 +712,13 @@ def draw_chat_overlay(image, accent):
     # 1. Rilevamento nuovi messaggi
     if now_mono - _chat_last_disk_read >= 0.5:
         _chat_last_disk_read = now_mono
-        latest_chat_file = os.path.join(TMP_DIR, "latest_chat.json")
-        if os.path.exists(latest_chat_file):
-            try:
-                with open(latest_chat_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    msg_timestamp = data.get("timestamp", 0.0)
-                    if msg_timestamp > _chat_last_checked_msg_timestamp:
+        from newsica.storage.repositories.editorial_memory_repository import get_memory
+        try:
+            val = get_memory("latest_chat")
+            if val:
+                data = json.loads(val)
+                msg_timestamp = data.get("timestamp", 0.0)
+                if msg_timestamp > _chat_last_checked_msg_timestamp:
                         _chat_last_checked_msg_timestamp = msg_timestamp
                         _chat_msg_data = data
                         _chat_state = CHAT_STATE_FADE_IN

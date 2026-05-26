@@ -118,19 +118,18 @@ def fetch_jamendo_chart(limit=5):
 
 def get_existing_manifests():
     manifests = {}
-    if not MUSIC_DIR.exists():
-        return manifests
-        
-    for file in MUSIC_DIR.iterdir():
-        if file.suffix == ".json":
-            try:
-                with open(file, "r", encoding="utf-8") as f:
-                    manifest = json.load(f)
-                    artist = manifest.get("artist", "").lower()
-                    title = manifest.get("title", "").lower()
-                    manifests[f"{artist} - {title}"] = file
-            except Exception:
-                pass
+    from newsica.storage.repositories.audio_metadata_repository import get_connection
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT file_path, title, artist FROM audio_metadata")
+            for row in cursor.fetchall():
+                artist = (row["artist"] or "").lower()
+                title = (row["title"] or "").lower()
+                if artist and title:
+                    manifests[f"{artist} - {title}"] = row["file_path"]
+    except Exception as e:
+        print(f"⚠️ Errore lettura manifest da DB: {e}")
     return manifests
 
 def clean_filename(name):
@@ -263,8 +262,13 @@ def download_and_convert(song, ffmpeg_cmd, source_type):
     }
     
     try:
-        with open(manifest_output_path, "w", encoding="utf-8") as f:
-            json.dump(manifest_data, f, indent=2, ensure_ascii=False)
+        from newsica.storage.repositories.audio_metadata_repository import save_metadata
+        save_metadata(
+            file_path=str(audio_output_path.resolve()),
+            title=title,
+            artist=artist,
+            metadata=manifest_data
+        )
     except Exception as e:
         print(f"  ⚠️ Errore salvataggio manifest per '{artist} - {title}': {e}")
         

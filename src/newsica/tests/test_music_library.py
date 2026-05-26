@@ -50,7 +50,7 @@ class TestMusicLibraryModes(unittest.TestCase):
     def test_ai_only_prefers_tracks_with_metadata_sidecar(self):
         extra_ai_track = self.ai_music_dir / "ai_track_2.wav"
         extra_ai_track.write_bytes(b"ai-2")
-        extra_ai_track.with_suffix(".json").write_text('{"title": "Cosmic Drift"}\n', encoding="utf-8")
+        extra_ai_track.with_suffix(".meta").write_text('{"title": "Cosmic Drift"}\n', encoding="utf-8")
         library = MusicLibrary(self.music_dir, self.ai_music_dir)
 
         with patch("newsica.audio.music_library.read_music_mode", return_value=MUSIC_MODE_AI_ONLY):
@@ -68,7 +68,7 @@ class TestMusicLibraryModes(unittest.TestCase):
             theme="synthwave",
         )
 
-        sidecar = self.ai_track.with_suffix(".json")
+        sidecar = self.ai_track.with_suffix(".meta")
         self.assertTrue(sidecar.exists())
         self.assertIn("Cosmic Drift", sidecar.read_text(encoding="utf-8"))
 
@@ -78,7 +78,7 @@ class TestMusicLibraryModes(unittest.TestCase):
         extra_library_track.write_bytes(b"library-2")
         extra_ai_track.write_bytes(b"ai-2")
 
-        history_file = self.base / "runtime" / "music_rotation_history.json"
+        history_file = self.base / "runtime" / "music_rotation_history.meta"
         with patch("newsica.audio.music_library.ROTATION_HISTORY_FILE", history_file):
             library = MusicLibrary(self.music_dir, self.ai_music_dir)
             library._recent_tracks.clear()
@@ -97,7 +97,7 @@ class TestMusicLibraryModes(unittest.TestCase):
         self.assertEqual(Path(selected).name, "ai_track_2.wav")
 
     def test_recent_rotation_history_is_loaded_by_new_instance(self):
-        history_file = self.base / "runtime" / "music_rotation_history.json"
+        history_file = self.base / "runtime" / "music_rotation_history.meta"
         with patch("newsica.audio.music_library.ROTATION_HISTORY_FILE", history_file):
             first = MusicLibrary(self.music_dir, self.ai_music_dir)
             first._remember_track(self.library_track)

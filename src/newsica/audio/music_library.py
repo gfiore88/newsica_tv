@@ -112,26 +112,23 @@ class MusicLibrary:
                 if theme:
                     normalized_theme = " ".join(theme.lower().strip().split())
                     thematic_candidates = []
+                    from newsica.storage.repositories.audio_metadata_repository import get_metadata
                     for path in candidates:
-                        metadata_file = path.with_suffix(".json")
-                        if metadata_file.exists():
-                            try:
-                                with open(metadata_file, "r", encoding="utf-8") as f:
-                                    meta = json.load(f)
-                                track_theme = meta.get("theme")
-                                if track_theme:
-                                    normalized_track_theme = " ".join(str(track_theme).lower().strip().split())
-                                    if normalized_track_theme == normalized_theme:
-                                        thematic_candidates.append(path)
-                            except Exception:
-                                pass
+                        meta_row = get_metadata(str(path.resolve()))
+                        if meta_row and meta_row.get("metadata"):
+                            meta = meta_row["metadata"]
+                            track_theme = meta.get("theme")
+                            if track_theme:
+                                normalized_track_theme = " ".join(str(track_theme).lower().strip().split())
+                                if normalized_track_theme == normalized_theme:
+                                    thematic_candidates.append(path)
                     if thematic_candidates:
                         candidates = thematic_candidates
                         print(f"🎵 Filtro musica per il tema '{theme}': trovate {len(candidates)} tracce corrispondenti.")
                     else:
                         print(f"⚠️ Nessun brano corrispondente trovato per il tema '{theme}'. Fallback a tutte le tracce AI.")
 
-                candidates_with_metadata = [path for path in candidates if path.with_suffix(".json").exists()]
+                candidates_with_metadata = [path for path in candidates if get_metadata(str(path.resolve())) is not None]
                 if candidates_with_metadata:
                     candidates = candidates_with_metadata
 

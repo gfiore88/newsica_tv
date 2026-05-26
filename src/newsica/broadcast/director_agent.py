@@ -199,20 +199,22 @@ class DirectorAgent:
         scheduled_slot = state.get("scheduled_slot", "").replace(":", "")
         ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot)
         voice_file = os.path.join(ready_dir, "audio.wav")
-        manifest_file = os.path.join(ready_dir, "manifest.json")
         has_valid_audio = os.path.exists(voice_file)
 
-        if os.path.exists(ready_dir):
+        if has_valid_audio:
+            from newsica.storage.repositories.audio_metadata_repository import get_metadata
             try:
-                with open(manifest_file, "r", encoding="utf-8") as f:
-                    manifest = json.load(f)
-                if manifest.get("character") != "podcast" or not manifest.get("title", "").startswith(title):
-                    print(
-                        f"⚠️ [DirectorAgent] Podcast pronto non coerente per {scheduled_slot}: "
-                        f"atteso podcast/{title}, trovato {manifest}."
-                    )
-                    has_valid_audio = False
+                meta_row = get_metadata(voice_file)
+                if meta_row and meta_row.get("metadata"):
+                    manifest = meta_row["metadata"]
+                    if manifest.get("character") != "podcast" or not manifest.get("title", "").startswith(title):
+                        print(
+                            f"⚠️ [DirectorAgent] Podcast pronto non coerente per {scheduled_slot}: "
+                            f"atteso podcast/{title}, trovato {manifest}."
+                        )
+                        has_valid_audio = False
             except Exception:
+                pass
                 print(f"⚠️ [DirectorAgent] Podcast pronto senza manifest valido per {scheduled_slot}. Attendo rigenerazione.")
                 has_valid_audio = False
         

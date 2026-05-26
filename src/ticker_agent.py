@@ -1,6 +1,6 @@
 import os
 import time
-import json
+
 from datetime import datetime
 
 _singleton_lock = None
@@ -122,21 +122,20 @@ def update_ticker():
             status_text = "NewsicaTV"
             next_block = ""
 
-            if os.path.exists(STATE_FILE):
-                with open(STATE_FILE, "r", encoding="utf-8") as f:
-                    state = json.load(f)
+            from newsica.broadcast.runtime_state import get_current_state
+            state = get_current_state()
 
-                if (
-                    state.get("current_block")
-                    in {"breaking_news", "trasmissione_straordinaria"}
-                    or state.get("status") == "SPECIAL_BROADCAST"
-                ):
-                    status_text = "🚨 Edizione straordinaria"
-                elif state.get("current_title"):
-                    status_text = f"In onda: {state.get('current_title')}"
+            if (
+                state.get("current_block")
+                in {"breaking_news", "trasmissione_straordinaria"}
+                or state.get("status") == "SPECIAL_BROADCAST"
+            ):
+                status_text = "🚨 Edizione straordinaria"
+            elif state.get("current_title"):
+                status_text = f"In onda: {state.get('current_title')}"
 
-                if state.get("next_block"):
-                    next_block = f"Tra poco: {state.get('next_block')}"
+            if state.get("next_block"):
+                next_block = f"Tra poco: {state.get('next_block')}"
 
             now = datetime.now()
             time_str = now.strftime("%H:%M")
@@ -155,19 +154,17 @@ def update_ticker():
 
             flash_text = ""
 
-            if os.path.exists(RAW_NEWS_FILE):
-                try:
-                    with open(RAW_NEWS_FILE, "r", encoding="utf-8") as f:
-                        all_news = json.load(f)
+            from newsica.storage.repositories.news_articles_repository import get_recent_articles
+            all_news = get_recent_articles(limit=10)
 
-                    if all_news:
-                        stable_news = all_news[:6]
-                        items = []
+            if all_news:
+                stable_news = all_news[:6]
+                items = []
 
-                        for news in stable_news:
-                            item = format_ticker_news_item(news)
+                for news in stable_news:
+                    item = format_ticker_news_item(news)
 
-                            if item:
+                    if item:
                                 items.append(item)
 
                         flash_text = "  •  ".join(items)

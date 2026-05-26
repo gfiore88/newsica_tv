@@ -241,14 +241,7 @@ class AudioPlayout:
         except Exception:
             return ""
 
-        metadata_file = track_path.with_suffix(".json")
-        try:
-            payload = json.loads(metadata_file.read_text(encoding="utf-8"))
-        except Exception:
-            return ""
-
-        title = " ".join(str(payload.get("title", "")).split())
-        return title
+        return self.get_track_title(str(track_path))
 
     def build_music_metadata(self, music_file, current_state=None):
         state = dict(current_state or {})
@@ -378,17 +371,30 @@ class AudioPlayout:
             return False
         try:
             track_path = Path(music_file)
-            metadata_file = track_path.with_suffix(".json")
-            if not metadata_file.exists():
+            from newsica.storage.repositories.audio_metadata_repository import get_metadata
+            meta_row = get_metadata(str(track_path.resolve()))
+            if not meta_row or not meta_row.get("metadata"):
                 return False
-            with metadata_file.open("r", encoding="utf-8") as f:
-                meta = json.load(f)
+            meta = meta_row["metadata"]
             track_theme = meta.get("theme")
             if not track_theme:
                 return False
             return " ".join(str(track_theme).lower().strip().split()) == " ".join(theme.lower().strip().split())
         except Exception:
             return False
+
+    def get_track_title(self, music_file: str) -> str:
+        try:
+            track_path = Path(music_file)
+            from newsica.storage.repositories.audio_metadata_repository import get_metadata
+            meta_row = get_metadata(str(track_path.resolve()))
+            if meta_row and meta_row.get("title"):
+                return " ".join(str(meta_row["title"]).split())
+            if meta_row and meta_row.get("metadata", {}).get("title"):
+                return " ".join(str(meta_row["metadata"]["title"]).split())
+            return ""
+        except Exception:
+            return ""
 
     def _ensure_music_allowed_by_mode(self, music_file):
         if not music_file:
@@ -427,16 +433,7 @@ class AudioPlayout:
         if is_valid_ai:
             return music_file
 
-        replacement = None
-        ai_candidates = self.music_library._scan(self.music_library.ai_music_dir)
-        ai_candidates = [path for path in ai_candidates if str(path) != self.last_music_file]
-        if theme:
-            ai_candidates = [path for path in ai_candidates if self._ai_track_matches_theme(str(path), theme)]
-        candidates_with_metadata = [path for path in ai_candidates if path.with_suffix(".json").exists()]
-        if candidates_with_metadata:
-            ai_candidates = candidates_with_metadata
-        if ai_candidates:
-            replacement = str(ai_candidates[0])
+        replacement = self._get_fallback_ai_track(theme)
         if replacement:
             label_text = f"per il tema '{theme}'" if theme else "non AI"
             print(

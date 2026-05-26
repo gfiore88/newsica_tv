@@ -1,51 +1,52 @@
-import json
+import sys
 import os
-from datetime import date
+import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
-def generate_schedule(target_date=None):
-    os.makedirs(RUNTIME_DIR, exist_ok=True)
+from newsica.agents.editorial_director import EditorialDirectorAgent
+from newsica.storage.repositories.schedule_repository import get_schedule, save_schedule
+
+def generate_schedule(target_date=None, force=False):
+    """
+    Genera un palinsesto tramite l'EditorialDirectorAgent e lo salva nel database.
+    Se esiste già e non c'è force=True, non fa nulla.
+    """
     if not target_date:
-        target_date = date.today().isoformat()
-    
-    file_path = os.path.join(RUNTIME_DIR, f"schedule_{target_date}.json")
-    
-    # Import the Editorial Director Agent
-    try:
-        import sys
-        src_dir = os.path.join(BASE_DIR, "src")
-        if src_dir not in sys.path:
-            sys.path.insert(0, src_dir)
-            
-        from newsica.agents.editorial_director import EditorialDirectorAgent
-        agent = EditorialDirectorAgent()
-        schedule_data = agent.generate_dynamic_schedule()
-    except Exception as e:
-        print(f"⚠️ Errore caricamento EditorialDirectorAgent: {e}")
-        # Fallback ultra base
-        schedule_data = {
-            "00:00": {"title": "Newsica Night", "type": "music_only"},
-            "06:00": {"title": "Morning News", "type": "news"},
-            "12:00": {"title": "Pranzo News", "type": "news"},
-            "20:00": {"title": "Newsica Sera", "type": "news"}
-        }
-
-    with open(file_path, "w") as f:
-        json.dump(schedule_data, f, indent=2)
+        target_date = datetime.date.today().isoformat()
         
-    print(f"✅ Palinsesto generato per {target_date} in {file_path}")
-    return file_path
-
-def get_current_schedule():
-    target_date = date.today().isoformat()
-    file_path = os.path.join(RUNTIME_DIR, f"schedule_{target_date}.json")
-    if not os.path.exists(file_path):
-        generate_schedule(target_date)
+    existing = get_schedule(target_date)
+    if existing and not force:
+        print(f"✅ Palinsesto per {target_date} già esistente in DB. Usa force=True per sovrascrivere.")
+        return existing
         
-    with open(file_path, "r") as f:
-        return json.load(f)
+    print(f"🎬 Generazione nuovo palinsesto per {target_date}...")
+    agent = EditorialDirectorAgent()
+    schedule_data = agent.generate_dynamic_schedule()
+    
+    save_schedule(target_date, schedule_data)
+    
+    print(f"✅ Palinsesto salvato nel database per {target_date}.")
+    return schedule_data
+
+def get_current_schedule(target_date=None):
+    """
+    Ritorna il palinsesto del giorno (dal DB). Se non esiste, lo genera.
+    """
+    if not target_date:
+        target_date = datetime.date.today().isoformat()
+        
+    sched = get_schedule(target_date)
+    if sched:
+        return sched
+        
+    # Se non esiste, generiamolo
+    return generate_schedule(target_date)
 
 if __name__ == "__main__":
-    generate_schedule()
+    force_flag = "--force" in sys.argv
+    sched = generate_schedule(force=force_flag)
+    print("Palinsesto risultante:")
+    print(sched)

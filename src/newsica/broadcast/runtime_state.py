@@ -69,23 +69,14 @@ def write_state_files(state):
     if not is_music_segment:
         state.pop("current_music_title", None)
     
-    # Scrittura atomica dello stato JSON
+    # Scrittura dello stato su SQLite
+    from newsica.storage.repositories.editorial_memory_repository import set_memory
     try:
-        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            "w",
-            dir=os.path.dirname(STATE_FILE),
-            prefix=os.path.basename(STATE_FILE) + ".",
-            suffix=".tmp",
-            delete=False,
-        ) as sf:
-            json.dump(state, sf, indent=2)
-            temp_state = sf.name
-        os.replace(temp_state, STATE_FILE)
+        set_memory("on_air_state", json.dumps(state, ensure_ascii=False))
     except Exception as e:
-        print(f"⚠️ Errore scrittura atomica STATE_FILE: {e}")
+        print(f"⚠️ Errore scrittura SQLite on_air_state: {e}")
         
-    # Scrittura atomica di current_program.txt
+    # Scrittura atomica di current_program.txt (per FFmpeg)
     try:
         os.makedirs(os.path.dirname(PROGRAM_FILE), exist_ok=True)
         with tempfile.NamedTemporaryFile(
@@ -101,7 +92,7 @@ def write_state_files(state):
     except Exception as e:
         print(f"⚠️ Errore scrittura atomica PROGRAM_FILE: {e}")
 
-    # Scrittura atomica di next_program.txt
+    # Scrittura atomica di next_program.txt (per FFmpeg)
     try:
         next_title = state.get("next_block", "")
         next_start = state.get("next_start")
@@ -125,11 +116,12 @@ def write_state_files(state):
     write_accent_files(state.get("current_block", "news"))
 
 def get_current_state():
-    if not os.path.exists(STATE_FILE):
-        return {"status": "OFFLINE"}
+    from newsica.storage.repositories.editorial_memory_repository import get_memory
     try:
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
+        val = get_memory("on_air_state")
+        if val:
+            return json.loads(val)
+        return {"status": "OFFLINE"}
     except Exception as e:
-        print(f"⚠️ Errore lettura STATE_FILE: {e}")
+        print(f"⚠️ Errore lettura SQLite on_air_state: {e}")
         return {"status": "OFFLINE"}

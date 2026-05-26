@@ -62,7 +62,7 @@ class TestAudioPlayoutMusicMode(unittest.TestCase):
             ai_music_dir.mkdir()
             audio_file = ai_music_dir / "ai_track_20260522_141032.wav"
             audio_file.write_bytes(b"ai")
-            audio_file.with_suffix(".json").write_text('{"title": "Cosmic Drift"}\n', encoding="utf-8")
+            audio_file.with_suffix(".meta").write_text('{"title": "Cosmic Drift"}\n', encoding="utf-8")
 
             playout = AudioPlayout(queue.Queue(), None, lambda: False)
             playout.music_library.ai_music_dir = ai_music_dir
