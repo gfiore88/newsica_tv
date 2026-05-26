@@ -3,7 +3,7 @@ import { Database as DbIcon, RefreshCw } from 'lucide-react'
 
 export default function Database() {
   const [activeTab, setActiveTab] = useState('history')
-  const [data, setData] = useState({ history: [], memory: [], assets: [], rotation: { recent_tracks: [], block_events: [], recent_window: 0 } })
+  const [data, setData] = useState({ history: [], memory: [], assets: [], rotation: { recent_tracks: [], block_events: [], configured_window: 0, tracked_count: 0 } })
   const [loading, setLoading] = useState(false)
 
   const fetchData = async () => {
@@ -22,7 +22,7 @@ export default function Database() {
         history: hist.data || [],
         memory: mem.data || [],
         assets: assets.data || [],
-        rotation: rotation.data || { recent_tracks: [], block_events: [], recent_window: 0 }
+        rotation: rotation.data || { recent_tracks: [], block_events: [], configured_window: 0, tracked_count: 0 }
       })
     } catch (e) {
       console.error(e)
@@ -175,7 +175,7 @@ export default function Database() {
               <div className="px-5 py-4 border-b border-slate-800 bg-slate-900">
                 <div className="text-xs uppercase tracking-widest font-bold text-sky-400">Finestra Recente</div>
                 <div className="text-sm text-slate-400 mt-1">
-                  Ultimi {data.rotation.recent_window || 0} brani realmente mandati in onda bloccati dalla rotazione.
+                  Limite configurato: {data.rotation.configured_window || 0} brani. Attualmente tracciati: {data.rotation.tracked_count || 0}.
                 </div>
               </div>
               <div className="divide-y divide-slate-800/60">

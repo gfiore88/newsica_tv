@@ -14,7 +14,7 @@ from schedule_generator import get_current_schedule, generate_schedule
 from newsica.storage.repositories.ai_music_jobs_repository import enqueue_job
 from newsica.audio.ai_music_runtime import resolve_ace_step_python
 from newsica.audio.settings import resolve_ffmpeg_cmd
-from newsica.audio.music_library import MusicLibrary
+from newsica.audio.music_library import DEFAULT_RECENT_WINDOW, MusicLibrary
 from newsica.audio.music_mode import (
     MUSIC_MODE_AI_ONLY,
     MUSIC_MODE_MIXED,
@@ -168,6 +168,8 @@ def _load_rotation_runtime():
         })
 
     return {
+        "configured_window": DEFAULT_RECENT_WINDOW,
+        "tracked_count": len(recent_tracks),
         "recent_tracks": recent_tracks,
         "block_events": block_events,
     }
@@ -832,9 +834,7 @@ def get_db_assets():
 @app.route('/api/db/music-rotation', methods=['GET'])
 def get_music_rotation_debug():
     try:
-        payload = _load_rotation_runtime()
-        payload["recent_window"] = len(payload["recent_tracks"])
-        return jsonify({"status": "OK", "data": payload})
+        return jsonify({"status": "OK", "data": _load_rotation_runtime()})
     except Exception as e:
         return jsonify({"status": "ERROR", "message": str(e)})
 
