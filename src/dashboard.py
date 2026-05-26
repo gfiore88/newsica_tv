@@ -23,6 +23,47 @@ from newsica.audio.music_mode import (
 )
 from newsica.storage.database import get_connection
 
+
+def _format_memory_value(raw_value):
+    if raw_value is None:
+        return {"text": "", "is_json": False, "summary": ""}
+    if not isinstance(raw_value, str):
+        raw_value = str(raw_value)
+    trimmed = raw_value.strip()
+    if not trimmed:
+        return {"text": "", "is_json": False, "summary": ""}
+    try:
+        parsed = json.loads(trimmed)
+    except Exception:
+        return {"text": raw_value, "is_json": False, "summary": ""}
+
+    summary = ""
+    if isinstance(parsed, dict):
+        interesting_keys = [
+            key for key in (
+                "status",
+                "current_title",
+                "current_block",
+                "next_block",
+                "author",
+                "message",
+                "mode",
+                "theme",
+                "requested_by",
+                "requested_title",
+            )
+            if parsed.get(key)
+        ]
+        summary = " | ".join(f"{key}: {parsed[key]}" for key in interesting_keys[:4])
+    elif isinstance(parsed, list):
+        summary = f"{len(parsed)} elementi"
+
+    return {
+        "text": json.dumps(parsed, ensure_ascii=False, indent=2),
+        "is_json": True,
+        "summary": summary,
+    }
+
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -538,7 +579,38 @@ def inject_chat_mock():
 def get_telegram_voices():
     from newsica.storage.repositories.telegram_repository import list_voices
     try:
-        voices = list_voices()
+        raw_voices = list_voices()
+        status_rank = {
+            "pending": 0,
+            "approved": 1,
+            "playing": 2,
+            "played": 3,
+            "rejected": 4,
+        }
+        voices = []
+        for voice in raw_voices:
+            author_first_name = (voice.get("author_first_name") or "").strip()
+            author_username = (voice.get("author_username") or "").strip()
+            author = author_first_name or author_username or "Ascoltatore"
+            if author_username and author_username != author_first_name:
+                author_display = f"{author} (@{author_username})"
+            else:
+                author_display = author
+
+            item = dict(voice)
+            item["author"] = author_display
+            item["can_approve"] = item.get("status") == "pending"
+            item["can_reject"] = item.get("status") in {"pending", "approved"}
+            item["is_playable"] = bool(item.get("converted_path")) and os.path.exists(item.get("converted_path"))
+            voices.append(item)
+
+        voices.sort(
+            key=lambda item: (
+                status_rank.get(item.get("status"), 99),
+                item.get("received_at", ""),
+            ),
+            reverse=False,
+        )
         return jsonify({"status": "OK", "voices": voices})
     except Exception as e:
         return jsonify({"status": "ERROR", "message": str(e)})
@@ -623,7 +695,14 @@ def get_db_memory():
                 SELECT * FROM editorial_memory 
                 ORDER BY id DESC LIMIT 50
             ''')
-            rows = [dict(row) for row in cursor.fetchall()]
+            rows = []
+            for row in cursor.fetchall():
+                item = dict(row)
+                formatted = _format_memory_value(item.get("value"))
+                item["value_pretty"] = formatted["text"]
+                item["value_is_json"] = formatted["is_json"]
+                item["value_summary"] = formatted["summary"]
+                rows.append(item)
         return jsonify({"status": "OK", "data": rows})
     except Exception as e:
         return jsonify({"status": "ERROR", "message": str(e)})

@@ -130,17 +130,38 @@ export default function Tools() {
             telegramVoices.map(v => (
               <div key={v.id} className="bg-slate-900/80 p-3 rounded-lg border border-slate-700 flex flex-col gap-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-slate-200">{v.author}</span>
-                  <span className="text-xs text-slate-500">{v.duration}s</span>
+                  <span className="text-sm font-bold text-slate-200">{v.author || 'Ascoltatore'}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${
+                      v.status === 'pending' ? 'bg-amber-900/30 text-amber-400 border-amber-500/40' :
+                      v.status === 'approved' ? 'bg-sky-900/30 text-sky-300 border-sky-500/40' :
+                      v.status === 'playing' ? 'bg-purple-900/30 text-purple-300 border-purple-500/40' :
+                      v.status === 'played' ? 'bg-green-900/30 text-green-400 border-green-500/40' :
+                      'bg-red-900/30 text-red-400 border-red-500/40'
+                    }`}>
+                      {v.status}
+                    </span>
+                    <span className="text-xs text-slate-500">{v.duration}s</span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <audio controls src={`/api/telegram-voices/play/${v.id}`} className="h-8 flex-1" />
-                  <button onClick={() => handleTgVoice(v.id, 'approve')} className="p-2 bg-green-600/20 text-green-400 hover:bg-green-600/40 rounded-lg transition border border-green-500/30">
-                    <Check size={16} />
-                  </button>
-                  <button onClick={() => handleTgVoice(v.id, 'reject')} className="p-2 bg-red-600/20 text-red-400 hover:bg-red-600/40 rounded-lg transition border border-red-500/30">
-                    <X size={16} />
-                  </button>
+                  {v.is_playable ? (
+                    <audio controls src={`/api/telegram-voices/play/${v.id}`} className="h-8 flex-1" />
+                  ) : (
+                    <div className="h-8 flex-1 flex items-center px-3 rounded bg-slate-950 border border-slate-800 text-xs text-slate-500">
+                      Anteprima non disponibile
+                    </div>
+                  )}
+                  {v.can_approve && (
+                    <button onClick={() => handleTgVoice(v.id, 'approve')} className="p-2 bg-green-600/20 text-green-400 hover:bg-green-600/40 rounded-lg transition border border-green-500/30">
+                      <Check size={16} />
+                    </button>
+                  )}
+                  {v.can_reject && (
+                    <button onClick={() => handleTgVoice(v.id, 'reject')} className="p-2 bg-red-600/20 text-red-400 hover:bg-red-600/40 rounded-lg transition border border-red-500/30">
+                      <X size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))

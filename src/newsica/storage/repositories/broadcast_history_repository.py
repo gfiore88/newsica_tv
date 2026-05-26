@@ -10,7 +10,7 @@ def add(slot_time: str, block_type: str, title: str, segment: str, event_type: s
     """
     try:
         meta_json_str = json.dumps(metadata_json) if metadata_json else None
-        started_at = datetime.datetime.utcnow().isoformat()
+        started_at = datetime.datetime.now().isoformat(timespec="seconds")
         
         with get_connection() as conn:
             cursor = conn.cursor()

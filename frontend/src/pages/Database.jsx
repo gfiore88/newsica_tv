@@ -39,6 +39,11 @@ export default function Database() {
     return new Date(iso).toLocaleTimeString()
   }
 
+  const formatDateTime = (iso) => {
+    if (!iso) return '--'
+    return new Date(iso).toLocaleString()
+  }
+
   return (
     <div className="flex flex-col h-full bg-slate-950/50 rounded-xl border border-slate-800 shadow-xl overflow-hidden">
       {/* Header & Tabs */}
@@ -74,11 +79,14 @@ export default function Database() {
             <tbody className="divide-y divide-slate-800/50">
               {data.history.map((row, i) => (
                 <tr key={i} className="hover:bg-slate-900/50 transition">
-                  <td className="px-6 py-3 whitespace-nowrap">{formatTime(row.started_at)}</td>
+                  <td className="px-6 py-3 whitespace-nowrap">{formatDateTime(row.started_at)}</td>
                   <td className="px-6 py-3">
                     <span className="px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 uppercase">{row.event_type}</span>
                   </td>
-                  <td className="px-6 py-3 font-semibold text-white">{row.title}</td>
+                  <td className="px-6 py-3">
+                    <div className="font-semibold text-white">{row.title}</div>
+                    <div className="text-[11px] text-slate-500 mt-1">{row.segment || row.block_type || '--'}</div>
+                  </td>
                   <td className="px-6 py-3 text-slate-500 font-mono text-xs">{row.asset_path ? row.asset_path.split('/').pop() : '--'}</td>
                 </tr>
               ))}
@@ -90,9 +98,10 @@ export default function Database() {
           <table className="w-full text-left text-sm text-slate-300">
             <thead className="bg-slate-900 sticky top-0 border-b border-slate-800 shadow-md">
               <tr>
-                <th className="px-6 py-4 font-bold text-slate-400 w-1/4">Tipo Memoria</th>
-                <th className="px-6 py-4 font-bold text-slate-400 w-1/2">Valore</th>
-                <th className="px-6 py-4 font-bold text-slate-400 w-1/4">Creazione</th>
+                <th className="px-6 py-4 font-bold text-slate-400 w-1/5">Tipo Memoria</th>
+                <th className="px-6 py-4 font-bold text-slate-400 w-2/5">Sintesi</th>
+                <th className="px-6 py-4 font-bold text-slate-400 w-2/5">Valore</th>
+                <th className="px-6 py-4 font-bold text-slate-400 w-1/5">Creazione</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50">
@@ -101,8 +110,19 @@ export default function Database() {
                   <td className="px-6 py-3">
                     <span className="px-2.5 py-1 rounded-full bg-purple-900/30 border border-purple-500/30 text-[10px] font-bold text-purple-300 uppercase">{row.memory_type}</span>
                   </td>
-                  <td className="px-6 py-3 font-semibold text-white">{row.value}</td>
-                  <td className="px-6 py-3 whitespace-nowrap text-slate-400">{formatTime(row.created_at)}</td>
+                  <td className="px-6 py-3 text-sm text-slate-300 align-top">{row.value_summary || '--'}</td>
+                  <td className="px-6 py-3 align-top">
+                    {row.value_is_json ? (
+                      <pre className="max-w-[520px] overflow-auto rounded-lg border border-slate-800 bg-slate-950/80 p-3 text-[11px] leading-5 text-slate-300 whitespace-pre-wrap">
+                        {row.value_pretty}
+                      </pre>
+                    ) : (
+                      <div className="max-w-[520px] whitespace-pre-wrap text-sm font-semibold text-white">
+                        {row.value}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-3 whitespace-nowrap text-slate-400 align-top">{formatDateTime(row.created_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -138,7 +158,7 @@ export default function Database() {
                       <span className={`px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase ${statusColor}`}>{row.status}</span>
                       {row.error && <div className="text-[10px] text-red-400 mt-2 font-mono">{row.error}</div>}
                     </td>
-                    <td className="px-6 py-3 text-slate-400">{formatTime(row.updated_at)}</td>
+                    <td className="px-6 py-3 text-slate-400">{formatDateTime(row.updated_at)}</td>
                   </tr>
                 )
               })}

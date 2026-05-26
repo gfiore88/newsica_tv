@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Radio, Calendar, Wrench, Database, Activity, RefreshCw } from 'lucide-react'
+import { Radio, Calendar, Wrench, Database, Activity, RefreshCw, MonitorPlay } from 'lucide-react'
 
 export default function AdminLayout() {
   const [state, setState] = useState({ status: 'OFFLINE' })
+  const [chatStatus, setChatStatus] = useState({ video_id: '', is_running: false })
   const location = useLocation()
 
   useEffect(() => {
@@ -18,6 +19,24 @@ export default function AdminLayout() {
     }
     fetchState()
     const interval = setInterval(fetchState, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    const fetchChatStatus = async () => {
+      try {
+        const res = await fetch('/api/chat/status')
+        if (res.ok) {
+          const data = await res.json()
+          setChatStatus({
+            video_id: data.video_id || '',
+            is_running: Boolean(data.is_running),
+          })
+        }
+      } catch (err) {}
+    }
+    fetchChatStatus()
+    const interval = setInterval(fetchChatStatus, 15000)
     return () => clearInterval(interval)
   }, [])
 
@@ -38,6 +57,10 @@ export default function AdminLayout() {
     { path: '/tools', icon: Wrench, label: 'Strumenti Editoriali' },
     { path: '/database', icon: Database, label: 'Registro Storico' },
   ]
+
+  const embedUrl = chatStatus.video_id
+    ? `https://www.youtube.com/embed/${chatStatus.video_id}?autoplay=1&mute=0&enablejsapi=1`
+    : null
 
   return (
     <div className="flex h-screen bg-slate-900 text-slate-100 overflow-hidden">
@@ -106,6 +129,39 @@ export default function AdminLayout() {
             )}
           </div>
         </header>
+
+        <div className="shrink-0 border-b border-slate-800 bg-slate-950/80 px-6 py-3">
+          <div className="max-w-7xl mx-auto flex items-center gap-4">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-400 min-w-[170px]">
+              <MonitorPlay size={14} className="text-red-400" />
+              Player Persistente
+            </div>
+            <div className="relative h-24 w-44 overflow-hidden rounded-lg border border-slate-700 bg-black shadow-inner shrink-0">
+              {embedUrl ? (
+                <iframe
+                  key={chatStatus.video_id}
+                  className="absolute inset-0 h-full w-full"
+                  src={embedUrl}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-[11px] text-slate-500">
+                  Nessuna live YouTube rilevata
+                </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-slate-200 truncate">
+                {state.current_title || 'Nessun contenuto in onda'}
+              </div>
+              <div className="text-xs text-slate-400 truncate">
+                {chatStatus.video_id ? `Video ID: ${chatStatus.video_id}` : 'Apri la pagina Live per i controlli completi della regia'}
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Page Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-slate-900 to-slate-950">

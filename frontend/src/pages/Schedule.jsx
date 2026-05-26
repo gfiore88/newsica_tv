@@ -1,11 +1,27 @@
 import React from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Calendar as CalendarIcon, Music, Newspaper, Goal, Heart, CloudLightning } from 'lucide-react'
+import { Calendar as CalendarIcon } from 'lucide-react'
 
 export default function Schedule() {
   const { state } = useOutletContext()
 
   const schedule = state.schedule || []
+
+  const normalizeTitle = (title) => {
+    if (!title) return ''
+    return title
+      .replace(/\s+-\s+Parte\s+\d+$/i, '')
+      .replace(/\s+-\s+Completo$/i, '')
+      .trim()
+      .toLowerCase()
+  }
+
+  const normalizedCurrentTitle = normalizeTitle(state.current_title)
+  const normalizedTitleCounts = schedule.reduce((acc, item) => {
+    const key = normalizeTitle(item.title)
+    acc[key] = (acc[key] || 0) + 1
+    return acc
+  }, {})
 
   const badges = {
     'music_only': { label: '🎵 Musica', bg: 'bg-indigo-950/50 text-indigo-300 border-indigo-800/50' },
@@ -45,9 +61,13 @@ export default function Schedule() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4 pb-6">
           {schedule.map((item, idx) => {
-            const isActive = (item.title === state.current_title) || 
-                             (state.current_title && state.current_title.startsWith(item.title)) || 
-                             (state.scheduled_slot && item.time === state.scheduled_slot)
+            const normalizedItemTitle = normalizeTitle(item.title)
+            const hasUniqueTitleMatch =
+              normalizedCurrentTitle &&
+              normalizedCurrentTitle === normalizedItemTitle &&
+              normalizedTitleCounts[normalizedItemTitle] === 1
+            const isScheduledSlotActive = state.scheduled_slot && item.time === state.scheduled_slot
+            const isActive = Boolean(isScheduledSlotActive || (!state.scheduled_slot && hasUniqueTitleMatch))
             
             const badge = badges[item.type] || { label: '📦 Altro', bg: 'bg-slate-900 text-slate-300 border-slate-700' }
 
