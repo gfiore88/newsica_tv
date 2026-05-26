@@ -10,6 +10,8 @@ import json
 import signal
 import subprocess
 import time
+import numpy as np
+import soundfile as sf
 from schedule_generator import get_current_schedule, generate_schedule
 from newsica.storage.repositories.ai_music_jobs_repository import enqueue_job
 from newsica.audio.ai_music_runtime import resolve_ace_step_python
@@ -410,6 +412,44 @@ def _manual_prompt_payload(character_id, title, brief):
     return content_data
 
 
+def _combine_manual_event_audio(generated_files, output_path):
+    audio_parts = sorted(
+        [
+            str(path)
+            for path in generated_files
+            if os.path.basename(str(path)).startswith("audio_part")
+            and str(path).endswith(".wav")
+            and os.path.exists(path)
+        ]
+    )
+    if not audio_parts:
+        return None
+
+    combined = []
+    sample_rate = None
+    pause_samples = None
+    for idx, part_path in enumerate(audio_parts):
+        data, sr = sf.read(part_path, dtype="float32")
+        if data.ndim > 1:
+            data = np.mean(data, axis=1)
+        if sample_rate is None:
+            sample_rate = sr
+            pause_samples = np.zeros(int(sample_rate * 0.3), dtype=np.float32)
+        elif sr != sample_rate:
+            raise RuntimeError(
+                f"Sample rate incoerente tra i segmenti manuali: {sr} != {sample_rate}"
+            )
+        if idx > 0 and pause_samples is not None:
+            combined.append(pause_samples)
+        combined.append(data)
+
+    if not combined or sample_rate is None:
+        return None
+
+    sf.write(output_path, np.concatenate(combined, axis=0), sample_rate)
+    return output_path
+
+
 def _generate_manual_event(character_id, title, brief):
     total_start = time.perf_counter()
     format_map = {item["id"]: item for item in _build_manual_event_formats()}
@@ -457,6 +497,13 @@ def _generate_manual_event(character_id, title, brief):
         if str(path).endswith("audio.wav"):
             audio_file = str(path)
             break
+    if not audio_file:
+        combined_path = _combine_manual_event_audio(
+            generated_files,
+            os.path.join(TMP_DIR, "audio.wav"),
+        )
+        if combined_path:
+            audio_file = combined_path
     if not audio_file or not os.path.exists(audio_file):
         return {
             "status": "ERROR",
