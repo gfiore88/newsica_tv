@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
+from newsica.storage.repositories import decision_log_repository
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 RUNTIME_DIR = BASE_DIR / "runtime"
@@ -16,11 +17,16 @@ def audit_log_file():
 def log_decision(agent_name: str, decision: str, level: str = "INFO"):
     """
     Registra una decisione di alto livello presa da un agente in un log leggibile.
+    Da oggi scrive anche sul database SQLite (decision_logs).
     
     :param agent_name: Il nome dell'agente o del componente (es. "EditorialDirector", "DirectorAgent")
     :param decision: La descrizione della decisione o dell'azione intrapresa
     :param level: Il livello di importanza (es. INFO, WARNING, SCHEDULING, MUSIC)
     """
+    # 1. Scrittura su SQLite (nuovo standard)
+    decision_log_repository.add(agent_name, level, decision)
+
+    # 2. Scrittura su file legacy (audit_trail.log)
     log_file = audit_log_file()
     log_file.parent.mkdir(parents=True, exist_ok=True)
     

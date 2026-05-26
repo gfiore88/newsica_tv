@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from newsica.audio.ai_music_runtime import schedule_rotation_fill_job
+from newsica.storage.repositories import broadcast_history_repository
+
 
 
 @dataclass
@@ -45,6 +47,12 @@ class PlayJingleEvent(PlayoutEvent):
     def execute(self, context: PlayoutExecutionContext) -> None:
         if self.next_segment:
             context.state_updater(current_segment=self.next_segment)
+        
+        slot = context.state_reader().get("scheduled_slot", "")
+        broadcast_history_repository.add(
+            slot_time=slot, block_type="jingle", title=self.label, 
+            segment=self.next_segment or "jingle", event_type="PlayJingleEvent", asset_path=self.file
+        )
         context.playout.queue_jingle(self.file, self.label)
 
 
@@ -73,6 +81,13 @@ class PlayVoiceMixEvent(PlayoutEvent):
             "current_title": f"{self.title} - {self.segment}",
             "breaking_news_available": False,
         }
+        
+        slot = context.state_reader().get("scheduled_slot", "")
+        broadcast_history_repository.add(
+            slot_time=slot, block_type=self.character, title=self.title, 
+            segment=self.segment, event_type="PlayVoiceMixEvent", asset_path=self.voice_file
+        )
+        
         if self.music_file:
             context.playout.mix_and_queue(self.music_file, self.voice_file, block_info)
         else:
@@ -104,6 +119,13 @@ class PlayVoiceEvent(PlayoutEvent):
             "current_title": f"{self.title} - {self.segment}",
             "breaking_news_available": False,
         }
+        
+        slot = context.state_reader().get("scheduled_slot", "")
+        broadcast_history_repository.add(
+            slot_time=slot, block_type=self.character, title=self.title, 
+            segment=self.segment, event_type="PlayVoiceEvent", asset_path=self.file
+        )
+        
         context.playout.queue_pcm_from_file(self.file, block_info)
         if self.next_segment:
             context.state_updater(current_segment=self.next_segment)
@@ -124,6 +146,12 @@ class PlayMusicEvent(PlayoutEvent):
         self.theme = theme
 
     def execute(self, context: PlayoutExecutionContext) -> None:
+        slot = context.state_reader().get("scheduled_slot", "")
+        broadcast_history_repository.add(
+            slot_time=slot, block_type="music", title=self.label, 
+            segment="rotation", event_type="PlayMusicEvent", asset_path=self.file
+        )
+        
         context.playout.queue_single_music_track(self.file)
         if self.trigger_ai_music_gen:
             schedule_rotation_fill_job("director", theme=self.theme)
@@ -137,6 +165,12 @@ class PlayMusicDeadlineEvent(PlayoutEvent):
         self.label = label
 
     def execute(self, context: PlayoutExecutionContext) -> None:
+        if self.file:
+            slot = context.state_reader().get("scheduled_slot", "")
+            broadcast_history_repository.add(
+                slot_time=slot, block_type="music", title=self.label,
+                segment="rotation_deadline", event_type="PlayMusicDeadlineEvent", asset_path=self.file
+            )
         context.playout.queue_music_track(self.deadline)
 
 
