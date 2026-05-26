@@ -128,6 +128,16 @@ export default function Tools() {
     } catch (e) {}
   }
 
+  const formatAiJobLabel = (job) => {
+    const shortId = (job.id || '').substring(0, 8)
+    const status = (job.status || '').toLowerCase()
+    const title = (job.generated_title || '').trim()
+    if ((status === 'done' || status === 'completed') && title) {
+      return `${title} (${shortId})`
+    }
+    return shortId
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
       <div className="glass rounded-xl p-6 border border-amber-900/50 flex flex-col lg:col-span-2">
@@ -298,7 +308,7 @@ export default function Tools() {
           ) : (
             aiJobs.map((job) => (
               <div key={job.id} className="bg-slate-900/80 px-3 py-2 rounded border border-slate-800 flex justify-between items-center">
-                <span className="text-[11px] text-slate-300 font-mono truncate mr-2">{job.id.substring(0, 8)}</span>
+                <span className="text-[11px] text-slate-300 truncate mr-2">{formatAiJobLabel(job)}</span>
                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
                   (job.status === 'completed' || job.status === 'done') ? 'bg-green-900/30 text-green-400' :
                   job.status === 'failed' ? 'bg-red-900/30 text-red-400' :
