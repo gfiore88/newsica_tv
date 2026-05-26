@@ -153,7 +153,28 @@ class DirectorAgent:
         Gestisce la progressione interna dei segmenti del blocco attivo (legacy per podcast e fallback).
         """
         current_segment = state.get("current_segment", "init")
-        
+
+        # Guard per slot passati forzati via FORCE_INDEX:
+        # Se lo scheduled_slot è diverso dal wallclock corrente, significa che stiamo
+        # riproducendo uno slot passato su override manuale. Una volta esaurita la coda
+        # eventi del PlayoutPlanner (arriviamo qui), torniamo al palinsesto normale.
+        # Senza questo check, schedule_deadline() restituisce "domani" per orari passati,
+        # generando un loop musicale infinito che non torna mai al wallclock.
+        wallclock_slot = get_wallclock_schedule_key()
+        scheduled_slot = state.get("scheduled_slot", "")
+        if scheduled_slot and wallclock_slot and scheduled_slot != wallclock_slot:
+            if scheduled_slot < wallclock_slot:
+                print(
+                    f"⏰ [DirectorAgent] Slot forzato passato '{title}' ({scheduled_slot}) completato. "
+                    f"Ripristino palinsesto corrente ({wallclock_slot})."
+                )
+                log_decision(
+                    "DirectorAgent",
+                    f"Slot forzato passato '{title}' ({scheduled_slot}) completato. Torno al wallclock ({wallclock_slot}).",
+                    level="PLAYOUT",
+                )
+                return TriggerNextBlockEvent()
+
         if block_type == "music_only":
             return TriggerNextBlockEvent()
             
@@ -176,6 +197,7 @@ class DirectorAgent:
                     return PlayMusicDeadlineEvent(music_file, deadline, "music_rotation")
                     
             return PlaySilenceFallbackEvent(2)
+
 
 
 
