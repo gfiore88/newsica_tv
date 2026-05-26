@@ -117,9 +117,11 @@ HTML_TEMPLATE = """
                             </span>
                             🔴 Live Monitor
                         </h2>
-                        <span class="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-bold uppercase tracking-wider">
-                            DIRECT RTMP
-                        </span>
+                        <div id="live-monitor-badge">
+                            <span class="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-bold uppercase tracking-wider">
+                                DIRECT RTMP
+                            </span>
+                        </div>
                     </div>
                     <div class="relative w-full aspect-video rounded-lg overflow-hidden border border-slate-700 bg-black/40 shadow-inner">
                         <iframe id="youtube-live-player" class="absolute inset-0 w-full h-full" 
@@ -147,15 +149,15 @@ HTML_TEMPLATE = """
                 <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-center">
                     <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-4">Controlli di Regia</h2>
                     <div class="flex flex-wrap gap-3">
-                        <button onclick="sendCommand('FORCE_NEXT')" class="flex-1 bg-slate-700 hover:bg-slate-600 transition p-3 rounded-lg font-semibold text-sm flex justify-center items-center">
+                        <button onclick="sendCommandSafe('FORCE_NEXT', 'Vuoi davvero saltare il blocco attuale?')" class="flex-1 bg-slate-700 hover:bg-slate-600 transition p-3 rounded-lg font-semibold text-sm flex justify-center items-center">
                             ⏭️ Salta Blocco
                         </button>
-                        <button onclick="sendCommand('REGEN_SCHEDULE')" class="flex-1 bg-slate-700 hover:bg-slate-600 transition p-3 rounded-lg font-semibold text-sm flex justify-center items-center">
+                        <button onclick="sendCommandSafe('REGEN_SCHEDULE', 'Vuoi davvero rigenerare l\'intero palinsesto?')" class="flex-1 bg-slate-700 hover:bg-slate-600 transition p-3 rounded-lg font-semibold text-sm flex justify-center items-center">
                             📅 Rigenera Palinsesto
                         </button>
                     </div>
                     <div class="mt-3 grid grid-cols-2 gap-3">
-                        <button onclick="sendCommand('TRIGGER_BREAKING_NEWS')" class="col-span-1 bg-red-600/80 hover:bg-red-500 transition border border-red-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                        <button onclick="sendCommandSafe('TRIGGER_BREAKING_NEWS', 'ATTENZIONE: Stai per interrompere il programma per una Breaking News. Confermi?')" class="col-span-1 bg-red-600/80 hover:bg-red-500 transition border border-red-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
                             🚨 BREAKING NEWS
                         </button>
                         <button id="chime-btn" onclick="triggerChime()" class="col-span-1 bg-amber-600/80 hover:bg-amber-500 transition border border-amber-500 p-3 rounded-lg font-bold text-sm flex justify-center items-center shadow-[0_0_15px_rgba(251,191,36,0.3)]">
@@ -163,10 +165,10 @@ HTML_TEMPLATE = """
                         </button>
                     </div>
                     <div class="mt-3 grid grid-cols-2 gap-3">
-                        <button onclick="sendCommand('TRIGGER_SPECIAL_BROADCAST_TEST')" class="col-span-1 bg-rose-700/90 hover:bg-rose-600 transition border border-rose-500 p-3 rounded-lg font-bold text-xs md:text-sm flex justify-center items-center shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+                        <button onclick="sendCommandSafe('TRIGGER_SPECIAL_BROADCAST_TEST', 'Vuoi simulare un\'edizione straordinaria di test?')" class="col-span-1 bg-rose-700/90 hover:bg-rose-600 transition border border-rose-500 p-3 rounded-lg font-bold text-xs md:text-sm flex justify-center items-center shadow-[0_0_15px_rgba(244,63,94,0.3)]">
                             🔴 ED. STRAORDINARIA (TEST)
                         </button>
-                        <button onclick="sendCommand('REVOKE_SPECIAL_BROADCAST')" class="col-span-1 bg-emerald-700/80 hover:bg-emerald-600 transition border border-emerald-500 p-3 rounded-lg font-bold text-xs md:text-sm flex justify-center items-center shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                        <button onclick="sendCommandSafe('REVOKE_SPECIAL_BROADCAST', 'Vuoi interrompere la breaking news e ripristinare il palinsesto normale?')" class="col-span-1 bg-emerald-700/80 hover:bg-emerald-600 transition border border-emerald-500 p-3 rounded-lg font-bold text-xs md:text-sm flex justify-center items-center shadow-[0_0_15px_rgba(16,185,129,0.3)]">
                             🟢 RIPRISTINA PALINSESTO
                         </button>
                     </div>
@@ -209,14 +211,24 @@ HTML_TEMPLATE = """
             <!-- Colonna Destra (Stretta) -->
             <div class="lg:col-span-1 space-y-6">
                 <!-- Card In Onda Ora -->
-                <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between h-48">
+                <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between">
                     <div>
                         <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">In Onda Ora</h2>
-                        <div id="current-title" class="text-2xl font-bold text-white mb-2 truncate">Caricamento...</div>
+                        <div id="current-title" class="text-xl md:text-2xl font-bold text-white mb-1 truncate">Caricamento...</div>
+                        <div id="current-segment" class="text-sm text-purple-300 font-medium mb-3 truncate">--</div>
                     </div>
-                    <div class="flex items-center text-sm text-slate-400 mt-4">
+                    
+                    <div class="border-t border-slate-700/50 pt-3 mt-2">
+                        <h3 class="text-[10px] uppercase tracking-widest text-slate-500 font-semibold mb-1">Prossimo</h3>
+                        <div class="flex items-center justify-between">
+                            <span id="next-block" class="text-sm font-semibold text-slate-300 truncate">--</span>
+                            <span id="next-start" class="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400 font-mono">--:--</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center text-xs text-slate-500 mt-4">
                         <span id="current-block" class="px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 mr-2 border border-blue-800">--</span>
-                        Aggiornato: <span id="last-update" class="ml-1">--</span>
+                        Agg.: <span id="last-update" class="ml-1">--</span>
                     </div>
                 </div>
 
@@ -301,6 +313,23 @@ HTML_TEMPLATE = """
                                 🚀 Inietta nell'Overlay
                             </button>
                         </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card AI Music Jobs -->
+                <div class="glass rounded-xl p-6 shadow-xl flex flex-col justify-between mt-6">
+                    <div>
+                        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-700/50">
+                            <h2 class="text-xs uppercase tracking-widest text-slate-400 font-semibold flex items-center">
+                                🎵 AI Music Worker
+                            </h2>
+                            <span id="ai-music-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 border border-slate-600 font-bold uppercase tracking-wider">
+                                Checking...
+                            </span>
+                        </div>
+                        <div id="ai-music-jobs-container" class="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                            <div class="text-xs text-slate-500 text-center py-4">Nessun job in corso.</div>
                         </div>
                     </div>
                 </div>
@@ -475,8 +504,29 @@ HTML_TEMPLATE = """
                 }
 
                 document.getElementById('current-title').innerText = data.current_title || '--';
+                
+                const segmentEl = document.getElementById('current-segment');
+                if (segmentEl) segmentEl.innerText = data.current_segment || '--';
+                
+                const nextBlockEl = document.getElementById('next-block');
+                if (nextBlockEl) nextBlockEl.innerText = data.next_block || '--';
+                
+                const nextStartEl = document.getElementById('next-start');
+                if (nextStartEl) nextStartEl.innerText = data.next_start || '--';
+                
                 document.getElementById('current-block').innerText = data.current_block || '--';
                 document.getElementById('last-update').innerText = data.last_update ? new Date(data.last_update).toLocaleTimeString() : '--';
+                
+                const liveBadge = document.getElementById('live-monitor-badge');
+                if (data.breaking_news_available) {
+                    if (liveBadge) {
+                        liveBadge.innerHTML = '<span class="animate-pulse px-3 py-1 rounded bg-red-600 text-white font-black uppercase tracking-widest shadow-[0_0_15px_rgba(239,68,68,0.8)] border border-red-400">🚨 BREAKING NEWS ATTIVA</span>';
+                    }
+                } else {
+                    if (liveBadge) {
+                        liveBadge.innerHTML = '<span class="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-bold uppercase tracking-wider">DIRECT RTMP</span>';
+                    }
+                }
 
                 renderSchedule(data.schedule, data.current_title, data.scheduled_slot);
             } catch (err) {
@@ -529,9 +579,41 @@ HTML_TEMPLATE = """
         }
 
         async function selectBlock(index, title) {
-            if (confirm(`Vuoi forzare la messa in onda immediata del blocco "${title}"?`)) {
-                await sendCommand(`FORCE_INDEX_${index}`);
-            }
+            sendCommandSafe(`FORCE_INDEX_${index}`, `Vuoi forzare la messa in onda immediata del blocco "${title}"?`);
+        }
+
+        let pendingConfirmAction = null;
+        
+        function sendCommandSafe(cmd, msg) {
+            const modal = document.getElementById('safe-confirm-modal');
+            const content = document.getElementById('safe-confirm-content');
+            document.getElementById('safe-confirm-msg').innerText = msg;
+            
+            pendingConfirmAction = () => {
+                closeConfirmModal();
+                sendCommand(cmd);
+            };
+            
+            document.getElementById('safe-confirm-yes').onclick = pendingConfirmAction;
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+        
+        function closeConfirmModal() {
+            const modal = document.getElementById('safe-confirm-modal');
+            const content = document.getElementById('safe-confirm-content');
+            
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                pendingConfirmAction = null;
+            }, 200);
         }
 
         async function sendCommand(cmd) {
@@ -551,10 +633,10 @@ HTML_TEMPLATE = """
 
         async function restartService(service) {
             const labels = { director: 'regia', stream: 'stream', all: 'regia e stream' };
-            if (!confirm(`Riavviare ${labels[service] || service}?`)) {
-                return;
-            }
-
+            sendCommandSafe(`RESTART_SERVICE_${service}`, `Riavviare ${labels[service] || service}?`);
+        }
+        
+        async function executeRestartService(service) {
             logMsg(`Restart servizio: ${service}`);
             try {
                 const res = await fetch('/api/service/restart', {
@@ -848,25 +930,40 @@ HTML_TEMPLATE = """
                 const data = await res.json();
                 if (data.status === "OK") {
                     const container = document.getElementById('telegram-voices-container');
-                    const voices = data.voices.filter(v => v.status === "pending");
+                    const voices = data.voices.filter(v => v.status === "pending" || v.status === "approved" || v.status === "played");
+                    const displayVoices = voices.reverse().slice(0, 15);
+                    
+                    const currentHash = JSON.stringify(displayVoices.map(v => v.id + v.status));
+                    if (window._lastTelegramVoicesHash === currentHash) {
+                        return; // Nessun cambiamento, evita re-render
+                    }
+                    window._lastTelegramVoicesHash = currentHash;
                     
                     if (voices.length === 0) {
                         container.innerHTML = `<div class="text-xs text-slate-500 text-center py-4">Nessun vocale in attesa.</div>`;
                         return;
                     }
                     
-                    container.innerHTML = voices.map(v => `
-                        <div class="p-3 rounded-lg border border-slate-700 bg-slate-900/40 hover:bg-slate-900/60 transition space-y-2">
+                    container.innerHTML = displayVoices.map(v => {
+                        const isApproved = v.status === 'approved';
+                        const isPlayed = v.status === 'played';
+                        const isPending = v.status === 'pending';
+                        const bgClass = isApproved ? 'bg-emerald-900/30 border-emerald-500/40' : (isPlayed ? 'bg-slate-900/20 border-slate-700/50 opacity-60' : 'bg-slate-900/50 border-slate-700 hover:bg-slate-800/80');
+                        
+                        return `
+                        <div class="p-3 rounded-lg border transition space-y-2 ${bgClass}">
                             <div class="flex items-center justify-between">
                                 <span class="text-xs font-bold text-slate-200">👤 ${v.author_first_name} ${v.author_username ? '(@' + v.author_username + ')' : ''}</span>
-                                <span class="text-[10px] text-slate-500">${v.duration}s</span>
+                                <div class="flex items-center gap-2">
+                                    ${isApproved ? '<span class="text-[9px] uppercase tracking-wider text-emerald-400 font-bold bg-emerald-900/50 px-1.5 py-0.5 rounded">Approvato</span>' : ''}
+                                    ${isPlayed ? '<span class="text-[9px] uppercase tracking-wider text-slate-400 font-bold bg-slate-800 px-1.5 py-0.5 rounded">In Onda</span>' : ''}
+                                    <span class="text-[10px] text-slate-500">${v.duration}s</span>
+                                </div>
                             </div>
                             <div class="flex items-center gap-2">
-                                <audio controls class="w-full h-8 rounded bg-slate-800 text-xs">
-                                    <source src="/api/telegram-voices/play/${v.id}" type="audio/wav">
-                                    Il tuo browser non supporta l'audio.
-                                </audio>
+                                <audio controls src="/api/telegram-voices/play/${v.id}" class="w-full h-8 rounded bg-slate-800 text-xs" ${isPlayed ? 'preload="none"' : ''}></audio>
                             </div>
+                            ${isPending ? `
                             <div class="flex gap-2">
                                 <button onclick="approveVoice('${v.id}')" 
                                     class="flex-1 bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold text-[11px] py-1 px-2 rounded transition">
@@ -876,9 +973,9 @@ HTML_TEMPLATE = """
                                     class="flex-1 bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] py-1 px-2 rounded transition">
                                     Rifiuta
                                 </button>
-                            </div>
+                            </div>` : ''}
                         </div>
-                    `).join('');
+                    `}).join('');
                 }
             } catch (e) {
                 console.error("Errore recupero vocali Telegram", e);
@@ -924,12 +1021,55 @@ HTML_TEMPLATE = """
             }
         }
 
+        async function fetchAiMusicJobs() {
+            try {
+                const res = await fetch('/api/ai_music_jobs');
+                const data = await res.json();
+                if (data.status === "OK") {
+                    const container = document.getElementById('ai-music-jobs-container');
+                    const badge = document.getElementById('ai-music-badge');
+                    
+                    const activeJobs = data.jobs.filter(j => j.status === 'pending' || j.status === 'running');
+                    
+                    const currentHash = JSON.stringify(activeJobs.map(j => j.id + j.status));
+                    if (window._lastAiMusicJobsHash === currentHash) {
+                        return;
+                    }
+                    window._lastAiMusicJobsHash = currentHash;
+                    
+                    if (activeJobs.length > 0) {
+                        badge.className = "animate-pulse text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold uppercase tracking-wider";
+                        badge.innerText = "Lavorando";
+                        
+                        container.innerHTML = activeJobs.map(j => `
+                            <div class="p-2 rounded border border-slate-700 bg-slate-900/60 flex justify-between items-center text-xs">
+                                <div class="truncate flex-1 pr-2">
+                                    <strong class="text-slate-300">${j.job_type}</strong>
+                                    <span class="text-slate-500 block text-[10px] truncate">${j.theme || 'Generico'}</span>
+                                </div>
+                                <span class="px-2 py-1 rounded text-[10px] font-bold ${j.status === 'running' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}">
+                                    ${j.status.toUpperCase()}
+                                </span>
+                            </div>
+                        `).join('');
+                    } else {
+                        badge.className = "text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-400 border border-slate-600 font-bold uppercase tracking-wider";
+                        badge.innerText = "In attesa";
+                        container.innerHTML = `<div class="text-xs text-slate-500 text-center py-4">Nessun job attivo.</div>`;
+                    }
+                }
+            } catch (e) {
+                console.error("Errore fetch AI music jobs", e);
+            }
+        }
+
         setInterval(fetchState, 3000);
         setInterval(fetchAuditLog, 5000);
         setInterval(fetchMusicMode, 15000);
         setInterval(fetchChatStatus, 3000);
         setInterval(fetchTelegramVoices, 5000);
         setInterval(fetchTelegramStatus, 3000);
+        setInterval(fetchAiMusicJobs, 5000);
         
         // Initial fetch
         fetchState();
@@ -938,8 +1078,30 @@ HTML_TEMPLATE = """
         fetchChatStatus();
         fetchTelegramVoices();
         fetchTelegramStatus();
+        fetchAiMusicJobs();
 
     </script>
+    <!-- Modal di Conferma Sicura -->
+    <div id="safe-confirm-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeConfirmModal()"></div>
+        <div class="glass relative rounded-2xl shadow-2xl w-full max-w-sm border border-slate-600 p-6 transform transition-all scale-95 opacity-0" id="safe-confirm-content">
+            <div class="flex items-center justify-center mb-4">
+                <div class="bg-rose-500/20 p-3 rounded-full border border-rose-500/30">
+                    <span class="text-3xl">⚠️</span>
+                </div>
+            </div>
+            <h3 class="text-lg font-bold text-white text-center mb-2">Conferma Azione</h3>
+            <p id="safe-confirm-msg" class="text-sm text-slate-300 text-center mb-6 leading-relaxed">Sei sicuro?</p>
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 px-4 py-2.5 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 font-semibold transition">
+                    Annulla
+                </button>
+                <button id="safe-confirm-yes" class="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold shadow-lg transition">
+                    Conferma
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
 """
@@ -1458,6 +1620,15 @@ def get_telegram_status():
         "status": "OK",
         "is_running": is_running
     })
+
+@app.route('/api/ai_music_jobs', methods=['GET'])
+def get_ai_music_jobs():
+    from newsica.audio.ai_music_jobs import list_jobs
+    try:
+        jobs = list_jobs()
+        return jsonify({"status": "OK", "jobs": jobs})
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)})
 
 
 def check_singleton(name):

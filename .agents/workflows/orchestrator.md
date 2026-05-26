@@ -16,6 +16,8 @@ Sei l'Agente Coordinatore per il progetto NewsicaTV. Il tuo obiettivo è garanti
 
 > ⚠️ **REGOLA AUREA DEL POST-REFACTORING (SELF-ANNEALING)**: Quando gli agenti eseguono un refactoring (A, B, o C che sia), o una qualsiasi modifica al codice, IL TASK NON È FINITO AL RESTART. L'Orchestratore DEVE verificare i test funzionali, analizzare sempre `tmp/director.log` e `tmp/stream.log` DOPO il riavvio per assicurarsi che la modifica non abbia rotto nulla a runtime. Se i log mostrano crash, il fix deve essere applicato immediatamente. Nessun refactor può essere considerato chiuso a scatola chiusa senza leggere l'output del restart nei log.
 
+> 🔄 **REGOLA DI RIAVVIO DASHBOARD**: Quando si apportano modifiche al codice della Dashboard Web (`src/dashboard.py` o relativi template/JS interni), questa DEVE ESSERE SEMPRE RIAVVIATA immediatamente dopo la modifica, altrimenti i cambiamenti non saranno visibili a schermo. Il comando di riavvio raccomandato è killare il processo e rieseguire lo startup (es: `pkill -f "src/dashboard.py" ; ./manage.sh start` oppure killando e avviando lo `screen` appropriato).
+
 ---
 
 ## Pipeline Standard di Progetto
