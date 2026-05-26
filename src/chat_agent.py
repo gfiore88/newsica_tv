@@ -187,30 +187,38 @@ def trigger_music_request_generation():
         print(f"❌ [CHAT REQUEST] Impossibile avviare il generatore musicale: {e}")
 
 
-def maybe_enqueue_music_request(author, message):
+def maybe_enqueue_music_request(author, message, video_id):
     intent = extract_music_request(message)
     if not intent:
         return None
 
+    import uuid
     from newsica.storage.repositories.chat_music_requests_repository import enqueue_request
 
+    req_id = str(uuid.uuid4())[:8]
+    prompt = intent.get("custom_brief") or message
+
     request = enqueue_request(
+        id=req_id,
+        video_id=video_id,
         author=author,
-        message=message,
-        theme=intent.get("theme"),
-        custom_brief=intent.get("custom_brief"),
+        prompt=prompt,
     )
+    if not request:
+        print(f"❌ [CHAT REQUEST] Errore nell'accodamento della richiesta nel database.")
+        return None
+
     job, created = enqueue_job(
         job_type="chat_request",
         source="chat",
         request_id=request["id"],
-        theme=request.get("theme"),
-        custom_brief=request.get("custom_brief"),
+        theme=intent.get("theme"),
+        custom_brief=intent.get("custom_brief"),
         dedupe_key=request["id"],
     )
     print(
         f"🎵 [CHAT REQUEST] Richiesta musicale acquisita da {author}: "
-        f"theme={request.get('theme') or 'freeform'} | text='{message}'"
+        f"theme={intent.get('theme') or 'freeform'} | text='{message}'"
     )
     if created:
         print(f"🧾 [CHAT REQUEST] Job musica accodato: {job['id']}")
@@ -490,7 +498,7 @@ def write_latest_chat(author, message, is_moderator=False, is_owner=False, is_sp
         print(f"❌ Errore nella scrittura di latest_chat in DB: {e}")
 
 
-def run_api_loop(api_key, chat_id):
+def run_api_loop(api_key, chat_id, video_id):
     print("🚀 [CHAT AGENT] Avvio loop di lettura chat tramite YouTube Data API v3.")
     url = "https://www.googleapis.com/youtube/v3/liveChat/messages"
     next_page_token = None
@@ -547,10 +555,10 @@ def run_api_loop(api_key, chat_id):
                             # Se è il proprietario o moderatore, bypassiamo filtri di moderazione
                             if is_own or is_mod:
                                 write_latest_chat(author, message, is_moderator=is_mod, is_owner=is_own, is_sponsor=is_spon)
-                                maybe_enqueue_music_request(author, message)
+                                maybe_enqueue_music_request(author, message, video_id)
                             elif not is_moderated(author, message):
                                 write_latest_chat(author, message, is_moderator=is_mod, is_owner=is_own, is_sponsor=is_spon)
-                                maybe_enqueue_music_request(author, message)
+                                maybe_enqueue_music_request(author, message, video_id)
                                 
                 time.sleep(polling_interval)
             elif r.status_code == 403:
@@ -587,10 +595,10 @@ def run_pytchat_loop(video_id):
                 if message:
                     if is_own or is_mod:
                         write_latest_chat(author, message, is_moderator=is_mod, is_owner=is_own, is_sponsor=is_spon)
-                        maybe_enqueue_music_request(author, message)
+                        maybe_enqueue_music_request(author, message, video_id)
                     elif not is_moderated(author, message):
                         write_latest_chat(author, message, is_moderator=is_mod, is_owner=is_own, is_sponsor=is_spon)
-                        maybe_enqueue_music_request(author, message)
+                        maybe_enqueue_music_request(author, message, video_id)
             time.sleep(1)
         except Exception as e:
             print(f"❌ [PYTCHAT] Eccezione nel loop: {e}")
@@ -637,7 +645,7 @@ def main():
             chat_id = get_active_live_chat_id(YOUTUBE_API_KEY, video_id)
             if chat_id:
                 print(f"✅ [CHAT AGENT] Trovato activeLiveChatId: {chat_id}")
-                success = run_api_loop(YOUTUBE_API_KEY, chat_id)
+                success = run_api_loop(YOUTUBE_API_KEY, chat_id, video_id)
                 if success is not False:
                     # Se esce con successo, o errore temporaneo, ripartiamo da capo
                     time.sleep(10)
