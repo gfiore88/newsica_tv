@@ -3,6 +3,7 @@ import shutil
 import time
 import json
 from pathlib import Path
+from newsica.storage.repositories import asset_slots_repository
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent
 RUNTIME_DIR = BASE_DIR / "runtime"
@@ -67,6 +68,15 @@ class SystemAdminAgent:
             return None, "L'asset è già in preparazione."
             
         preparing_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Logging to SQLite
+        asset_slots_repository.upsert_slot(
+            slot_time=slot_time,
+            character=character or "unknown",
+            title=title or "unknown",
+            status="preparing"
+        )
+        
         return preparing_dir, "OK"
         
     def commit_assets(self, slot_time, audio_files, preparing_dir, metadata=None):
@@ -88,6 +98,18 @@ class SystemAdminAgent:
             if ready_dir.exists():
                 shutil.rmtree(ready_dir)
             preparing_dir.rename(ready_dir)
+            
+            # Logging to SQLite
+            manifest_path_str = str(ready_dir / "manifest.json") if metadata else None
+            asset_slots_repository.upsert_slot(
+                slot_time=slot_time,
+                character=metadata.get("character", "unknown") if metadata else "unknown",
+                title=metadata.get("title", "unknown") if metadata else "unknown",
+                status="ready",
+                ready_dir=str(ready_dir),
+                manifest_path=manifest_path_str
+            )
+            
             print(f"✅ [SystemAdminAgent] Asset per {slot_time} pronto in {ready_dir.name}")
         except Exception as e:
             self.fail_slot(slot_time, preparing_dir, error=str(e))
@@ -100,9 +122,31 @@ class SystemAdminAgent:
         failed_dir = ASSETS_DIR / "failed" / slot_id
         
         if failed_dir.exists():
-            shutil.rmtree(failed_dir)
+                shutil.rmtree(failed_dir)
         if preparing_dir.exists():
             preparing_dir.rename(failed_dir)
+            
+        # Try to guess character from slot_time or just use 'unknown' 
+        # (It will just update if the record exists because of conflict resolution)
+        asset_slots_repository.update_status(
+            slot_time=slot_time,
+            character="unknown", 
+            status="failed",
+            error=error
+        )
+        # We might have the actual character in DB, we could do an UPDATE WHERE slot_time = ...
+        # Since character is part of the UNIQUE constraint, let's provide a dedicated update
+        # Actually, let's use a simpler DB update that ignores character if we don't know it.
+        # Wait, the schema is UNIQUE(slot_time, character). If we don't know character here, 
+        # let's just do a manual update or pass character down.
+        # For now, let's just do it cleanly by updating the error field where slot_time matches.
+        try:
+            from newsica.storage.database import get_connection
+            with get_connection() as conn:
+                conn.execute("UPDATE asset_slots SET status = 'failed', error = ? WHERE slot_time = ?", (error, slot_time))
+                conn.commit()
+        except Exception as e:
+            print(f"⚠️ Errore db in fail_slot fallback: {e}")
             
     def cleanup_old_assets(self, max_age_hours=24):
         """Pulisce le vecchie directory per evitare l'esaurimento dello spazio."""

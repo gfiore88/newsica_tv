@@ -13,6 +13,16 @@ ACTIVE_STATUSES = {"pending", "running"}
 RUNNING_STALE_SECONDS = int(os.getenv("AI_MUSIC_RUNNING_STALE_SECONDS", "3600"))
 
 
+import datetime
+import os
+import time
+import uuid
+from newsica.storage.repositories import ai_music_jobs_repository
+
+ACTIVE_STATUSES = {"pending", "running"}
+RUNNING_STALE_SECONDS = int(os.getenv("AI_MUSIC_RUNNING_STALE_SECONDS", "3600"))
+
+
 def _parse_job_timestamp(value: str | None) -> datetime.datetime | None:
     if not value:
         return None
@@ -22,75 +32,46 @@ def _parse_job_timestamp(value: str | None) -> datetime.datetime | None:
         return None
 
 
-def _expire_stale_running_jobs(payload: dict) -> bool:
+def _expire_stale_running_jobs() -> None:
     if RUNNING_STALE_SECONDS <= 0:
-        return False
-
-    changed = False
+        return
+        
+    running_jobs = ai_music_jobs_repository.get_running_jobs()
     now = datetime.datetime.now()
-    for job in payload.get("jobs", []):
-        if job.get("status") != "running":
-            continue
+    
+    for job in running_jobs:
         started_at = _parse_job_timestamp(job.get("started_at")) or _parse_job_timestamp(job.get("created_at"))
         if not started_at:
             continue
         age_seconds = (now - started_at).total_seconds()
         if age_seconds <= RUNNING_STALE_SECONDS:
             continue
-        job["status"] = "failed"
-        job["failed_at"] = now.strftime("%Y-%m-%dT%H:%M:%S")
-        job["error"] = (
+            
+        error_msg = (
             f"Job running orfano auto-chiuso dopo {int(age_seconds)}s "
             f"(soglia {RUNNING_STALE_SECONDS}s)"
         )[:400]
-        changed = True
-    return changed
+        
+        ai_music_jobs_repository.update_job(
+            job["id"], 
+            status="failed", 
+            failed_at=now.strftime("%Y-%m-%dT%H:%M:%S"),
+            error=error_msg
+        )
 
 
-def _load_payload(path: Path = JOBS_FILE) -> dict:
-    if not path.exists():
-        return {"jobs": []}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {"jobs": []}
-    if not isinstance(data, dict):
-        return {"jobs": []}
-    jobs = data.get("jobs")
-    if not isinstance(jobs, list):
-        data["jobs"] = []
-    if _expire_stale_running_jobs(data):
-        _save_payload(data, path)
-    return data
-
-
-def _save_payload(payload: dict, path: Path = JOBS_FILE) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-
-def list_jobs(path: Path = JOBS_FILE) -> list[dict]:
-    return list(_load_payload(path).get("jobs", []))
+def list_jobs() -> list[dict]:
+    _expire_stale_running_jobs()
+    return ai_music_jobs_repository.get_all_jobs()
 
 
 def find_active_job(
     *,
     job_type: str | None = None,
     dedupe_key: str | None = None,
-    path: Path = JOBS_FILE,
 ) -> dict | None:
-    for job in _load_payload(path).get("jobs", []):
-        if job.get("status") not in ACTIVE_STATUSES:
-            continue
-        if job_type and job.get("job_type") != job_type:
-            continue
-        if dedupe_key and job.get("dedupe_key") != dedupe_key:
-            continue
-        return dict(job)
-    return None
+    _expire_stale_running_jobs()
+    return ai_music_jobs_repository.get_active_job(job_type, dedupe_key)
 
 
 def enqueue_job(
@@ -101,57 +82,43 @@ def enqueue_job(
     custom_brief: str | None = None,
     request_id: str | None = None,
     dedupe_key: str | None = None,
-    path: Path = JOBS_FILE,
 ) -> tuple[dict, bool]:
-    payload = _load_payload(path)
+    _expire_stale_running_jobs()
+    
     if dedupe_key:
-        for job in payload.get("jobs", []):
-            if job.get("status") in ACTIVE_STATUSES and job.get("dedupe_key") == dedupe_key:
-                return dict(job), False
+        active = ai_music_jobs_repository.get_active_job(dedupe_key=dedupe_key)
+        if active:
+            return active, False
 
-    job = {
-        "id": f"aijob_{int(time.time() * 1000)}",
-        "job_type": job_type,
-        "source": source,
-        "theme": theme,
-        "custom_brief": custom_brief,
-        "request_id": request_id,
-        "dedupe_key": dedupe_key,
-        "status": "pending",
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-    }
-    payload["jobs"].append(job)
-    _save_payload(payload, path)
-    return job, True
+    job_id = f"aijob_{int(time.time() * 1000)}"
+    new_job = ai_music_jobs_repository.add_job(
+        id=job_id,
+        job_type=job_type,
+        source=source,
+        theme=theme,
+        custom_brief=custom_brief,
+        request_id=request_id,
+        dedupe_key=dedupe_key,
+        status="pending"
+    )
+    return new_job, True
 
 
-def get_next_pending_job(path: Path = JOBS_FILE) -> dict | None:
-    for job in _load_payload(path).get("jobs", []):
-        if job.get("status") == "pending":
-            return dict(job)
-    return None
+def get_next_pending_job() -> dict | None:
+    _expire_stale_running_jobs()
+    return ai_music_jobs_repository.get_next_pending_job()
 
 
 def update_job(
     job_id: str,
-    *,
-    path: Path = JOBS_FILE,
     **updates,
 ) -> dict | None:
-    payload = _load_payload(path)
-    for job in payload.get("jobs", []):
-        if job.get("id") != job_id:
-            continue
-        job.update(updates)
-        _save_payload(payload, path)
-        return dict(job)
-    return None
+    return ai_music_jobs_repository.update_job(job_id, **updates)
 
 
-def mark_running(job_id: str, path: Path = JOBS_FILE) -> dict | None:
-    return update_job(
+def mark_running(job_id: str) -> dict | None:
+    return ai_music_jobs_repository.update_job(
         job_id,
-        path=path,
         status="running",
         started_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
     )
@@ -162,20 +129,18 @@ def mark_done(
     *,
     audio_path: str | None = None,
     title: str | None = None,
-    path: Path = JOBS_FILE,
 ) -> dict | None:
-    payload = {"status": "done", "completed_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    updates = {"status": "done", "completed_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     if audio_path:
-        payload["audio_path"] = audio_path
+        updates["audio_path"] = audio_path
     if title:
-        payload["generated_title"] = title
-    return update_job(job_id, path=path, **payload)
+        updates["generated_title"] = title
+    return ai_music_jobs_repository.update_job(job_id, **updates)
 
 
-def mark_failed(job_id: str, error: str, path: Path = JOBS_FILE) -> dict | None:
-    return update_job(
+def mark_failed(job_id: str, error: str) -> dict | None:
+    return ai_music_jobs_repository.update_job(
         job_id,
-        path=path,
         status="failed",
         failed_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
         error=error[:400],

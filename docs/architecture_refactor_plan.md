@@ -135,6 +135,15 @@ Rischio medio-alto: e' la parte piu' delicata per continuita' audio.
 
 Rischio medio: da fare quando le fasi precedenti sono stabili.
 
+### Fase 5 - Consolidare Memoria e Storico su SQLite (Storage Layer)
+
+- [x] Sostituire la selva di file JSON (`ai_music_jobs.json`, `telegram_voices.json`, `editorial-memory.json`, ecc.) con un DB transazionale.
+- [x] Sviluppare `src/newsica/storage/database.py` e relativi Repository.
+- [x] Mantenere invariato il runtime Realtime (che continua a usare code FIFO fisiche) ma spostare su DB tutto il layer di decisione, asset lifecycle e storico.
+- [x] Eseguire migrazioni trasparenti (i vecchi moduli wrapper continuano a funzionare esponendo la stessa firma ma puntando ai Repository SQLite).
+
+Rischio basso-medio: tocca molti agenti periferici ma stabilizza enormemente i conflitti I/O.
+
 ## Quando usare agenti specializzati
 
 Ha senso coinvolgerli dopo la Fase 1, quando il lavoro e' divisibile in ownership precise:

@@ -45,14 +45,14 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 ## MVP 3 — La "Svolta": Regia AI e Identità Editoriale
 **Obiettivo:** Trasformare la playlist automatica in una vera web TV con regia autonoma, interruzioni dinamiche e format strutturati.
 - [x] **Refactor Architetturale Modulare**: separare character, prompt, fonti, TTS, audio playout, overlay e runtime director in moduli dedicati mantenendo entrypoint compatibili. Fasi 1-2 avviate: character registry, prompt esterni, fallback editoriali, config TTS centralizzata e sources modulari.
-- [ ] **Musica AI Locale**: generare brani brevi da 30-60 secondi con tool open-source locali, depositarli in `assets/ai_music/` e alternarli ai brani manuali senza dipendenze cloud.
+- [x] **Musica AI Locale**: generare brani brevi da 30-60 secondi con tool open-source locali, depositarli in `assets/ai_music/` e alternarli ai brani manuali senza dipendenze cloud. (Risolto tramite ACE-Step worker)
 - [x] **Regia AI Centrale (`DirectorAgent`)**: Refactoring del motore per gestire palinsesti veri e mantenere un file di stato in tempo reale (`runtime/on-air-state.json`).
 - [x] **Protocollo Unico PlayoutEvent nel Director (ADR 0039)**: completata la migrazione del `DirectorAgent` e del loop live a un solo modello a eventi, rimuovendo il bridge legacy a `dict` che perdeva side effect come la schedulazione automatica della musica AI.
 - [x] **Breaking News Interrupt**: Agente `BreakingNewsAgent` con calcolo score urgenza, capace di interrompere il programma attuale, mandare ultim'ora con jingle speciale e riprendere.
-- [ ] **Palinsesto Giornaliero Automatico**: Generazione schedulata ogni mattina (file `.md` e `.json`) per definire rubriche diverse a seconda dell'orario (mattina veloce, sera riepilogo, ecc.).
-- [ ] **Identità Speaker (Personaggi AI)**: Creazione di voci AI ricorrenti per categoria (Nora: news, Leo: sport, Mia: musica, Regia: neutra) senza imitare persone reali (per policy YouTube).
+- [x] **Palinsesto Giornaliero Automatico**: Generazione schedulata ogni mattina (file `.md` e `.json`) per definire rubriche diverse a seconda dell'orario (mattina veloce, sera riepilogo, ecc.). (Implementato in `EditorialDirectorAgent`)
+- [x] **Identità Speaker (Personaggi AI)**: Creazione di voci AI ricorrenti per categoria (Nora: news, Leo: sport, Mia: musica, Regia: neutra) senza imitare persone reali (per policy YouTube). (Completato con config JSON e reference audio Kokoro/Chatterbox)
 - [x] **Ticker Intelligente**: Pipeline autonoma (`NewsCollector -> TickerSummarizer`) per visualizzare in basso "Ultime, Meteo, Prossimo blocco" senza limiti statici.
-- [ ] **Fact-Check e Log Fonti**: Filtro anti-allucinazione interno prima del broadcast per verificare data, fonte, duplicati e veridicità.
+- [x] **Fact-Check e Log Fonti**: Filtro anti-allucinazione interno prima del broadcast per verificare data, fonte, duplicati e veridicità. (Implementato in `fact_checker.py`)
 
 ## MVP 3.5 — Chatterbox & Podcast a Due Voci
 **Obiettivo:** Introdurre rubriche speciali a due voci (podcast) interamente autogestite localmente e a costo zero tramite Chatterbox Multilingual, con fallback Kokoro.
@@ -68,11 +68,11 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 ## MVP 4 — Automazione Editoriale e Strumenti di Regia
 **Obiettivo:** Aumentare il ritmo e l'affidabilità con controlli locali e archiviazione.
 - [x] **Pre-Produzione Multi-Agente (ADR 0027)**: Introdotto Content Buffer, PreparationAgent e classi Agente (Strategist, Integrator, SysAdmin) per disaccoppiare generazione e messa in onda.
-- [ ] **Riepilogo in 60 Secondi**: Bollettino orario rotante (es. "Mondo in 60 secondi", "Sport Flash") per dare la sensazione di un canale live costante.
-- [ ] **Ingestion Musica Esterna a Licenza Verificata**: Studiare e integrare una API gratuita per scaricare brani in `assets/music/`, con filtro licenze, download consentito e manifest per ogni file.
+- [x] **Riepilogo in 60 Secondi**: Bollettino orario rotante (es. "Mondo in 60 secondi", "Sport Flash") per dare la sensazione di un canale live costante. (Implementato in `flash_60s.md`)
+- [x] **Ingestion Musica Esterna a Licenza Verificata**: Studiare e integrare una API gratuita per scaricare brani in `assets/music/`, con filtro licenze, download consentito e manifest per ogni file. (Implementato via Jamendo CC-BY in `chart_importer.py`)
 - [ ] **Generatore Automatico di Format**: Agente che settimanalmente propone nuovi format documentati (durata, tono, jingle) da inserire in scaletta.
-- [ ] **Dashboard Locale di Controllo**: Pannello per monitorare stato stream, uso risorse, buffer news e con pulsanti di interazione ("forza breaking", "salta").
-- [ ] **Archivio Automatico Contenuti**: Salvataggio strutturato (log, script, audio) per data per mantenere traccia di tutto ciò che va in onda.
+- [x] **Dashboard Locale di Controllo**: Pannello per monitorare stato stream, uso risorse, buffer news e con pulsanti di interazione ("forza breaking", "salta").
+- [x] **Archivio Automatico Contenuti & Memoria SQLite (ADR 0044)**: Tutto lo storico (log decisioni, history di messa in onda, code AI Jobs, moderazione Telegram e storico editoriale) è stato migrato su DB SQLite (`runtime/newsica.db`), risolvendo race conditions ed espandendo la memoria all'infinito rispetto ai file JSON.
 
 ## MVP 5 — Espansione dei Formati (Crescita)
 **Obiettivo:** Riciclare i contenuti H24 per massimizzare l'audience.

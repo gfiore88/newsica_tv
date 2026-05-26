@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from newsica.audio.ai_music_runtime import schedule_rotation_fill_job
 from newsica.storage.repositories import broadcast_history_repository
+from newsica.storage.repositories import asset_slots_repository
 
 
 
@@ -87,6 +88,7 @@ class PlayVoiceMixEvent(PlayoutEvent):
             slot_time=slot, block_type=self.character, title=self.title, 
             segment=self.segment, event_type="PlayVoiceMixEvent", asset_path=self.voice_file
         )
+        asset_slots_repository.update_status(slot_time=slot, character=self.character, status="played")
         
         if self.music_file:
             context.playout.mix_and_queue(self.music_file, self.voice_file, block_info)
@@ -125,6 +127,7 @@ class PlayVoiceEvent(PlayoutEvent):
             slot_time=slot, block_type=self.character, title=self.title, 
             segment=self.segment, event_type="PlayVoiceEvent", asset_path=self.file
         )
+        asset_slots_repository.update_status(slot_time=slot, character=self.character, status="played")
         
         context.playout.queue_pcm_from_file(self.file, block_info)
         if self.next_segment:
