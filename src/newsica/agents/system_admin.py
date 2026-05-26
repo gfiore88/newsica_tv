@@ -33,6 +33,45 @@ class SystemAdminAgent:
             return False
         return True
 
+    def _archive_dir(self, source_dir: Path, suffix: str):
+        if not source_dir.exists():
+            return
+        stale_dir = ASSETS_DIR / "archive" / f"{source_dir.name}_{suffix}_{int(time.time())}"
+        if stale_dir.exists():
+            shutil.rmtree(stale_dir)
+        source_dir.rename(stale_dir)
+
+    def reconcile_asset_slots(self, schedule_data):
+        """Ripulisce record DB e cartelle non più coerenti col palinsesto corrente."""
+        for row in asset_slots_repository.list_slots():
+            slot_time = row.get("slot_time")
+            character = row.get("character")
+            title = row.get("title")
+            status = row.get("status")
+            slot_id = slot_time.replace(":", "")
+            ready_dir = ASSETS_DIR / "ready" / slot_id
+            preparing_dir = ASSETS_DIR / "preparing" / slot_id
+            expected = schedule_data.get(slot_time)
+
+            if not expected or expected.get("type") != character or expected.get("title") != title:
+                if preparing_dir.exists():
+                    self._archive_dir(preparing_dir, "schedule_mismatch")
+                if ready_dir.exists():
+                    self._archive_dir(ready_dir, "schedule_mismatch")
+                asset_slots_repository.delete_slot(slot_time, character)
+                print(
+                    f"♻️ [SystemAdminAgent] Ripulito asset slot stale {slot_time} "
+                    f"({character}/{title}) non coerente col palinsesto attuale."
+                )
+                continue
+
+            if status == "preparing" and not preparing_dir.exists():
+                asset_slots_repository.delete_slot(slot_time, character)
+                print(
+                    f"♻️ [SystemAdminAgent] Ripulito preparing orfano per {slot_time} "
+                    f"({character}/{title}). Verrà rigenerato al prossimo ciclo."
+                )
+
     def prepare_slot(self, slot_time, character=None, title=None):
         """Prepara la cartella per l'asset in generazione e previene le race condition."""
         slot_id = slot_time.replace(":", "")
@@ -56,10 +95,7 @@ class SystemAdminAgent:
             age = time.time() - preparing_dir.stat().st_mtime
             is_empty = not any(preparing_dir.iterdir())
             if age > self.STALE_PREPARING_SECONDS or (is_empty and age > 5 * 60):
-                stale_dir = ASSETS_DIR / "archive" / f"{slot_id}_preparing_stale_{int(time.time())}"
-                if stale_dir.exists():
-                    shutil.rmtree(stale_dir)
-                preparing_dir.rename(stale_dir)
+                self._archive_dir(preparing_dir, "preparing_stale")
                 print(f"♻️ [SystemAdminAgent] Preparazione stale per {slot_time}. Archivio e rigenero.")
             else:
                 return None, "L'asset è già in preparazione."
@@ -68,8 +104,9 @@ class SystemAdminAgent:
             return None, "L'asset è già in preparazione."
             
         preparing_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Logging to SQLite
+        asset_slots_repository.delete_slot(slot_time, character or "unknown")
         asset_slots_repository.upsert_slot(
             slot_time=slot_time,
             character=character or "unknown",

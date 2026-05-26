@@ -22,6 +22,25 @@ def upsert_slot(slot_time: str, character: str, title: str, status: str, ready_d
     except Exception as e:
         print(f"⚠️ Errore db in asset_slots upsert_slot: {e}")
 
+def list_slots():
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM asset_slots ORDER BY slot_time ASC, id ASC')
+            return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"⚠️ Errore db in asset_slots list_slots: {e}")
+        return []
+
+def delete_slot(slot_time: str, character: str):
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM asset_slots WHERE slot_time = ? AND character = ?', (slot_time, character))
+            conn.commit()
+    except Exception as e:
+        print(f"⚠️ Errore db in asset_slots delete_slot: {e}")
+
 def update_status(slot_time: str, character: str, status: str, error: str = None):
     now = datetime.datetime.now().isoformat()
     try:

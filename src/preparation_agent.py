@@ -89,8 +89,13 @@ def run_loop():
         try:
             # 1. Manutenzione di sistema
             sysadmin.cleanup_old_assets(max_age_hours=24)
-            
-            # 2. Controllo palinsesto
+
+            # 2. Riconciliazione stato asset con il palinsesto corrente
+            from schedule_generator import get_current_schedule
+            schedule_data = get_current_schedule()
+            sysadmin.reconcile_asset_slots(schedule_data)
+
+            # 3. Controllo palinsesto
             future_slots = get_future_slots(hours_ahead=2)
             
             for slot_time, block_info in future_slots:

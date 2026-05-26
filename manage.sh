@@ -86,6 +86,7 @@ function do_status() {
   check_status "Ticker Agent" "src/ticker_agent.py"
   check_status "Overlay Agent" "src/overlay_agent.py"
   check_status "Chime Agent" "src/hourly_chime_agent.py"
+  check_status "Preparation Agent" "src/preparation_agent.py"
   check_status "AI Music Worker" "src/newsica/audio/ai_music_worker.py"
   check_status "Breaking News Daemon" "src/breaking_news_agent.py --daemon"
   check_status "Telegram Agent" "src/telegram_agent.py"
@@ -122,7 +123,7 @@ function do_stop() {
   fi
 
   # Invia SIGTERM ordinato a Regia, Dashboard e Stream
-  local targets=("src/director.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py")
+  local targets=("src/director.py" "src/preparation_agent.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py")
   if [ "$exclude_telegram" = false ]; then
     targets+=("src/telegram_agent.py")
   fi
