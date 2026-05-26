@@ -143,6 +143,16 @@ def build_restart_recovery_state(existing_state, wallclock_slot, now_ts):
     if not scheduled_slot or scheduled_slot != wallclock_slot:
         return {"status": "OFFLINE", "last_update": now_ts}
 
+    schedule_block = {}
+    try:
+        schedule_block = scheduler.get_current_schedule().get(scheduled_slot, {}) or {}
+    except Exception:
+        schedule_block = {}
+
+    scheduled_block_type = schedule_block.get("type") or current_block
+    scheduled_title = schedule_block.get("title") or state.get("current_title", "")
+    scheduled_theme = schedule_block.get("theme")
+
     # Dopo un restart non possiamo riprendere un file PCM a metà voce.
     # I blocchi music_only vengono re-inizializzati (OFFLINE) perché il Director
     # per questo tipo di blocco non produce mai audio da _progress_current_block()
@@ -150,20 +160,27 @@ def build_restart_recovery_state(existing_state, wallclock_slot, now_ts):
     # Con OFFLINE, _initialize_scheduled_block() viene chiamato e il PlayoutPlanner
     # mette subito in coda un PlayMusicDeadlineEvent → audio immediato al restart.
     recovered = dict(state)
-    if current_block == "music_only":
-        recovered["status"] = "OFFLINE"
-        recovered["last_update"] = now_ts
-        return recovered
-
     current_segment = recovered.get("current_segment", "") or ""
     is_music_segment = (
         current_segment == "music_rotation_until_deadline"
         or current_segment.startswith("music_")
     )
+
+    if scheduled_block_type == "music_only" and not is_music_segment:
+        recovered["status"] = "OFFLINE"
+        recovered["last_update"] = now_ts
+        return recovered
+
     if not is_music_segment:
         recovered["current_segment"] = "music_rotation_until_deadline"
-        if current_block == "podcast":
+        if scheduled_block_type == "podcast":
             recovered["podcast_played"] = True
+
+    if is_music_segment:
+        recovered["current_block"] = scheduled_block_type
+        recovered["current_title"] = scheduled_title
+        recovered["theme"] = scheduled_theme
+
     recovered["last_update"] = now_ts
     return recovered
 

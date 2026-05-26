@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from director import build_restart_recovery_state
 
@@ -38,12 +39,16 @@ class TestDirectorRestartRecovery(unittest.TestCase):
             "per forzare la re-inizializzazione immediata senza silenzio.",
         )
 
-    def test_restart_during_music_only_music_rotation_goes_offline(self):
+    @patch("schedule_generator.get_current_schedule")
+    def test_restart_during_music_only_music_rotation_realigns_to_schedule(self, mock_schedule):
         """
         Anche con current_segment='music_rotation' (già in rotazione musicale),
-        music_only va OFFLINE: il PlayoutPlanner calcola una deadline fresca
-        invece di riprendere un vecchio PlayMusicDeadlineEvent già scaduto.
+        al restart riallineiamo titolo/tipo/tema al palinsesto dello slot
+        corrente invece di preservare uno stato stantio.
         """
+        mock_schedule.return_value = {
+            "13:30": {"title": "Baila Newsica", "type": "music_only", "theme": "latin/reggaeton/dembow"}
+        }
         state = {
             "status": "ON_AIR",
             "current_block": "music_only",
@@ -58,7 +63,10 @@ class TestDirectorRestartRecovery(unittest.TestCase):
             "2026-05-26T14:15:00",
         )
 
-        self.assertEqual(recovered["status"], "OFFLINE")
+        self.assertEqual(recovered["status"], "ON_AIR")
+        self.assertEqual(recovered["current_block"], "music_only")
+        self.assertEqual(recovered["current_title"], "Baila Newsica")
+        self.assertEqual(recovered["theme"], "latin/reggaeton/dembow")
 
     # --- Test pre-esistenti (invariati) ---
 
@@ -117,6 +125,30 @@ class TestDirectorRestartRecovery(unittest.TestCase):
         )
 
         self.assertEqual(recovered["current_segment"], "music_rotation_until_deadline")
+
+    @patch("schedule_generator.get_current_schedule")
+    def test_restart_realigns_stale_immediate_state_to_current_slot_show(self, mock_schedule):
+        mock_schedule.return_value = {
+            "17:00": {"title": "Rock & Roll Arena", "type": "music_only", "theme": "rock"}
+        }
+        state = {
+            "status": "ON_AIR",
+            "current_block": "wellness",
+            "current_title": "Pausa Benessere",
+            "current_segment": "music_rotation_until_deadline",
+            "scheduled_slot": "17:00",
+        }
+
+        recovered = build_restart_recovery_state(
+            state,
+            "17:00",
+            "2026-05-26T18:12:35",
+        )
+
+        self.assertEqual(recovered["status"], "ON_AIR")
+        self.assertEqual(recovered["current_block"], "music_only")
+        self.assertEqual(recovered["current_title"], "Rock & Roll Arena")
+        self.assertEqual(recovered["theme"], "rock")
 
     def test_restart_with_stale_slot_goes_offline(self):
         state = {
