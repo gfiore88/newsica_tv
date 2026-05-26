@@ -10,6 +10,7 @@ from pathlib import Path
 
 from newsica.audio.music_library import MusicLibrary
 from newsica.storage.repositories.chat_music_requests_repository import consume_next_ready_request
+from newsica.storage.repositories import broadcast_history_repository
 from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, read_music_mode
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 from newsica.config.paths import BASE_DIR, TMP_DIR
@@ -600,16 +601,44 @@ class AudioPlayout:
 
         print(f"✅ Blocco audio caricato nella coda ({count} chunks).")
 
-    def get_random_music(self, exclude=None, theme=None):
+    def get_random_music(self, exclude=None, theme=None, remember=True):
         if theme is None:
             try:
                 from newsica.broadcast.runtime_state import get_current_state
                 theme = get_current_state().get("theme")
             except Exception:
                 pass
-        return self.music_library.get_random_track(exclude=exclude, theme=theme)
+        return self.music_library.get_random_track(exclude=exclude, theme=theme, remember=remember)
 
-    def queue_music_track(self, deadline):
+    def remember_music_track(self, music_file):
+        if not music_file:
+            return
+        try:
+            self.music_library.remember_track(music_file)
+        except Exception:
+            pass
+
+    def _log_music_history(self, *, slot_time, label, event_type, segment, music_file):
+        if not slot_time or not music_file:
+            return
+        broadcast_history_repository.add(
+            slot_time=slot_time,
+            block_type="music",
+            title=label,
+            segment=segment,
+            event_type=event_type,
+            asset_path=music_file,
+        )
+
+    def queue_music_track(
+        self,
+        deadline,
+        preferred_music_file=None,
+        history_slot=None,
+        history_label="music_rotation",
+        history_event_type="PlayMusicDeadlineEvent",
+        history_segment="rotation_deadline",
+    ):
         if isinstance(deadline, str):
             deadline = datetime.datetime.fromisoformat(deadline)
             
@@ -639,7 +668,7 @@ class AudioPlayout:
                     playback_voice_file = str(voice_file)
                 
                 # Sottofondo musicale per il vocale
-                bg_music = self.get_random_music(exclude=self.last_music_file)
+                bg_music = self.get_random_music(exclude=self.last_music_file, remember=False)
                 if not bg_music:
                     print("⚠️ Nessun sottofondo musicale trovato per il vocale Telegram. Lo riproduco liscio.")
                     self.queue_pcm_from_file(playback_voice_file, {
@@ -683,6 +712,7 @@ class AudioPlayout:
                 
                 # Processo di riproduzione con musica + sidechain
                 print(f"🎵 Sottofondo musicale: {os.path.basename(bg_music)}")
+                self.remember_music_track(bg_music)
                 process = subprocess.Popen(
                     self._music_decode_command(bg_music),
                     stdout=subprocess.PIPE,
@@ -789,8 +819,11 @@ class AudioPlayout:
                     print(f"⚠️ Richiesta musicale {request.get('id')} pronta ma senza file valido: {music_file}")
                 music_file = None
 
+        if not music_file and preferred_music_file and Path(preferred_music_file).exists():
+            music_file = preferred_music_file
+
         if not music_file:
-            music_file = self.get_random_music(exclude=self.last_music_file)
+            music_file = self.get_random_music(exclude=self.last_music_file, remember=False)
             
         if not music_file:
             time.sleep(1)
@@ -802,6 +835,14 @@ class AudioPlayout:
             return
             
         self.last_music_file = music_file
+        self.remember_music_track(music_file)
+        self._log_music_history(
+            slot_time=history_slot,
+            label=history_label,
+            event_type=history_event_type,
+            segment=history_segment,
+            music_file=music_file,
+        )
         
         metadata = self.build_music_metadata(music_file)
         
@@ -897,7 +938,14 @@ class AudioPlayout:
         self._safe_wait(process, name="music_track_process", timeout=0.2)
         self.current_process = None
 
-    def queue_single_music_track(self, music_file=None):
+    def queue_single_music_track(
+        self,
+        music_file=None,
+        history_slot=None,
+        history_label="music_rotation",
+        history_event_type="PlayMusicEvent",
+        history_segment="rotation",
+    ):
         if self.is_interrupted():
             return
 
@@ -924,7 +972,7 @@ class AudioPlayout:
                     playback_voice_file = str(voice_file)
                 
                 # Sottofondo musicale per il vocale
-                bg_music = self.get_random_music(exclude=self.last_music_file)
+                bg_music = self.get_random_music(exclude=self.last_music_file, remember=False)
                 if not bg_music:
                     print("⚠️ Nessun sottofondo musicale trovato per il vocale Telegram. Lo riproduco liscio.")
                     self.queue_pcm_from_file(playback_voice_file, {
@@ -968,6 +1016,7 @@ class AudioPlayout:
                 
                 # Processo di riproduzione con musica + sidechain
                 print(f"🎵 Sottofondo musicale: {os.path.basename(bg_music)}")
+                self.remember_music_track(bg_music)
                 process = subprocess.Popen(
                     self._music_decode_command(bg_music),
                     stdout=subprocess.PIPE,
@@ -1074,7 +1123,7 @@ class AudioPlayout:
                 music_file = None
 
         if not music_file:
-            music_file = self.get_random_music(exclude=self.last_music_file)
+            music_file = self.get_random_music(exclude=self.last_music_file, remember=False)
         if not music_file:
             time.sleep(1)
             return
@@ -1085,6 +1134,14 @@ class AudioPlayout:
             return
             
         self.last_music_file = music_file
+        self.remember_music_track(music_file)
+        self._log_music_history(
+            slot_time=history_slot,
+            label=history_label,
+            event_type=history_event_type,
+            segment=history_segment,
+            music_file=music_file,
+        )
         
         metadata = self.build_music_metadata(music_file)
         

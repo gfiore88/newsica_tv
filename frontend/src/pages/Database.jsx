@@ -3,24 +3,26 @@ import { Database as DbIcon, RefreshCw } from 'lucide-react'
 
 export default function Database() {
   const [activeTab, setActiveTab] = useState('history')
-  const [data, setData] = useState({ history: [], memory: [], assets: [] })
+  const [data, setData] = useState({ history: [], memory: [], assets: [], rotation: { recent_tracks: [], block_events: [], recent_window: 0 } })
   const [loading, setLoading] = useState(false)
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [histRes, memRes, assetsRes] = await Promise.all([
+      const [histRes, memRes, assetsRes, rotationRes] = await Promise.all([
         fetch('/api/db/history'),
         fetch('/api/db/memory'),
-        fetch('/api/db/assets')
+        fetch('/api/db/assets'),
+        fetch('/api/db/music-rotation')
       ])
-      const [hist, mem, assets] = await Promise.all([
-        histRes.json(), memRes.json(), assetsRes.json()
+      const [hist, mem, assets, rotation] = await Promise.all([
+        histRes.json(), memRes.json(), assetsRes.json(), rotationRes.json()
       ])
       setData({
         history: hist.data || [],
         memory: mem.data || [],
-        assets: assets.data || []
+        assets: assets.data || [],
+        rotation: rotation.data || { recent_tracks: [], block_events: [], recent_window: 0 }
       })
     } catch (e) {
       console.error(e)
@@ -56,6 +58,7 @@ export default function Database() {
              <button onClick={() => setActiveTab('history')} className={`px-4 py-2 text-sm font-bold uppercase tracking-wider rounded-lg transition ${activeTab === 'history' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Storico Trasmissioni</button>
              <button onClick={() => setActiveTab('memory')} className={`px-4 py-2 text-sm font-bold uppercase tracking-wider rounded-lg transition ${activeTab === 'memory' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Memoria Editoriale</button>
              <button onClick={() => setActiveTab('assets')} className={`px-4 py-2 text-sm font-bold uppercase tracking-wider rounded-lg transition ${activeTab === 'assets' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Stato Asset</button>
+             <button onClick={() => setActiveTab('rotation')} className={`px-4 py-2 text-sm font-bold uppercase tracking-wider rounded-lg transition ${activeTab === 'rotation' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Rotazione Musica</button>
            </div>
          </div>
          <button onClick={fetchData} className={`text-slate-400 hover:text-white p-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition ${loading ? 'animate-spin' : ''}`}>
@@ -84,8 +87,8 @@ export default function Database() {
                     <span className="px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 uppercase">{row.event_type}</span>
                   </td>
                   <td className="px-6 py-3">
-                    <div className="font-semibold text-white">{row.title}</div>
-                    <div className="text-[11px] text-slate-500 mt-1">{row.segment || row.block_type || '--'}</div>
+                    <div className="font-semibold text-white">{row.display_title || row.title}</div>
+                    <div className="text-[11px] text-slate-500 mt-1">{row.display_detail || row.segment || row.block_type || '--'}</div>
                   </td>
                   <td className="px-6 py-3 text-slate-500 font-mono text-xs">{row.asset_path ? row.asset_path.split('/').pop() : '--'}</td>
                 </tr>
@@ -164,6 +167,67 @@ export default function Database() {
               })}
             </tbody>
           </table>
+        )}
+
+        {activeTab === 'rotation' && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 p-6">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-800 bg-slate-900">
+                <div className="text-xs uppercase tracking-widest font-bold text-sky-400">Finestra Recente</div>
+                <div className="text-sm text-slate-400 mt-1">
+                  Ultimi {data.rotation.recent_window || 0} brani realmente mandati in onda bloccati dalla rotazione.
+                </div>
+              </div>
+              <div className="divide-y divide-slate-800/60">
+                {data.rotation.recent_tracks.length === 0 ? (
+                  <div className="px-5 py-8 text-sm text-slate-500">Nessuna history runtime disponibile.</div>
+                ) : (
+                  data.rotation.recent_tracks.map((track, i) => (
+                    <div key={`${track.path}-${i}`} className="px-5 py-4">
+                      <div className="text-sm font-semibold text-white">{track.display_title || track.filename}</div>
+                      <div className="text-[11px] text-slate-500 mt-1 font-mono break-all">{track.filename}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-800 bg-slate-900">
+                <div className="text-xs uppercase tracking-widest font-bold text-amber-400">Candidati Scartati</div>
+                <div className="text-sm text-slate-400 mt-1">
+                  Ultimi eventi in cui la rotazione ha escluso brani recenti prima di scegliere un’alternativa.
+                </div>
+              </div>
+              <div className="divide-y divide-slate-800/60">
+                {data.rotation.block_events.length === 0 ? (
+                  <div className="px-5 py-8 text-sm text-slate-500">Ancora nessun candidato escluso dalla finestra recente.</div>
+                ) : (
+                  data.rotation.block_events.map((event, i) => (
+                    <div key={`${event.timestamp}-${i}`} className="px-5 py-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-sm font-semibold text-white">{formatDateTime(event.timestamp)}</div>
+                        <div className="text-[11px] text-slate-500">
+                          {event.blocked_count} esclusi su {event.candidate_count} candidati
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-amber-300 mt-2 uppercase tracking-wider font-bold">
+                        Motivo: {event.reason} | finestra={event.recent_window}
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {event.blocked_tracks.map((track, idx) => (
+                          <div key={`${track.path}-${idx}`} className="rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2">
+                            <div className="text-sm text-slate-200">{track.display_title || track.filename}</div>
+                            <div className="text-[11px] text-slate-500 mt-1 font-mono break-all">{track.filename}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
       </div>

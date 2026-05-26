@@ -45,3 +45,4 @@
 | 42 | /orchestrator | ✅ Done | Hardening prompt Musica AI: lyrics senza placeholder e titolo sempre coerente con la lingua del brano con ADR 0038 |
 | 43 | /orchestrator | ✅ Done | History persistente anti-ripetizione per la rotazione musica live con ADR 0043 |
 | 44 | /orchestrator | ✅ Done | Ripristino post-migrazione DB: schema SQLite completato, compatibilità repository legacy, restart dashboard/regia e riattivazione agenti ticker/overlay/chime |
+| 45 | /orchestrator | ✅ Done | Diagnostica dashboard per rotazione musica: tab dedicata con finestra recente e candidati scartati, fix selezione dry-run e allineamento ADR 0043 |

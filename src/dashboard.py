@@ -22,6 +22,7 @@ from newsica.audio.music_mode import (
     write_music_mode,
 )
 from newsica.storage.database import get_connection
+from newsica.storage.repositories.audio_metadata_repository import get_metadata
 
 
 def _format_memory_value(raw_value):
@@ -62,6 +63,113 @@ def _format_memory_value(raw_value):
         "text": json.dumps(parsed, ensure_ascii=False, indent=2),
         "is_json": True,
         "summary": summary,
+    }
+
+
+def _resolve_track_display_title(asset_path):
+    if not asset_path:
+        return ""
+
+    try:
+        meta_row = get_metadata(os.path.realpath(asset_path))
+    except Exception:
+        meta_row = None
+
+    if meta_row:
+        artist = " ".join(str(meta_row.get("artist", "")).split())
+        title = " ".join(str(meta_row.get("title", "")).split())
+        if artist and title:
+            return f"{artist} - {title}"
+        if title:
+            return title
+        metadata = meta_row.get("metadata") or {}
+        meta_title = " ".join(str(metadata.get("title", "")).split())
+        if meta_title:
+            return meta_title
+
+    root, ext = os.path.splitext(asset_path)
+    if ext.lower() in {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"}:
+        sidecar_path = root + ".meta"
+        if os.path.exists(sidecar_path):
+            try:
+                payload = json.loads(open(sidecar_path, "r", encoding="utf-8").read())
+                sidecar_title = " ".join(str(payload.get("title", "")).split())
+                if sidecar_title:
+                    return sidecar_title
+            except Exception:
+                pass
+
+    fallback_title = os.path.splitext(os.path.basename(asset_path))[0].replace("_", " ").strip()
+    return " ".join(fallback_title.split())
+
+
+def _decorate_history_row(row):
+    item = dict(row)
+    item["display_title"] = item.get("title") or "--"
+    item["display_detail"] = item.get("segment") or item.get("block_type") or "--"
+
+    if item.get("block_type") == "music":
+        track_title = _resolve_track_display_title(item.get("asset_path"))
+        if track_title:
+            item["display_title"] = track_title
+        label = item.get("title") or ""
+        if label and label not in {"music_rotation", "fallback_non_pronto"}:
+            item["display_detail"] = label
+        elif item.get("segment"):
+            item["display_detail"] = item["segment"]
+
+    return item
+
+
+def _load_rotation_runtime():
+    history_path = os.path.join(RUNTIME_DIR, "music_rotation_history.json")
+    blocks_path = os.path.join(RUNTIME_DIR, "music_rotation_blocks.json")
+
+    try:
+        history_payload = json.loads(open(history_path, "r", encoding="utf-8").read()) if os.path.exists(history_path) else {}
+    except Exception:
+        history_payload = {}
+
+    try:
+        blocks_payload = json.loads(open(blocks_path, "r", encoding="utf-8").read()) if os.path.exists(blocks_path) else {}
+    except Exception:
+        blocks_payload = {}
+
+    recent_tracks = []
+    for track_path in history_payload.get("recent_tracks", []):
+        resolved = os.path.realpath(track_path)
+        recent_tracks.append({
+            "path": resolved,
+            "display_title": _resolve_track_display_title(resolved),
+            "filename": os.path.basename(resolved),
+        })
+
+    block_events = []
+    for entry in reversed(blocks_payload.get("events", [])):
+        blocked_tracks = []
+        for track_path in entry.get("blocked_tracks", []):
+            resolved = os.path.realpath(track_path)
+            if not os.path.exists(resolved):
+                continue
+            blocked_tracks.append({
+                "path": resolved,
+                "display_title": _resolve_track_display_title(resolved),
+                "filename": os.path.basename(resolved),
+            })
+        if not blocked_tracks:
+            continue
+        block_events.append({
+            "timestamp": entry.get("timestamp"),
+            "reason": entry.get("reason", "recent_window"),
+            "recent_window": entry.get("recent_window", 0),
+            "candidate_count": entry.get("candidate_count", 0),
+            "blocked_count": len(blocked_tracks),
+            "blocked_tracks": blocked_tracks,
+        })
+
+    return {
+        "recent_tracks": recent_tracks,
+        "block_events": block_events,
     }
 
 app = Flask(__name__)
@@ -681,7 +789,7 @@ def get_db_history():
                 SELECT * FROM broadcast_history 
                 ORDER BY id DESC LIMIT 50
             ''')
-            rows = [dict(row) for row in cursor.fetchall()]
+            rows = [_decorate_history_row(row) for row in cursor.fetchall()]
         return jsonify({"status": "OK", "data": rows})
     except Exception as e:
         return jsonify({"status": "ERROR", "message": str(e)})
@@ -718,6 +826,15 @@ def get_db_assets():
             ''')
             rows = [dict(row) for row in cursor.fetchall()]
         return jsonify({"status": "OK", "data": rows})
+    except Exception as e:
+        return jsonify({"status": "ERROR", "message": str(e)})
+
+@app.route('/api/db/music-rotation', methods=['GET'])
+def get_music_rotation_debug():
+    try:
+        payload = _load_rotation_runtime()
+        payload["recent_window"] = len(payload["recent_tracks"])
+        return jsonify({"status": "OK", "data": payload})
     except Exception as e:
         return jsonify({"status": "ERROR", "message": str(e)})
 

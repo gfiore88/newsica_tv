@@ -150,12 +150,13 @@ class PlayMusicEvent(PlayoutEvent):
 
     def execute(self, context: PlayoutExecutionContext) -> None:
         slot = context.state_reader().get("scheduled_slot", "")
-        broadcast_history_repository.add(
-            slot_time=slot, block_type="music", title=self.label, 
-            segment="rotation", event_type="PlayMusicEvent", asset_path=self.file
+        context.playout.queue_single_music_track(
+            self.file,
+            history_slot=slot,
+            history_label=self.label,
+            history_event_type="PlayMusicEvent",
+            history_segment="rotation",
         )
-        
-        context.playout.queue_single_music_track(self.file)
         if self.trigger_ai_music_gen:
             schedule_rotation_fill_job("director", theme=self.theme)
 
@@ -168,13 +169,15 @@ class PlayMusicDeadlineEvent(PlayoutEvent):
         self.label = label
 
     def execute(self, context: PlayoutExecutionContext) -> None:
-        if self.file:
-            slot = context.state_reader().get("scheduled_slot", "")
-            broadcast_history_repository.add(
-                slot_time=slot, block_type="music", title=self.label,
-                segment="rotation_deadline", event_type="PlayMusicDeadlineEvent", asset_path=self.file
-            )
-        context.playout.queue_music_track(self.deadline)
+        slot = context.state_reader().get("scheduled_slot", "")
+        context.playout.queue_music_track(
+            self.deadline,
+            preferred_music_file=self.file,
+            history_slot=slot,
+            history_label=self.label,
+            history_event_type="PlayMusicDeadlineEvent",
+            history_segment="rotation_deadline",
+        )
 
 
 class PlaySilenceFallbackEvent(PlayoutEvent):

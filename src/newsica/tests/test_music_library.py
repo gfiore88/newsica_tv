@@ -79,7 +79,10 @@ class TestMusicLibraryModes(unittest.TestCase):
         extra_ai_track.write_bytes(b"ai-2")
 
         history_file = self.base / "runtime" / "music_rotation_history.meta"
-        with patch("newsica.audio.music_library.ROTATION_HISTORY_FILE", history_file):
+        blocks_file = self.base / "runtime" / "music_rotation_blocks.meta"
+        with patch("newsica.audio.music_library.ROTATION_HISTORY_FILE", history_file), patch(
+            "newsica.audio.music_library.ROTATION_BLOCKS_FILE", blocks_file
+        ):
             library = MusicLibrary(self.music_dir, self.ai_music_dir)
             library._recent_tracks.clear()
             library._recent_tracks.extend(
@@ -98,12 +101,29 @@ class TestMusicLibraryModes(unittest.TestCase):
 
     def test_recent_rotation_history_is_loaded_by_new_instance(self):
         history_file = self.base / "runtime" / "music_rotation_history.meta"
-        with patch("newsica.audio.music_library.ROTATION_HISTORY_FILE", history_file):
+        blocks_file = self.base / "runtime" / "music_rotation_blocks.meta"
+        with patch("newsica.audio.music_library.ROTATION_HISTORY_FILE", history_file), patch(
+            "newsica.audio.music_library.ROTATION_BLOCKS_FILE", blocks_file
+        ):
             first = MusicLibrary(self.music_dir, self.ai_music_dir)
             first._remember_track(self.library_track)
             second = MusicLibrary(self.music_dir, self.ai_music_dir)
 
-        self.assertIn(str(self.library_track), list(second._recent_tracks))
+        self.assertIn(str(self.library_track.resolve()), list(second._recent_tracks))
+
+    def test_get_random_track_without_remember_does_not_pollute_history(self):
+        history_file = self.base / "runtime" / "music_rotation_history.meta"
+        blocks_file = self.base / "runtime" / "music_rotation_blocks.meta"
+        with patch("newsica.audio.music_library.ROTATION_HISTORY_FILE", history_file), patch(
+            "newsica.audio.music_library.ROTATION_BLOCKS_FILE", blocks_file
+        ):
+            library = MusicLibrary(self.music_dir, self.ai_music_dir)
+
+            with patch("newsica.audio.music_library.read_music_mode", return_value=MUSIC_MODE_MIXED):
+                selected = library.get_random_track(remember=False)
+
+        self.assertTrue(selected)
+        self.assertEqual(list(library._recent_tracks), [])
 
 
 if __name__ == "__main__":

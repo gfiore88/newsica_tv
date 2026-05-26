@@ -475,11 +475,11 @@ class DirectorAgent:
             
         # Prova fino a 10 volte per trovare un brano non riprodotto di recente
         for _ in range(10):
-            music_file = self.playout.get_random_music(theme=theme)
+            music_file = self.playout.get_random_music(theme=theme, remember=False)
             if not music_file:
                 break
             if not is_music_track_recent(music_file):
                 return music_file
                 
         # Se tutti i brani sono recenti, ne restituisce uno a caso per non interrompere l'audio
-        return self.playout.get_random_music(theme=theme)
+        return self.playout.get_random_music(theme=theme, remember=False)
