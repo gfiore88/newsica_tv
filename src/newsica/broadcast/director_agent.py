@@ -201,7 +201,17 @@ class DirectorAgent:
                 return TriggerNextBlockEvent()
 
         if block_type == "music_only":
-            return TriggerNextBlockEvent()
+            deadline = schedule_deadline(next_time)
+            if datetime.datetime.now() >= deadline:
+                return TriggerNextBlockEvent()
+
+            theme = state.get("theme")
+            music_file = self._select_non_repeated_music(theme=theme)
+            if music_file:
+                add_music_track(music_file)
+                return PlayMusicDeadlineEvent(music_file, deadline, "music_rotation")
+
+            return PlaySilenceFallbackEvent(2)
             
         elif block_type == "podcast" or (block_type == "news" and current_time == EVENING_PODCAST_SLOT):
             return self._handle_podcast_progression(state, title, current_segment, next_time)

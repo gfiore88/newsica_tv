@@ -12,6 +12,7 @@ from newsica.domain.playout_events import (
     PlayMusicDeadlineEvent,
     PlayMusicEvent,
     PlaySilenceFallbackEvent,
+    TriggerNextBlockEvent,
     PlayVoiceEvent,
 )
 
@@ -168,6 +169,42 @@ class TestDirectorAgent(unittest.TestCase):
         )
 
         self.assertIsInstance(action, PlayMusicDeadlineEvent)
+
+    @patch("newsica.broadcast.director_agent.get_wallclock_schedule_key")
+    @patch("newsica.broadcast.director_agent.schedule_deadline")
+    def test_music_only_progression_uses_deadline_event_until_slot_end(self, mock_deadline, mock_wallclock):
+        mock_wallclock.return_value = "17:00"
+        mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=10)
+        state = {
+            "status": "ON_AIR",
+            "scheduled_slot": "17:00",
+            "current_segment": "music_rotation",
+            "theme": None,
+        }
+
+        action = self.director._progress_current_block(
+            state, "music_only", "Newsica Music Flow", "Newsica Podcast", "18:30", "17:00"
+        )
+
+        self.assertIsInstance(action, PlayMusicDeadlineEvent)
+
+    @patch("newsica.broadcast.director_agent.get_wallclock_schedule_key")
+    @patch("newsica.broadcast.director_agent.schedule_deadline")
+    def test_music_only_progression_triggers_next_block_at_deadline(self, mock_deadline, mock_wallclock):
+        mock_wallclock.return_value = "17:00"
+        mock_deadline.return_value = datetime.datetime.now() - datetime.timedelta(seconds=1)
+        state = {
+            "status": "ON_AIR",
+            "scheduled_slot": "17:00",
+            "current_segment": "music_rotation",
+            "theme": None,
+        }
+
+        action = self.director._progress_current_block(
+            state, "music_only", "Newsica Music Flow", "Newsica Podcast", "18:30", "17:00"
+        )
+
+        self.assertIsInstance(action, TriggerNextBlockEvent)
 
     def test_special_broadcast_without_bulletin_waits_with_silence_event(self):
         state = {"current_segment": "intro"}
