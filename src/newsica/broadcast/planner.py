@@ -25,8 +25,12 @@ class PlayoutPlanner:
         events = []
         
         # 1. Jingle d'apertura
+        # Il next_segment dipende dal tipo di blocco:
+        # - music_only → dopo il jingle inizia la rotazione musicale (non segmenti parlati)
+        # - altri blocchi → dopo il jingle inizia il contenuto vocale (voice_part_1)
         jingle_file, jingle_label = get_jingle_for_block(block_type)
-        events.append(PlayJingleEvent(jingle_file, jingle_label, next_segment="voice_part_1"))
+        jingle_next_seg = "music_rotation" if block_type == "music_only" else "voice_part_1"
+        events.append(PlayJingleEvent(jingle_file, jingle_label, next_segment=jingle_next_seg))
         
         if block_type == "music_only":
             # Per la musica continua, semplicemente aggiungiamo eventi di musica fino alla deadline

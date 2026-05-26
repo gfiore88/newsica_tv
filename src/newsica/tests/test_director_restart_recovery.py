@@ -4,6 +4,64 @@ from director import build_restart_recovery_state
 
 
 class TestDirectorRestartRecovery(unittest.TestCase):
+
+    # --- Nuovi test per la regressione music_only → silenzio post-restart ---
+
+    def test_restart_during_music_only_with_stale_voice_segment_goes_offline(self):
+        """
+        Regressione: il jingle di apertura di un blocco music_only scriveva
+        current_segment='voice_part_1' nello stato runtime. Dopo un restart,
+        questo segmento veniva preservato → _progress_current_block() tornava
+        TriggerNextBlockEvent() in loop → silenzio totale sulla live.
+
+        Fix: i blocchi music_only vanno sempre OFFLINE al restart, così
+        _initialize_scheduled_block() viene chiamato e il PlayoutPlanner
+        mette subito in coda un PlayMusicDeadlineEvent.
+        """
+        state = {
+            "status": "ON_AIR",
+            "current_block": "music_only",
+            "current_title": "Baila Newsica",
+            "current_segment": "voice_part_1",   # segmento spurio pre-fix
+            "scheduled_slot": "13:30",
+        }
+
+        recovered = build_restart_recovery_state(
+            state,
+            "13:30",
+            "2026-05-26T14:15:00",
+        )
+
+        self.assertEqual(
+            recovered["status"], "OFFLINE",
+            "Un blocco music_only deve essere OFFLINE dopo il restart "
+            "per forzare la re-inizializzazione immediata senza silenzio.",
+        )
+
+    def test_restart_during_music_only_music_rotation_goes_offline(self):
+        """
+        Anche con current_segment='music_rotation' (già in rotazione musicale),
+        music_only va OFFLINE: il PlayoutPlanner calcola una deadline fresca
+        invece di riprendere un vecchio PlayMusicDeadlineEvent già scaduto.
+        """
+        state = {
+            "status": "ON_AIR",
+            "current_block": "music_only",
+            "current_title": "Baila Newsica",
+            "current_segment": "music_rotation",
+            "scheduled_slot": "13:30",
+        }
+
+        recovered = build_restart_recovery_state(
+            state,
+            "13:30",
+            "2026-05-26T14:15:00",
+        )
+
+        self.assertEqual(recovered["status"], "OFFLINE")
+
+    # --- Test pre-esistenti (invariati) ---
+
     def test_restart_during_podcast_degrades_to_music_without_replay(self):
         state = {
             "status": "ON_AIR",
@@ -43,7 +101,7 @@ class TestDirectorRestartRecovery(unittest.TestCase):
         self.assertEqual(recovered["current_segment"], "music_rotation_until_deadline")
         self.assertEqual(recovered["current_block"], "sport")
 
-    def test_restart_preserves_music_segment_as_is(self):
+    def test_restart_preserves_music_rotation_segment_as_is(self):
         state = {
             "status": "ON_AIR",
             "current_block": "sport",

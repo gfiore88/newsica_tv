@@ -200,6 +200,7 @@ class DirectorAgent:
         ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot)
         voice_file = os.path.join(ready_dir, "audio.wav")
         has_valid_audio = os.path.exists(voice_file)
+        manifest = {}  # inizializzato qui per evitare UnboundLocalError nel path senza manifest
 
         if has_valid_audio:
             from newsica.storage.repositories.audio_metadata_repository import get_metadata
@@ -217,7 +218,7 @@ class DirectorAgent:
                 pass
                 print(f"⚠️ [DirectorAgent] Podcast pronto senza manifest valido per {scheduled_slot}. Attendo rigenerazione.")
                 has_valid_audio = False
-        
+
         if current_segment in {"intro", "init"} or (current_segment == "music_rotation_until_deadline" and not state.get("podcast_played")):
             if has_valid_audio and not state.get("podcast_played"):
                 state["current_segment"] = "podcast_playing"
@@ -226,7 +227,7 @@ class DirectorAgent:
                 return PlayVoiceEvent(
                     voice_file,
                     "podcast",
-                    manifest.get("title", title) if os.path.exists(ready_dir) else title,
+                    manifest.get("title", title) if manifest else title,
                     "Completo",
                 )
             # Se l'audio non è pronto, inneschiamo un fallback musicale.

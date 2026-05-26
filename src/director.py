@@ -143,13 +143,21 @@ def build_restart_recovery_state(existing_state, wallclock_slot, now_ts):
     if not scheduled_slot or scheduled_slot != wallclock_slot:
         return {"status": "OFFLINE", "last_update": now_ts}
 
-    # Dopo un restart non possiamo riprendere un file PCM a metà voce:
-    # manteniamo lo slot ma degradando in rotazione musicale fino a fine fascia.
+    # Dopo un restart non possiamo riprendere un file PCM a metà voce.
+    # I blocchi music_only vengono re-inizializzati (OFFLINE) perché il Director
+    # per questo tipo di blocco non produce mai audio da _progress_current_block()
+    # (restituisce TriggerNextBlockEvent() in loop → silenzio).
+    # Con OFFLINE, _initialize_scheduled_block() viene chiamato e il PlayoutPlanner
+    # mette subito in coda un PlayMusicDeadlineEvent → audio immediato al restart.
     recovered = dict(state)
+    if current_block == "music_only":
+        recovered["status"] = "OFFLINE"
+        recovered["last_update"] = now_ts
+        return recovered
+
     current_segment = recovered.get("current_segment", "") or ""
     is_music_segment = (
-        current_block == "music_only"
-        or current_segment == "music_rotation_until_deadline"
+        current_segment == "music_rotation_until_deadline"
         or current_segment.startswith("music_")
     )
     if not is_music_segment:
