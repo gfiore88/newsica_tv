@@ -17,3 +17,4 @@ Produci e aggiorna un documento markdown in `docs/current_task_brief.md` con:
 - **Vincoli Tecnici**: Librerie, strumenti Python/FFmpeg necessari
 - **Piano di Lavoro**: I passi da far eseguire al team (`/python_engineer`, `/ai_integrator`, ecc.)
 - **Rischi Potenziali**: Problemi di memoria/CPU, copyright musicale, ecc.
+- **Piano Test Obbligatorio**: Quali unit test, regression test, compile check e verifiche post-restart devono essere eseguite per considerare il task chiuso.

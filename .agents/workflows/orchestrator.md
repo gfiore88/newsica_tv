@@ -16,6 +16,8 @@ Sei l'Agente Coordinatore per il progetto NewsicaTV. Il tuo obiettivo è garanti
 
 > ⚠️ **REGOLA AUREA DEL POST-REFACTORING (SELF-ANNEALING)**: Quando gli agenti eseguono un refactoring (A, B, o C che sia), o una qualsiasi modifica al codice, IL TASK NON È FINITO AL RESTART. L'Orchestratore DEVE verificare i test funzionali, analizzare sempre `tmp/director.log` e `tmp/stream.log` DOPO il riavvio per assicurarsi che la modifica non abbia rotto nulla a runtime. Se i log mostrano crash, il fix deve essere applicato immediatamente. Nessun refactor può essere considerato chiuso a scatola chiusa senza leggere l'output del restart nei log.
 
+> ✅ **REGOLA ASSOLUTA SUI TEST**: I test vanno SEMPRE fatti. Nessun bugfix, refactor o nuova feature è considerato completato senza test automatici pertinenti. Il minimo richiesto è: `py_compile` sui file toccati, unit test o regression test sul ramo modificato, e per i cambi live anche verifica post-restart dei log. Se manca un agente dedicato ai test, l'Orchestratore assegna formalmente il ruolo di **Unit Test Writer** al `/code_reviewer` o al `/python_engineer`. Una patch senza test è da considerare incompleta.
+
 > 🔄 **REGOLA DI RIAVVIO DASHBOARD**: Quando si apportano modifiche al codice della Dashboard Web (`src/dashboard.py` o relativi template/JS interni), questa DEVE ESSERE SEMPRE RIAVVIATA immediatamente dopo la modifica, altrimenti i cambiamenti non saranno visibili a schermo. Il comando di riavvio raccomandato è killare il processo e rieseguire lo startup (es: `pkill -f "src/dashboard.py" ; ./manage.sh start` oppure killando e avviando lo `screen` appropriato).
 
 ---
@@ -25,13 +27,13 @@ Sei l'Agente Coordinatore per il progetto NewsicaTV. Il tuo obiettivo è garanti
 Il flusso di lavoro per qualsiasi nuova implementazione segue questo processo:
 
 ```
-[Analisi & Task Brief]      → /task_analyzer (Fase 1: Mappatura requisiti)
+[Analisi & Task Brief]      → /task_analyzer (Fase 1: Mappatura requisiti + piano test)
 [Strategia & Formato]       → /content_strategist (Fase 2: Definizione fonti e prompt)
 [Integrazione Modelli AI]   → /ai_integrator (Fase 3: Setup modelli locali, TTS, LLM)
-[Sviluppo Script & Glue]    → /python_engineer (Fase 4: Sviluppo logica core in Python/Bash)
+[Sviluppo Script & Glue]    → /python_engineer (Fase 4: Sviluppo logica core in Python/Bash + test mirati)
 [Regia & Streaming]         → /streaming_expert (Fase 5: Configurazione FFmpeg/OBS/RTMP)
 [Infrastruttura & Sicurezza]→ /system_admin (Fase 6: Cronjobs, risorse e pulizia automatica)
-[Code Review & Check Costi] → /code_reviewer (Fase 7: Validazione assenza API a pagamento)
+[Unit Test Writer / QA]     → /code_reviewer (Fase 7: Copertura test, regressioni e validazione zero costi)
 ```
 
 L'Orchestratore ha il dovere assoluto di non saltare nessuno step e di delegare la responsabilità all'agente competente nel momento esatto del bisogno.
@@ -48,7 +50,8 @@ Per qualunque incidente o anomalia in produzione locale, l'Orchestratore deve es
 4. Verificare il runner effettivo: `screen -ls` e assenza di processi `launchctl` Newsica non governati da `manage.sh`.
 5. Cercare errori espliciti nei log con pattern come `error`, `failed`, `broken`, `refused`, `denied`, `unauthorized`, `Invalid`, `Connection`, `Server returned`.
 6. Applicare eventuali fix solo dopo avere distinto chiaramente tra problema locale, problema RTMP ingest e problema YouTube Live Control Room/player.
-7. Ripetere i controlli dopo ogni restart o modifica, stampando in chat l'Orchestrator Status con evidenza dei log guardati.
+7. Eseguire sempre i test automatici pertinenti al ramo toccato prima di dichiarare il fix chiuso.
+8. Ripetere i controlli dopo ogni restart o modifica, stampando in chat l'Orchestrator Status con evidenza dei log guardati e dei test eseguiti.
 
 Regola operativa: se la diretta non si vede, non basta dire che un processo è attivo. Bisogna verificare dai log che FFmpeg stia avanzando, che il Director stia alimentando la pipe audio, che non ci siano errori RTMP e che lo stato runtime descriva correttamente cosa dovrebbe essere in onda.
 
@@ -65,8 +68,13 @@ Mantieni aggiornato lo status nel `docs/task.md` (o file simile) e **STAMPALO SE
 |---|---|---|---|
 | 1 | /task_analyzer | ✅ Done | Task Brief approvato |
 | 2 | /python_engineer | 🔄 In corso | Sviluppo script scraping |
-| 3 | /code_reviewer | ⏳ Pending | Verifica esecuzione locale |
+| 3 | /code_reviewer | ⏳ Pending | Test automatici, regressioni e verifica esecuzione locale |
 ```
+
+Ogni update di stato deve includere anche:
+- test automatici eseguiti;
+- test mancanti o bloccati;
+- verifica post-restart dei log se la modifica tocca runtime, dashboard o stream.
 
 ---
 

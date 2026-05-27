@@ -6,6 +6,17 @@ Il progetto segue due vincoli fondamentali:
 1. **Zero Costi**: Nessun utilizzo di API a pagamento o servizi Cloud (es. OpenAI, ElevenLabs).
 2. **Local-First**: Tutti i processi (scraping, LLM per rielaborazione testi, TTS, mix audio e regia video) devono girare localmente sulla macchina host.
 
+## ✅ Disciplina Test
+
+Per NewsicaTV i test non sono opzionali.
+
+Ogni modifica a codice o runtime deve includere:
+- `py_compile` sui file toccati;
+- test automatici pertinenti al ramo modificato;
+- verifica post-restart dei log live se la modifica tocca regia, dashboard, stream o processi residenti.
+
+Una patch senza test automatici è da considerare incompleta anche se sembra funzionare a occhio.
+
 ## 🛠 Stack Tecnologico (Previsto)
 - **Logica Core**: Python & Bash Scripts
 - **Text Generation (LLM)**: Ollama (es. Llama-3) in locale per riscrivere e sintetizzare i feed RSS
