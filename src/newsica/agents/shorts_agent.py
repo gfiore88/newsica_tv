@@ -116,12 +116,19 @@ Notizia: {news_item.get('title')}
         # 1. Rimuoviamo hashtag e prepariamo il testo
         tts_text = text.replace("#", "")
         # 2. Rimuoviamo tutte le emoji dal testo destinato al TTS
+        import emoji
         tts_text = emoji.replace_emoji(tts_text, replace='')
         
         clean_text = prepare_text_for_tts(tts_text)
         kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
-        # Voice if_sara represents Nora (News)
-        samples, sample_rate = kokoro.create(clean_text, voice="if_sara", speed=1.1, lang="it")
+        
+        # Scelta random tra voce maschile e femminile
+        import random
+        voices = ["if_sara", "im_nicola"]
+        selected_voice = random.choice(voices)
+        print(f"🗣️ Voce TTS selezionata: {selected_voice}")
+        
+        samples, sample_rate = kokoro.create(clean_text, voice=selected_voice, speed=1.1, lang="it")
         sf.write(self.tmp_audio, samples, sample_rate)
         
         duration = len(samples) / sample_rate
@@ -204,6 +211,31 @@ Notizia: {news_item.get('title')}
         image.paste(context_img, (x_pos, y_pos), context_img)
         return image
 
+    def _search_pexels_image_via_llm(self, title: str):
+        pexels_key = os.getenv("PEXELS_API_KEY")
+        if not pexels_key:
+            return None
+            
+        try:
+            import urllib.parse
+            prompt = f'Given the news title: "{title}". Extract a SINGLE generic English keyword that visually represents the subject (e.g. if the news is about an Italian hospital, write "hospital". If it is about police, write "police car"). Reply ONLY with the English keyword, no punctuation.'
+            payload = {"model": MODEL_NAME, "prompt": prompt, "stream": False, "options": {"temperature": 0.1}}
+            resp = requests.post(OLLAMA_URL, json=payload, timeout=10)
+            if resp.status_code == 200:
+                keyword = resp.json().get("response", "").strip()
+                if keyword:
+                    print(f"🔎 Keyword Pexels estratta: {keyword}")
+                    q = urllib.parse.quote(keyword)
+                    url = f"https://api.pexels.com/v1/search?query={q}&per_page=1&orientation=landscape"
+                    pex_resp = requests.get(url, headers={"Authorization": pexels_key}, timeout=10)
+                    if pex_resp.status_code == 200:
+                        data = pex_resp.json()
+                        if data.get("photos"):
+                            return data["photos"][0]["src"].get("landscape") or data["photos"][0]["src"].get("large")
+        except Exception as e:
+            logger.warning(f"Errore Pexels via LLM: {e}")
+        return None
+
     def _search_wikipedia_image_via_llm(self, title: str):
         try:
             import urllib.parse
@@ -248,11 +280,16 @@ Notizia: {news_item.get('title')}
             context_img = self._download_image(image_url)
             
         if not context_img and title:
-            print("🔎 Cerco immagine su Wikipedia...")
-            wiki_url = self._search_wikipedia_image_via_llm(title)
-            if wiki_url:
-                print(f"🖼️ Immagine Wikipedia trovata: {wiki_url}")
-                context_img = self._download_image(wiki_url)
+            print("🔎 Cerco immagine ad alto impatto...")
+            remote_url = self._search_pexels_image_via_llm(title)
+            
+            # Fallback intelligente su Wikipedia
+            if not remote_url:
+                remote_url = self._search_wikipedia_image_via_llm(title)
+                
+            if remote_url:
+                print(f"🖼️ Immagine remota trovata: {remote_url}")
+                context_img = self._download_image(remote_url)
                 
         # 5. Applica immagine
         if context_img is not None:
