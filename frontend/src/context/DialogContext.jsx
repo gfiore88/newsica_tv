@@ -45,7 +45,7 @@ export function DialogProvider({ children }) {
       {children}
 
       {dialog && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 shadow-2xl rounded-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-4 flex items-center justify-between border-b border-slate-800 bg-slate-800/50">
               <div className="flex items-center gap-3">

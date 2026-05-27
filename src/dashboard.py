@@ -920,6 +920,44 @@ def generate_short():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/api/shorts_publish', methods=['POST'])
+def shorts_publish():
+    data = request.json or {}
+    filename = data.get("filename")
+    platform = data.get("platform")  # 'youtube', 'instagram', 'tiktok'
+    
+    if not filename or not platform:
+        return jsonify({"status": "error", "message": "Parametri mancanti."}), 400
+        
+    shorts_dir = os.path.join(BASE_DIR, "output", "shorts")
+    video_path = os.path.join(shorts_dir, filename)
+    
+    if not os.path.exists(video_path):
+        return jsonify({"status": "error", "message": "File video non trovato."}), 404
+        
+    metadata = _read_short_metadata(video_path)
+    title = metadata.get("news_title", "Short NewsicaTV")
+    caption = metadata.get("caption", "")
+    hashtags = metadata.get("hashtags_text", "")
+    full_caption = f"{caption}\n\n{hashtags}" if hashtags else caption
+    
+    from newsica.utils.social_publisher import SocialPublisher
+    publisher = SocialPublisher()
+    
+    if platform == "youtube":
+        res = publisher.publish_to_youtube(video_path, title, full_caption)
+    elif platform == "instagram":
+        res = publisher.publish_to_instagram(video_path, full_caption)
+    elif platform == "tiktok":
+        res = publisher.publish_to_tiktok(video_path, title)
+    else:
+        return jsonify({"status": "error", "message": "Piattaforma non supportata."}), 400
+        
+    if res.get("status") == "success":
+        return jsonify({"status": "OK", "message": res.get("message")}), 200
+    else:
+        return jsonify({"status": "config_missing", "message": res.get("message")}), 200
+
 @app.route('/api/shorts_library', methods=['GET'])
 def shorts_library():
     import glob

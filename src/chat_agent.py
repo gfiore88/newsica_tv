@@ -19,6 +19,7 @@ RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 LIVE_VIDEO_ID_FILE = os.path.join(TMP_DIR, "live_video_id.txt")
 LIVE_VIDEO_CACHE_FILE = os.path.join(TMP_DIR, "live_video_cache.txt")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+YOUTUBE_CHAT_USE_API = os.getenv("YOUTUBE_CHAT_USE_API", "false").lower() == "true"
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "UCQOA9AoLRA8XG2g9ruogE1g")
 YOUTUBE_HANDLE = os.getenv("YOUTUBE_HANDLE", "@NewsicaTV")
 YOUTUBE_HEADERS = {
@@ -404,7 +405,7 @@ def get_active_video_id():
             pass
 
     # 2. Se disponibile, usa la YouTube Data API per trovare il video live attuale.
-    if YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID:
+    if YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID and YOUTUBE_CHAT_USE_API:
         v_id = get_live_video_id_via_api(YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID)
         if v_id:
             try:
@@ -657,8 +658,8 @@ def main():
         print(f"🎯 [CHAT AGENT] Trovata sessione live attiva con ID: {video_id}")
         
         # Tentativo di usare l'API ufficiale
-        if YOUTUBE_API_KEY:
-            print("🔑 [CHAT AGENT] Chiave API rilevata in .env. Risoluzione liveChatId...")
+        if YOUTUBE_API_KEY and YOUTUBE_CHAT_USE_API:
+            print("🔑 [CHAT AGENT] Chiave API rilevata e abilitata in .env. Risoluzione liveChatId...")
             chat_id = get_active_live_chat_id(YOUTUBE_API_KEY, video_id)
             if chat_id:
                 print(f"✅ [CHAT AGENT] Trovato activeLiveChatId: {chat_id}")

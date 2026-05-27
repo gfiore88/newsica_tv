@@ -194,6 +194,32 @@ export default function ShortsLibrary() {
     }
   }
 
+  const [publishing, setPublishing] = useState({ youtube: false, instagram: false, tiktok: false })
+
+  const handlePublish = async (platform) => {
+    setPublishing((prev) => ({ ...prev, [platform]: true }))
+    try {
+      const res = await fetch('/api/shorts_publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: playingShort.filename, platform }),
+      })
+      const data = await res.json()
+      if (res.ok && data.status === 'OK') {
+        await showAlert(data.message, 'Pubblicazione Completata')
+      } else {
+        await showAlert(
+          data.message || 'Si è verificato un errore durante la pubblicazione.',
+          'Info / Configurazione API'
+        )
+      }
+    } catch (e) {
+      await showAlert('Errore di rete durante la pubblicazione.', 'Errore di Rete')
+    } finally {
+      setPublishing((prev) => ({ ...prev, [platform]: false }))
+    }
+  }
+
   return (
     <div className="pb-8">
       <div className="flex items-center justify-between mb-8">
@@ -386,6 +412,39 @@ export default function ShortsLibrary() {
                 </div>
 
                 <div className="space-y-4">
+                  {/* Sezione Pubblicazione Social */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+                    <div className="mb-3">
+                      <span className="text-sm font-semibold text-slate-200">Pubblica / Condividi sui Social</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => handlePublish('youtube')}
+                        disabled={publishing.youtube}
+                        className="flex flex-col items-center justify-center gap-2 p-3 bg-rose-950/30 hover:bg-rose-900/40 text-rose-200 hover:text-white border border-rose-500/20 hover:border-rose-500/40 rounded-xl text-xs font-bold transition disabled:opacity-50"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.508 9.388.508 9.388.508s7.517 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        {publishing.youtube ? 'Invio...' : 'YouTube Shorts'}
+                      </button>
+                      <button
+                        onClick={() => handlePublish('instagram')}
+                        disabled={publishing.instagram}
+                        className="flex flex-col items-center justify-center gap-2 p-3 bg-pink-950/30 hover:bg-pink-900/40 text-pink-200 hover:text-white border border-pink-500/20 hover:border-pink-500/40 rounded-xl text-xs font-bold transition disabled:opacity-50"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+                        {publishing.instagram ? 'Invio...' : 'Instagram Reels'}
+                      </button>
+                      <button
+                        onClick={() => handlePublish('tiktok')}
+                        disabled={publishing.tiktok}
+                        className="flex flex-col items-center justify-center gap-2 p-3 bg-cyan-950/30 hover:bg-cyan-900/40 text-cyan-200 hover:text-white border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl text-xs font-bold transition disabled:opacity-50"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.17-2.86-.74-3.99-1.72-.08-.07-.17-.17-.25-.26V14c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6c.39 0 .77.04 1.14.11V4.28c-1.32-.19-2.67-.12-3.95.22C3.99 5.21 2 7.89 2 11c0 4.42 3.58 8 8 8s8-3.58 8-8V0c-1.49.88-3.21 1.39-4.96 1.41l-.51-1.39z"/></svg>
+                        {publishing.tiktok ? 'Invio...' : 'TikTok'}
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <span className="text-sm font-semibold text-slate-200">Caption pronta per Reel o TikTok</span>
