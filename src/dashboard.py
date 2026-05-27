@@ -181,6 +181,47 @@ def _load_rotation_runtime():
         "block_events": block_events,
     }
 
+
+def _normalize_short_hashtags(raw_hashtags):
+    if not isinstance(raw_hashtags, list):
+        return []
+    hashtags = []
+    seen = set()
+    for value in raw_hashtags:
+        tag = str(value or "").strip()
+        if not tag:
+            continue
+        if not tag.startswith("#"):
+            tag = f"#{tag}"
+        lowered = tag.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        hashtags.append(tag)
+        if len(hashtags) == 5:
+            break
+    return hashtags
+
+
+def _read_short_metadata(video_path):
+    metadata_path = os.path.splitext(video_path)[0] + ".json"
+    if not os.path.exists(metadata_path):
+        return {}
+    try:
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception:
+        return {}
+
+    hashtags = _normalize_short_hashtags(payload.get("hashtags"))
+    return {
+        "caption": str(payload.get("caption", "")).strip(),
+        "hashtags": hashtags,
+        "hashtags_text": " ".join(hashtags),
+        "news_title": str(payload.get("news_title", "")).strip(),
+        "script": str(payload.get("script", "")).strip(),
+    }
+
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -841,6 +882,10 @@ def generate_short():
         agent = ShortsAgent()
         result = agent.run()
         if result.get("status") == "success":
+            output_file = result.get("output", "")
+            filename = os.path.basename(output_file) if output_file else ""
+            result["filename"] = filename
+            result["video_url"] = f"/api/shorts_video/{filename}" if filename else ""
             return jsonify(result), 200
         else:
             return jsonify(result), 500
@@ -871,12 +916,18 @@ def shorts_library():
         else:
             dt = datetime.fromtimestamp(os.path.getmtime(filepath))
             
+        metadata = _read_short_metadata(filepath)
         shorts.append({
             "filename": filename,
             "url": f"/api/shorts_video/{filename}",
             "timestamp": dt.isoformat(),
             "date_display": dt.strftime("%d/%m/%Y"),
-            "time_display": dt.strftime("%H:%M")
+            "time_display": dt.strftime("%H:%M"),
+            "caption": metadata.get("caption", ""),
+            "hashtags": metadata.get("hashtags", []),
+            "hashtags_text": metadata.get("hashtags_text", ""),
+            "news_title": metadata.get("news_title", ""),
+            "script": metadata.get("script", ""),
         })
         
     shorts.sort(key=lambda x: x["timestamp"], reverse=True)

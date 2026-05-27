@@ -13,6 +13,8 @@ from newsica.editorial.gravity_assessor import calculate_heuristic_score
 import emoji
 from duckduckgo_search import DDGS
 import io
+import re
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +113,97 @@ Notizia: {news_item.get('title')}
             logger.error(f"Errore LLM: {e}")
             return "Ultim'ora pazzesca! " + news_item.get('title', '') + ". Che ne pensate? Scrivetelo nei commenti!"
 
+    def _normalize_text(self, text: str) -> str:
+        if not text:
+            return ""
+        text = re.sub(r"\s+", " ", str(text)).strip()
+        return text
+
+    def _build_hashtag(self, text: str) -> str:
+        cleaned = unicodedata.normalize("NFKD", text or "")
+        cleaned = cleaned.encode("ascii", "ignore").decode("ascii")
+        cleaned = re.sub(r"[^A-Za-z0-9 ]+", " ", cleaned)
+        parts = [part for part in cleaned.split() if part]
+        if not parts:
+            return ""
+        return "#" + "".join(part.capitalize() for part in parts[:3])
+
+    def _extract_keyword_hashtags(self, text: str) -> list[str]:
+        stopwords = {
+            "alla", "allo", "anche", "ancora", "avere", "come", "con", "dalla", "dalle",
+            "degli", "della", "delle", "dello", "dentro", "dopo", "fare", "gli", "hanno",
+            "italia", "loro", "nelle", "nello", "newsica", "newsicatv", "oggi", "perche",
+            "pero", "prima", "quale", "quando", "quella", "quello", "questa", "questo",
+            "sara", "sono", "sotto", "sulla", "sulle", "tutto", "ultime", "ultima", "ultimora",
+            "verso", "dove", "degli", "dati", "dopo", "delle", "della", "dello", "dell",
+            "nella", "nelle", "negli", "sugli", "sugli", "dall", "dallo", "dalla", "dalle",
+        }
+        normalized = unicodedata.normalize("NFKD", text or "")
+        normalized = normalized.encode("ascii", "ignore").decode("ascii").lower()
+        tokens = re.findall(r"[a-z0-9]{4,}", normalized)
+        hashtags = []
+        seen = set()
+        for token in tokens:
+            if token in stopwords:
+                continue
+            hashtag = self._build_hashtag(token)
+            if not hashtag:
+                continue
+            lowered = hashtag.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            hashtags.append(hashtag)
+        return hashtags
+
+    def _generate_social_copy(self, news_item: dict, script: str) -> tuple[str, list[str]]:
+        title = self._normalize_text(news_item.get("title", ""))
+        script_text = self._normalize_text(script)
+        theme = (news_item.get("theme_color") or "news").lower()
+
+        theme_hashtags = {
+            "news": ["#Ultimora", "#Notizie", "#Italia"],
+            "sport": ["#SportNews", "#Sport", "#Highlights"],
+            "tech": ["#TechNews", "#Tecnologia", "#Innovazione"],
+            "wellness": ["#Salute", "#Benessere", "#Lifestyle"],
+            "meteo": ["#Meteo", "#Previsioni", "#Italia"],
+        }
+
+        script_for_caption = re.sub(r"\s*#\w+", "", script_text).strip()
+        caption_parts = []
+        if title:
+            caption_parts.append(title)
+        if script_for_caption:
+            caption_parts.append(script_for_caption)
+        caption_parts.append("Seguici per altri aggiornamenti in tempo reale.")
+        caption = "\n\n".join(part for part in caption_parts if part)
+
+        hashtags = ["#NewsicaTV"]
+        hashtags.extend(theme_hashtags.get(theme, theme_hashtags["news"]))
+        hashtags.extend(self._extract_keyword_hashtags(f"{title} {script_text}"))
+
+        unique_hashtags = []
+        seen = set()
+        for hashtag in hashtags:
+            lowered = hashtag.lower()
+            if not hashtag or lowered in seen:
+                continue
+            seen.add(lowered)
+            unique_hashtags.append(hashtag)
+            if len(unique_hashtags) == 5:
+                break
+
+        fallback_hashtags = ["#BreakingNews", "#ViralNews", "#Aggiornamento"]
+        for hashtag in fallback_hashtags:
+            if len(unique_hashtags) == 5:
+                break
+            lowered = hashtag.lower()
+            if lowered not in seen:
+                seen.add(lowered)
+                unique_hashtags.append(hashtag)
+
+        return caption, unique_hashtags[:5]
+
     def _generate_audio(self, text: str) -> float:
         print("🎙️ Generazione audio TTS per lo Short...")
         # 1. Rimuoviamo hashtag e prepariamo il testo
@@ -187,28 +280,41 @@ Notizia: {news_item.get('title')}
             return None
 
     def _apply_context_image_to_background(self, image: Image.Image, context_img: Image.Image):
-        # La mettiamo in un riquadro centrale per non coprire i loghi del base screen
+        # Misure del box contenitore della foto
         width, height = image.size
-        box_w, box_h = 980, 700
+        box_w, box_h = 940, 680
         
-        img_w, img_h = context_img.size
-        scale = max(box_w / img_w, box_h / img_h)
-        new_w = int(img_w * scale)
-        new_h = int(img_h * scale)
+        # 1. Aspect Fill (Ridimensiona e taglia senza strecciare)
+        from PIL import ImageOps
+        context_img = context_img.convert("RGBA")
+        context_img = ImageOps.fit(context_img, (box_w, box_h), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
         
-        context_img = context_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        left = (new_w - box_w) // 2
-        top = (new_h - box_h) // 2
-        context_img = context_img.crop((left, top, left + box_w, top + box_h))
+        # 2. Maschera per bordi arrotondati della foto
+        radius = 40
+        mask = Image.new("L", (box_w, box_h), 0)
+        draw_mask = ImageDraw.Draw(mask)
+        draw_mask.rounded_rectangle((0, 0, box_w, box_h), radius=radius, fill=255)
+        context_img.putalpha(mask)
         
-        # Sfumatura ai bordi (effetto vignettatura) o opacità ridotta per amalgamarsi
-        context_img.putalpha(190)
+        # 3. Creazione del Bordo (Card Background)
+        border_thickness = 12
+        card_w = box_w + (border_thickness * 2)
+        card_h = box_h + (border_thickness * 2)
+        card = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
+        draw_card = ImageDraw.Draw(card)
         
-        # Posizionala al centro-alto (lasciando spazio sotto per i testi)
-        y_pos = (height - box_h) // 2 - 150
-        x_pos = (width - box_w) // 2
+        # Bordo bianco tondeggiante
+        draw_card.rounded_rectangle((0, 0, card_w, card_h), radius=radius + border_thickness, fill=(255, 255, 255, 255))
         
-        image.paste(context_img, (x_pos, y_pos), context_img)
+        # 4. Incolla la foto sopra la card bianca
+        card.paste(context_img, (border_thickness, border_thickness), mask=context_img)
+        
+        # 5. Posiziona la card finita sul background principale
+        y_pos = (height - card_h) // 2 - 150
+        x_pos = (width - card_w) // 2
+        
+        # Applica usando la card stessa come maschera per gestire i bordi trasparenti esterni
+        image.paste(card, (x_pos, y_pos), mask=card)
         return image
 
     def _search_pexels_image_via_llm(self, title: str):
@@ -319,7 +425,6 @@ Notizia: {news_item.get('title')}
 
     def _render_video(self):
         from pilmoji import Pilmoji
-        import re
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         output_file = os.path.join(OUTPUT_DIR, f"short_{timestamp}.mp4")
         print(f"🎬 Rendering video finale con FFmpeg verso: {output_file}...")
@@ -430,22 +535,38 @@ Notizia: {news_item.get('title')}
             print(f"❌ Errore FFmpeg: {error_msg}")
             raise RuntimeError(f"FFmpeg Error: {error_msg}")
 
+    def _write_metadata(self, output_file: str, news_item: dict, script: str, caption: str, hashtags: list[str]):
+        metadata_path = os.path.splitext(output_file)[0] + ".json"
+        payload = {
+            "news_title": news_item.get("title", ""),
+            "script": script,
+            "caption": caption,
+            "hashtags": hashtags[:5],
+            "created_at": datetime.datetime.now().isoformat(),
+        }
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
     def run(self) -> dict:
         try:
             news = self._get_top_news()
             theme = news.get('theme_color', 'news')
             script = self._generate_script(news)
+            caption, hashtags = self._generate_social_copy(news, script)
             duration = self._generate_audio(script)
             self._generate_srt(script, duration)
             img_url = news.get('image_url') or news.get('urlToImage', '')
             self._generate_background(theme, news.get('title', ''), img_url)
             out_file = self._render_video()
+            self._write_metadata(out_file, news, script, caption, hashtags)
             
             return {
                 "status": "success" if out_file else "failed",
                 "output": out_file,
                 "script": script,
-                "news_title": news.get('title', '')
+                "news_title": news.get('title', ''),
+                "caption": caption,
+                "hashtags": hashtags,
             }
         except Exception as e:
             logger.error(f"Errore critico in ShortsAgent: {e}")

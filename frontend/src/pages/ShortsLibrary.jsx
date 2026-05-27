@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Video, Calendar, Download, Play, RefreshCw } from 'lucide-react'
+import { Video, Calendar, Download, Play, RefreshCw, Copy } from 'lucide-react'
 import { useDialog } from '../context/DialogContext'
 
 export default function ShortsLibrary() {
@@ -28,6 +28,17 @@ export default function ShortsLibrary() {
     fetchShorts()
   }, [])
 
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setPlayingShort(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   const generateShort = async () => {
     setShortsLoading(true)
     try {
@@ -35,8 +46,14 @@ export default function ShortsLibrary() {
       const data = await res.json()
       if (res.ok) {
         await showAlert(`Short generato con successo.`, 'Video Pronto')
-        const filename = data.output.split('/').pop()
-        setPlayingShort({ url: `/shorts/${filename}` })
+        setPlayingShort({
+          url: data.video_url,
+          news_title: data.news_title,
+          script: data.script,
+          caption: data.caption,
+          hashtags: data.hashtags || [],
+          hashtags_text: (data.hashtags || []).join(' '),
+        })
         fetchShorts()
       } else {
         await showAlert(`Errore: ${data.message || 'Generazione fallita'}`, 'Errore Generazione')
@@ -55,6 +72,21 @@ export default function ShortsLibrary() {
     acc[date].push(short)
     return acc
   }, {})
+
+  const copyText = async (value, label) => {
+    if (!value) {
+      await showAlert(`Nessun contenuto disponibile per ${label.toLowerCase()}.`, 'Contenuto Assente')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(value)
+      await showAlert(`${label} copiati negli appunti.`, 'Copiato')
+    } catch (e) {
+      console.error(`Errore copia ${label}:`, e)
+      await showAlert(`Impossibile copiare ${label.toLowerCase()}.`, 'Errore Copia')
+    }
+  }
 
   return (
     <div className="pb-8">
@@ -161,21 +193,95 @@ export default function ShortsLibrary() {
 
       {/* Modal Video Player */}
       {playingShort && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-[400px]">
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm"
+          onClick={() => setPlayingShort(null)}
+        >
+          <div
+            className="relative w-full max-w-6xl"
+            onClick={(event) => event.stopPropagation()}
+          >
             <button 
               onClick={(e) => { e.preventDefault(); setPlayingShort(null); }}
               className="absolute -top-10 right-0 text-white hover:text-slate-300 transition"
             >
               Chiudi (Esc)
             </button>
-            <video 
-              src={playingShort.url} 
-              controls 
-              autoPlay 
-              playsInline
-              className="w-full rounded-lg shadow-2xl bg-black aspect-[9/16]"
-            />
+            <div className="grid gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
+              <video 
+                src={playingShort.url} 
+                controls 
+                autoPlay 
+                playsInline
+                className="w-full rounded-lg shadow-2xl bg-black aspect-[9/16]"
+              />
+
+              <div className="glass rounded-2xl border border-slate-800/80 p-5 text-slate-100">
+                <div className="mb-5">
+                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">
+                    Contenuti Social
+                  </div>
+                  <h3 className="text-xl font-bold text-white">
+                    {playingShort.news_title || 'Short NewsicaTV'}
+                  </h3>
+                  {playingShort.script && (
+                    <p className="mt-2 text-sm text-slate-400 line-clamp-4">
+                      {playingShort.script}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-slate-200">Caption pronta per Reel o TikTok</span>
+                      <button
+                        onClick={() => copyText(playingShort.caption, 'Caption')}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
+                      >
+                        <Copy size={14} />
+                        Copia caption
+                      </button>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={playingShort.caption || ''}
+                      placeholder="Genera un nuovo short per ottenere una caption pronta da copiare."
+                      className="min-h-[220px] w-full resize-none rounded-lg border border-slate-800 bg-slate-900/80 p-3 text-sm leading-6 text-slate-100 outline-none"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-slate-200">5 hashtag pertinenti</span>
+                      <button
+                        onClick={() => copyText(playingShort.hashtags_text, 'Hashtag')}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
+                      >
+                        <Copy size={14} />
+                        Copia hashtag
+                      </button>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={playingShort.hashtags_text || ''}
+                      placeholder="Per gli short storici i 5 hashtag non erano ancora salvati."
+                      className="min-h-[96px] w-full resize-none rounded-lg border border-slate-800 bg-slate-900/80 p-3 text-sm leading-6 text-slate-100 outline-none"
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(playingShort.hashtags || []).map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-200"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

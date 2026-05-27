@@ -52,3 +52,4 @@
 | 49 | /orchestrator | ✅ Done | Richieste musicali chat freeform come vincolo primario del prompt ACE-Step: parser meno distruttivo, hint lingua/dialetto e supporto LLM a `lyrics_language` non canonici con ADR 0048 |
 | 50 | /orchestrator | ✅ Done | Fix live `flash_60s`: fallback non pronto ora resta in `music_rotation_until_deadline` senza silenzio; corretto anche crash `PreparationAgent` su asset slot non presenti nel palinsesto |
 | 51 | /orchestrator | ✅ Done | Resa esplicita e obbligatoria la policy “test sempre” nei workflow agenti e nella documentazione operativa con ADR 0049 |
+| 52 | /python_engineer | ✅ Done | Modal libreria shorts con blocchi copia/incolla per caption social e 5 hashtag pertinenti persistiti come metadati sidecar |

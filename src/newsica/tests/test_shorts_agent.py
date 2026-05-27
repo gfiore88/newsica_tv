@@ -33,6 +33,11 @@ class TestShortsAgent(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertIn("Test script", result["script"])
         self.assertIn("output/shorts/short_", result["output"].replace("\\", "/"))
+        self.assertTrue(result.get("caption"))
+        self.assertEqual(len(result.get("hashtags", [])), 5)
+
+        metadata_path = os.path.splitext(result["output"])[0] + ".json"
+        self.assertTrue(os.path.exists(metadata_path))
 
         # Verifica file creati (pulizia)
         if os.path.exists(agent.tmp_bg):
@@ -41,6 +46,8 @@ class TestShortsAgent(unittest.TestCase):
             os.remove(agent.tmp_srt)
         if os.path.exists(agent.tmp_audio):
             os.remove(agent.tmp_audio)
+        if os.path.exists(metadata_path):
+            os.remove(metadata_path)
             
         import glob
         for f in glob.glob(os.path.join(os.path.dirname(agent.tmp_bg), "frame_*.png")):
