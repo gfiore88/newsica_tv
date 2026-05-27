@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { FileAudio, Music, MessageSquare, Play, Check, X } from 'lucide-react'
+import { useDialog } from '../context/DialogContext'
 
 export default function Tools() {
   const [manualFormats, setManualFormats] = useState([])
@@ -10,6 +11,7 @@ export default function Tools() {
   const [musicMode, setMusicMode] = useState({ mode: 'mixed', counts: {} })
   const [telegramVoices, setTelegramVoices] = useState([])
   const [aiJobs, setAiJobs] = useState([])
+  const { showAlert } = useDialog()
 
   useEffect(() => {
     fetchMusicMode()
@@ -59,25 +61,27 @@ export default function Tools() {
 
   const triggerMusicGen = async () => {
     try {
-      await fetch('/api/music_gen', { method: 'POST' })
-      alert('Generazione musica AI avviata in background.')
+      await fetch('/api/music/generate', { method: 'POST' })
+      await showAlert('Generazione musica AI avviata in background.', 'Traccia in lavorazione')
       fetchAiJobs()
-    } catch (e) {}
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   const launchManualEvent = async () => {
     if (!selectedFormat) {
-      alert('Nessun format disponibile.')
+      await showAlert('Nessun format disponibile.', 'Errore')
       return
     }
     if (selectedFormat.requires_brief && !manualBrief.trim()) {
-      alert('Questo format richiede un tema o un brief.')
+      await showAlert('Questo format richiede un tema o un brief.', 'Attenzione')
       return
     }
 
     setManualLoading(true)
     try {
-      const res = await fetch('/api/manual-event', {
+      const res = await fetch('/api/manual_event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -88,14 +92,14 @@ export default function Tools() {
       })
       const data = await res.json()
       if (res.ok) {
-        alert(`Generazione avviata: ${data.title}`)
+        await showAlert(`Generazione avviata: ${data.title}`, 'Format in Lavorazione')
         setManualTitle('')
         setManualBrief('')
       } else {
-        alert(data.message || 'Errore nella generazione del format.')
+        await showAlert(data.message || 'Errore nella generazione del format.', 'Errore Server')
       }
     } catch (e) {
-      alert('Errore nell\'invio della richiesta.')
+      await showAlert('Errore nell\'invio della richiesta.', 'Errore Rete')
     } finally {
       setManualLoading(false)
     }

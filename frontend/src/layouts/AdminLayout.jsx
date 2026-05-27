@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { Radio, Calendar, Wrench, Database, Activity, RefreshCw, MonitorPlay, Video } from 'lucide-react'
+import { useDialog } from '../context/DialogContext'
 
 export default function AdminLayout() {
   const [state, setState] = useState({ status: 'OFFLINE' })
   const [chatStatus, setChatStatus] = useState({ video_id: '', is_running: false })
   const location = useLocation()
+  const { showAlert, showConfirm } = useDialog()
 
   useEffect(() => {
     const fetchState = async () => {
@@ -41,13 +43,17 @@ export default function AdminLayout() {
   }, [])
 
   const restartAll = async () => {
-    if (confirm("Vuoi riavviare regia e stream?")) {
-      await fetch('/api/service/restart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ service: 'all' })
-      })
-      alert("Comando di riavvio inviato.")
+    if (await showConfirm("Vuoi riavviare regia e stream? Questo comporterà una breve interruzione.", "Riavvio Emergenza")) {
+      try {
+        await fetch('/api/service/restart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ service: 'all' })
+        })
+        await showAlert("Comando di riavvio inviato con successo. Attendi qualche secondo.", "Riavvio in Corso")
+      } catch (e) {
+        await showAlert("Errore durante l'invio del comando.", "Errore")
+      }
     }
   }
 

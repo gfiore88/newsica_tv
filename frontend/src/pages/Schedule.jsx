@@ -1,9 +1,11 @@
 import React from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Calendar as CalendarIcon } from 'lucide-react'
+import { useDialog } from '../context/DialogContext'
 
 export default function Schedule() {
   const { state } = useOutletContext()
+  const { showConfirm, showAlert } = useDialog()
 
   const schedule = state.schedule || []
 
@@ -31,15 +33,21 @@ export default function Schedule() {
     'meteo': { label: '☀️ Meteo', bg: 'bg-sky-950/50 text-sky-300 border-sky-800/50' }
   }
 
-  const selectBlock = async (index, title) => {
-    if (confirm(`Forzare la messa in onda immediata del blocco "${title}"?`)) {
+  const forcePlay = async (index, title) => {
+    if (await showConfirm(`Forzare la messa in onda immediata del blocco "${title}"?`, 'Messa in Onda Forzata')) {
       try {
-        await fetch('/api/command', {
+        const res = await fetch('/api/command', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ command: `FORCE_INDEX_${index}` })
         })
+        if (res.ok) {
+          await showAlert('Comando accettato: il blocco andrà in onda tra poco.', 'Comando Inviato')
+        } else {
+          await showAlert('Errore durante l\'invio del comando.', 'Errore')
+        }
       } catch (e) {
+        await showAlert('Errore di rete.', 'Errore')
         console.error(e)
       }
     }
@@ -74,7 +82,7 @@ export default function Schedule() {
             return (
               <div 
                 key={idx}
-                onClick={() => !isActive && selectBlock(item.index, item.title)}
+                onClick={() => !isActive && forcePlay(item.index, item.title)}
                 className={`relative group p-5 rounded-xl border flex flex-col h-40 ${
                   isActive 
                     ? 'ring-2 ring-purple-500 bg-gradient-to-br from-slate-800 to-indigo-950 border-purple-500 shadow-xl shadow-purple-500/20 scale-[1.02]' 

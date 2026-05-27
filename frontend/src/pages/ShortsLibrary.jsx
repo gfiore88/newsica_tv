@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { Video, Calendar, Download, Play, RefreshCw } from 'lucide-react'
+import { useDialog } from '../context/DialogContext'
 
 export default function ShortsLibrary() {
   const [shorts, setShorts] = useState([])
   const [loading, setLoading] = useState(true)
   const [playingShort, setPlayingShort] = useState(null)
   const [shortsLoading, setShortsLoading] = useState(false)
+  const { showAlert } = useDialog()
 
   const fetchShorts = async () => {
     setLoading(true)
@@ -32,13 +34,15 @@ export default function ShortsLibrary() {
       const res = await fetch('/api/generate_short', { method: 'POST' })
       const data = await res.json()
       if (res.ok) {
-        alert(`Short generato con successo: ${data.output}`)
+        await showAlert(`Short generato con successo.`, 'Video Pronto')
+        const filename = data.output.split('/').pop()
+        setPlayingShort({ url: `/shorts/${filename}` })
         fetchShorts()
       } else {
-        alert(`Errore: ${data.message || 'Generazione fallita'}`)
+        await showAlert(`Errore: ${data.message || 'Generazione fallita'}`, 'Errore Generazione')
       }
     } catch (e) {
-      alert('Errore di connessione al server.')
+      await showAlert('Errore di connessione al server.', 'Errore di Rete')
     } finally {
       setShortsLoading(false)
     }
@@ -110,7 +114,7 @@ export default function ShortsLibrary() {
                   <div key={short.filename} className="glass rounded-lg overflow-hidden border border-slate-800/80 group">
                     <div 
                       className="aspect-[9/16] bg-slate-900 relative cursor-pointer"
-                      onClick={() => setPlayingShort(short)}
+                      onClick={(e) => { e.preventDefault(); setPlayingShort(short); }}
                     >
                       {/* Simula un placeholder video */}
                       <div className="absolute inset-0 bg-gradient-to-b from-indigo-900/20 to-black flex items-center justify-center">
@@ -150,10 +154,10 @@ export default function ShortsLibrary() {
 
       {/* Modal Video Player */}
       {playingShort && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
           <div className="relative w-full max-w-[400px]">
             <button 
-              onClick={() => setPlayingShort(null)}
+              onClick={(e) => { e.preventDefault(); setPlayingShort(null); }}
               className="absolute -top-10 right-0 text-white hover:text-slate-300 transition"
             >
               Chiudi (Esc)
@@ -162,6 +166,7 @@ export default function ShortsLibrary() {
               src={playingShort.url} 
               controls 
               autoPlay 
+              playsInline
               className="w-full rounded-lg shadow-2xl bg-black aspect-[9/16]"
             />
           </div>

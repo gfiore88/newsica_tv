@@ -1,12 +1,16 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
+import { useDialog } from '../context/DialogContext'
 import { AlertTriangle, SkipForward, RefreshCw, Bell, MonitorPlay, Volume2, ShieldAlert } from 'lucide-react'
 
 export default function LiveMonitor() {
   const { state } = useOutletContext()
+  const { showConfirm } = useDialog()
+  const [loadingAction, setLoadingAction] = useState(null)
 
   const sendCommandSafe = async (cmd, msg) => {
-    if (confirm(msg)) {
+    if (await showConfirm(msg, 'Conferma Comando')) {
+      setLoadingAction(cmd)
       try {
         await fetch('/api/command', {
           method: 'POST',
@@ -16,6 +20,7 @@ export default function LiveMonitor() {
       } catch (err) {
         console.error("Errore comando:", err)
       }
+      setLoadingAction(null)
     }
   }
 
