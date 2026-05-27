@@ -11,6 +11,33 @@ class SocialPublisher:
     def is_auto_post_enabled() -> bool:
         return os.getenv("AUTO_POST_SHORTS", "false").lower() == "true"
 
+    @staticmethod
+    def _bulk_status_from_results(results: dict) -> str:
+        statuses = [item.get("status") for item in results.values()]
+        if statuses and all(status == "success" for status in statuses):
+            return "success"
+        if any(status == "success" for status in statuses):
+            return "partial"
+        if any(status == "config_missing" for status in statuses):
+            return "config_missing"
+        return "error"
+
+    @staticmethod
+    def _bulk_message_from_results(results: dict) -> str:
+        labels = {
+            "youtube": "YouTube",
+            "instagram": "Instagram",
+            "tiktok": "TikTok",
+        }
+        lines = []
+        for platform in ("youtube", "instagram", "tiktok"):
+            result = results.get(platform, {})
+            label = labels[platform]
+            status = result.get("status", "error")
+            prefix = "OK" if status == "success" else "KO"
+            lines.append(f"[{prefix}] {label}: {result.get('message', 'Nessuna risposta disponibile.')}")
+        return "\n".join(lines)
+
     def _upload_to_cloudinary(self, video_path: str) -> str:
         """Effettua il caricamento del file video locale su Cloudinary firmato crittograficamente."""
         cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
@@ -358,6 +385,38 @@ class SocialPublisher:
         return {
             "status": "success",
             "message": "Reel simulato con successo su Instagram! Nota: in produzione il video deve essere ospitato su un URL pubblico per consentire ai server di Facebook di scaricarlo."
+        }
+
+    def publish_to_all_socials(self, video_path: str, title: str, caption: str) -> dict:
+        """Pubblica lo short su YouTube, Instagram e TikTok con un'unica azione."""
+        if os.getenv("BUFFER_USE_INTEGRATION", "false").lower() == "true":
+            try:
+                video_url = self._upload_to_cloudinary(video_path)
+                results = {
+                    "youtube": self._publish_via_buffer(video_url, caption, "youtube", title=title),
+                    "instagram": self._publish_via_buffer(video_url, caption, "instagram", post_type="reel"),
+                    "tiktok": self._publish_via_buffer(video_url, caption, "tiktok"),
+                }
+                return {
+                    "status": self._bulk_status_from_results(results),
+                    "message": self._bulk_message_from_results(results),
+                    "results": results,
+                }
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "message": f"Errore durante la pubblicazione multi-social via Buffer: {e}"
+                }
+
+        results = {
+            "youtube": self.publish_to_youtube(video_path, title, caption),
+            "instagram": self.publish_to_instagram(video_path, caption),
+            "tiktok": self.publish_to_tiktok(video_path, title, caption),
+        }
+        return {
+            "status": self._bulk_status_from_results(results),
+            "message": self._bulk_message_from_results(results),
+            "results": results,
         }
 
     def publish_to_tiktok(self, video_path: str, title: str, description: str = None) -> dict:

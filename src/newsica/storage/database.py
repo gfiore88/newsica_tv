@@ -6,13 +6,21 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 DB_PATH = os.path.join(RUNTIME_DIR, "newsica.db")
 
+
+class ManagedConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            return super().__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            self.close()
+
 def get_connection():
     """
     Ritorna una connessione al DB SQLite con timeout di sicurezza
     per supportare accessi concorrenti da più processi.
     """
     os.makedirs(RUNTIME_DIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=5.0)
+    conn = sqlite3.connect(DB_PATH, timeout=5.0, factory=ManagedConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -155,6 +163,13 @@ def init_schema():
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.executescript(schema)
+            shorts_columns = {
+                row["name"] for row in cursor.execute("PRAGMA table_info(shorts_library)").fetchall()
+            }
+            if "social_posts_json" not in shorts_columns:
+                cursor.execute(
+                    "ALTER TABLE shorts_library ADD COLUMN social_posts_json TEXT DEFAULT '{}'"
+                )
             conn.commit()
     except Exception as e:
         print(f"⚠️ Failed to initialize SQLite schema: {e}")

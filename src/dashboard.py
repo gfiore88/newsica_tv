@@ -30,7 +30,7 @@ from newsica.editorial.fallback_scripts import build_fallback_script
 from newsica.editorial.source_filters import fallback_general_news, filter_items_for_character
 from newsica.storage.database import get_connection
 from newsica.storage.repositories.audio_metadata_repository import get_metadata
-from newsica.storage.repositories.shorts_library_repository import delete_shorts, get_short
+from newsica.storage.repositories.shorts_library_repository import delete_shorts, get_short, mark_short_social_posts
 
 
 def _format_memory_value(raw_value):
@@ -204,6 +204,25 @@ def _normalize_short_hashtags(raw_hashtags):
     return hashtags
 
 
+def _normalize_short_social_posts(raw_social_posts):
+    if not isinstance(raw_social_posts, dict):
+        return {}
+    normalized = {}
+    for platform in ("youtube", "instagram", "tiktok"):
+        payload = raw_social_posts.get(platform)
+        if not isinstance(payload, dict):
+            continue
+        posted_at = str(payload.get("posted_at", "")).strip()
+        message = str(payload.get("message", "")).strip()
+        if not posted_at:
+            continue
+        normalized[platform] = {
+            "posted_at": posted_at,
+            "message": message,
+        }
+    return normalized
+
+
 def _read_short_metadata(video_path):
     filename = os.path.basename(video_path)
     db_row = get_short(filename)
@@ -212,7 +231,12 @@ def _read_short_metadata(video_path):
             raw_hashtags = json.loads(db_row.get("hashtags_json") or "[]")
         except Exception:
             raw_hashtags = []
+        try:
+            raw_social_posts = json.loads(db_row.get("social_posts_json") or "{}")
+        except Exception:
+            raw_social_posts = {}
         hashtags = _normalize_short_hashtags(raw_hashtags)
+        social_posts = _normalize_short_social_posts(raw_social_posts)
         return {
             "caption": str(db_row.get("caption", "")).strip(),
             "hashtags": hashtags,
@@ -221,6 +245,9 @@ def _read_short_metadata(video_path):
             "script": str(db_row.get("script", "")).strip(),
             "theme": str(db_row.get("theme", "")).strip(),
             "mode": str(db_row.get("mode", "")).strip(),
+            "social_posts": social_posts,
+            "posted_any": bool(social_posts),
+            "posted_platforms": sorted(social_posts.keys()),
         }
 
     metadata_path = os.path.splitext(video_path)[0] + ".json"
@@ -241,6 +268,9 @@ def _read_short_metadata(video_path):
         "script": str(payload.get("script", "")).strip(),
         "theme": str(payload.get("theme", "")).strip(),
         "mode": str(payload.get("mode", "")).strip(),
+        "social_posts": {},
+        "posted_any": False,
+        "posted_platforms": [],
     }
 
 app = Flask(__name__)
@@ -924,7 +954,7 @@ def generate_short():
 def shorts_publish():
     data = request.json or {}
     filename = data.get("filename")
-    platform = data.get("platform")  # 'youtube', 'instagram', 'tiktok'
+    platform = data.get("platform")  # 'youtube', 'instagram', 'tiktok', 'all'
     
     if not filename or not platform:
         return jsonify({"status": "error", "message": "Parametri mancanti."}), 400
@@ -950,13 +980,22 @@ def shorts_publish():
         res = publisher.publish_to_instagram(video_path, full_caption)
     elif platform == "tiktok":
         res = publisher.publish_to_tiktok(video_path, title, full_caption)
+    elif platform == "all":
+        res = publisher.publish_to_all_socials(video_path, title, full_caption)
     else:
         return jsonify({"status": "error", "message": "Piattaforma non supportata."}), 400
+
+    platform_results = res.get("results")
+    if not isinstance(platform_results, dict):
+        platform_results = {platform: res}
+    social_posts = mark_short_social_posts(filename, platform_results)
         
     if res.get("status") == "success":
-        return jsonify({"status": "OK", "message": res.get("message")}), 200
+        return jsonify({"status": "OK", "message": res.get("message"), "social_posts": social_posts}), 200
+    if res.get("status") == "partial":
+        return jsonify({"status": "partial", "message": res.get("message"), "results": res.get("results", {}), "social_posts": social_posts}), 200
     else:
-        return jsonify({"status": "config_missing", "message": res.get("message")}), 200
+        return jsonify({"status": res.get("status", "config_missing"), "message": res.get("message"), "results": res.get("results", {}), "social_posts": social_posts}), 200
 
 @app.route('/api/shorts_library', methods=['GET'])
 def shorts_library():
@@ -996,6 +1035,9 @@ def shorts_library():
             "script": metadata.get("script", ""),
             "theme": metadata.get("theme", ""),
             "mode": metadata.get("mode", ""),
+            "social_posts": metadata.get("social_posts", {}),
+            "posted_any": metadata.get("posted_any", False),
+            "posted_platforms": metadata.get("posted_platforms", []),
         })
         
     shorts.sort(key=lambda x: x["timestamp"], reverse=True)

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Video, Calendar, Download, Play, RefreshCw, Copy, Trash2 } from 'lucide-react'
+import { Video, Calendar, Download, Play, RefreshCw, Copy, Trash2, Share2, CheckCircle2 } from 'lucide-react'
 import { useDialog } from '../context/DialogContext'
 
 export default function ShortsLibrary() {
@@ -32,6 +32,33 @@ export default function ShortsLibrary() {
     funfact: { label: 'Fun Fact', className: 'bg-amber-400/95 text-slate-950 border-amber-100/40' },
   }
 
+  const socialPlatformMeta = {
+    youtube: { label: 'YouTube Shorts' },
+    instagram: { label: 'Instagram Reels' },
+    tiktok: { label: 'TikTok' },
+  }
+
+  const formatPostedAt = (value) => {
+    if (!value) return ''
+    try {
+      return new Intl.DateTimeFormat('it-IT', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      }).format(new Date(value))
+    } catch (e) {
+      return value
+    }
+  }
+
+  const getPostedHint = (short) => {
+    const socialPosts = short?.social_posts || {}
+    const entries = Object.entries(socialPosts)
+    if (entries.length === 0) return 'Non ancora pubblicato sui social.'
+    return entries
+      .map(([platform, payload]) => `${socialPlatformMeta[platform]?.label || platform}: ${formatPostedAt(payload.posted_at)}`)
+      .join(' | ')
+  }
+
   const fetchShorts = async () => {
     setLoading(true)
     try {
@@ -43,6 +70,11 @@ export default function ShortsLibrary() {
         setSelectedShorts((current) =>
           current.filter((filename) => nextShorts.some((short) => short.filename === filename))
         )
+        setPlayingShort((current) => {
+          if (!current) return current
+          return nextShorts.find((short) => short.filename === current.filename) || current
+        })
+        return nextShorts
       }
     } catch (e) {
       console.error("Errore caricamento libreria shorts:", e)
@@ -98,6 +130,9 @@ export default function ShortsLibrary() {
           caption: data.caption,
           hashtags: data.hashtags || [],
           hashtags_text: (data.hashtags || []).join(' '),
+          social_posts: {},
+          posted_any: false,
+          posted_platforms: [],
         })
         fetchShorts()
       } else {
@@ -194,10 +229,14 @@ export default function ShortsLibrary() {
     }
   }
 
-  const [publishing, setPublishing] = useState({ youtube: false, instagram: false, tiktok: false })
+  const [publishing, setPublishing] = useState({ youtube: false, instagram: false, tiktok: false, all: false })
 
   const handlePublish = async (platform) => {
-    setPublishing((prev) => ({ ...prev, [platform]: true }))
+    setPublishing((prev) => (
+      platform === 'all'
+        ? { ...prev, youtube: true, instagram: true, tiktok: true, all: true }
+        : { ...prev, [platform]: true }
+    ))
     try {
       const res = await fetch('/api/shorts_publish', {
         method: 'POST',
@@ -206,7 +245,26 @@ export default function ShortsLibrary() {
       })
       const data = await res.json()
       if (res.ok && data.status === 'OK') {
+        const refreshedShorts = await fetchShorts()
+        const updatedShort = refreshedShorts?.find((short) => short.filename === playingShort.filename)
+        if (updatedShort) {
+          setPlayingShort(updatedShort)
+        } else if (data.social_posts) {
+          setPlayingShort((current) => current ? {
+            ...current,
+            social_posts: data.social_posts,
+            posted_any: Object.keys(data.social_posts).length > 0,
+            posted_platforms: Object.keys(data.social_posts),
+          } : current)
+        }
         await showAlert(data.message, 'Pubblicazione Completata')
+      } else if (res.ok && data.status === 'partial') {
+        const refreshedShorts = await fetchShorts()
+        const updatedShort = refreshedShorts?.find((short) => short.filename === playingShort.filename)
+        if (updatedShort) {
+          setPlayingShort(updatedShort)
+        }
+        await showAlert(data.message, 'Pubblicazione Parziale')
       } else {
         await showAlert(
           data.message || 'Si è verificato un errore durante la pubblicazione.',
@@ -216,7 +274,11 @@ export default function ShortsLibrary() {
     } catch (e) {
       await showAlert('Errore di rete durante la pubblicazione.', 'Errore di Rete')
     } finally {
-      setPublishing((prev) => ({ ...prev, [platform]: false }))
+      setPublishing((prev) => (
+        platform === 'all'
+          ? { ...prev, youtube: false, instagram: false, tiktok: false, all: false }
+          : { ...prev, [platform]: false }
+      ))
     }
   }
 
@@ -350,8 +412,19 @@ export default function ShortsLibrary() {
                     </div>
                     
                     <div className="p-2 bg-slate-800/50 flex justify-between items-center">
-                      <div className="text-[10px] text-slate-400 truncate pr-2" title={short.filename}>
-                        {short.filename.replace('.mp4', '').replace('short_', '')}
+                      <div className="min-w-0 pr-2">
+                        <div className="text-[10px] text-slate-400 truncate" title={short.filename}>
+                          {short.filename.replace('.mp4', '').replace('short_', '')}
+                        </div>
+                        {short.posted_any && (
+                          <div
+                            className="mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200"
+                            title={getPostedHint(short)}
+                          >
+                            <CheckCircle2 size={11} />
+                            {short.posted_platforms.length}/3 postati
+                          </div>
+                        )}
                       </div>
                       <a 
                         href={short.url} 
@@ -417,10 +490,35 @@ export default function ShortsLibrary() {
                     <div className="mb-3">
                       <span className="text-sm font-semibold text-slate-200">Pubblica / Condividi sui Social</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+                      {Object.entries(socialPlatformMeta).map(([platform, meta]) => {
+                        const socialPost = playingShort.social_posts?.[platform]
+                        const isPosted = Boolean(socialPost?.posted_at)
+                        return (
+                          <div
+                            key={platform}
+                            title={isPosted ? `Gia pubblicato il ${formatPostedAt(socialPost.posted_at)}` : 'Non ancora pubblicato'}
+                            className={`rounded-lg border px-3 py-2 text-xs ${
+                              isPosted
+                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                                : 'border-slate-700 bg-slate-900/70 text-slate-400'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 font-semibold">
+                              <CheckCircle2 size={14} className={isPosted ? 'text-emerald-300' : 'text-slate-600'} />
+                              {meta.label}
+                            </div>
+                            <div className="mt-1 text-[11px]">
+                              {isPosted ? `Gia postato: ${formatPostedAt(socialPost.posted_at)}` : 'Non ancora postato'}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                       <button
                         onClick={() => handlePublish('youtube')}
-                        disabled={publishing.youtube}
+                        disabled={publishing.youtube || publishing.all}
                         className="flex flex-col items-center justify-center gap-2 p-3 bg-rose-950/30 hover:bg-rose-900/40 text-rose-200 hover:text-white border border-rose-500/20 hover:border-rose-500/40 rounded-xl text-xs font-bold transition disabled:opacity-50"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.508 9.388.508 9.388.508s7.517 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
@@ -428,7 +526,7 @@ export default function ShortsLibrary() {
                       </button>
                       <button
                         onClick={() => handlePublish('instagram')}
-                        disabled={publishing.instagram}
+                        disabled={publishing.instagram || publishing.all}
                         className="flex flex-col items-center justify-center gap-2 p-3 bg-pink-950/30 hover:bg-pink-900/40 text-pink-200 hover:text-white border border-pink-500/20 hover:border-pink-500/40 rounded-xl text-xs font-bold transition disabled:opacity-50"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
@@ -436,11 +534,19 @@ export default function ShortsLibrary() {
                       </button>
                       <button
                         onClick={() => handlePublish('tiktok')}
-                        disabled={publishing.tiktok}
+                        disabled={publishing.tiktok || publishing.all}
                         className="flex flex-col items-center justify-center gap-2 p-3 bg-cyan-950/30 hover:bg-cyan-900/40 text-cyan-200 hover:text-white border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl text-xs font-bold transition disabled:opacity-50"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.17-2.86-.74-3.99-1.72-.08-.07-.17-.17-.25-.26V14c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6c.39 0 .77.04 1.14.11V4.28c-1.32-.19-2.67-.12-3.95.22C3.99 5.21 2 7.89 2 11c0 4.42 3.58 8 8 8s8-3.58 8-8V0c-1.49.88-3.21 1.39-4.96 1.41l-.51-1.39z"/></svg>
                         {publishing.tiktok ? 'Invio...' : 'TikTok'}
+                      </button>
+                      <button
+                        onClick={() => handlePublish('all')}
+                        disabled={publishing.all || publishing.youtube || publishing.instagram || publishing.tiktok}
+                        className="flex flex-col items-center justify-center gap-2 p-3 bg-amber-950/40 hover:bg-amber-900/50 text-amber-100 hover:text-white border border-amber-400/25 hover:border-amber-300/45 rounded-xl text-xs font-bold transition disabled:opacity-50"
+                      >
+                        <Share2 className="w-5 h-5" />
+                        {publishing.all ? 'Invio globale...' : 'Tutti i social'}
                       </button>
                     </div>
                   </div>
