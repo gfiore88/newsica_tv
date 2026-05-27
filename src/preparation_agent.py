@@ -40,12 +40,16 @@ def check_singleton(name):
 def get_future_slots(hours_ahead=2, current_grace_minutes=30):
     # Leggiamo lo schedule
     from schedule_generator import get_current_schedule
-    schedule_data = get_current_schedule()
+    schedule_data = get_current_schedule() or {}
+    if not isinstance(schedule_data, dict):
+        return []
     
     now = datetime.datetime.now()
     future_slots = []
     
     for slot_time, block_info in schedule_data.items():
+        if not isinstance(block_info, dict):
+            continue
         try:
             hour, minute = map(int, slot_time.split(":"))
             slot_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -160,7 +164,7 @@ def run_loop():
 
             try:
                 from newsica.broadcast.runtime_state import get_current_state
-                current_state = get_current_state()
+                current_state = get_current_state() or {}
                 if (
                     current_state.get("status") == "ON_AIR"
                     and current_state.get("current_block") == "music_only"
@@ -172,13 +176,17 @@ def run_loop():
 
             # 2. Riconciliazione stato asset con il palinsesto corrente
             from schedule_generator import get_current_schedule
-            schedule_data = get_current_schedule()
+            schedule_data = get_current_schedule() or {}
+            if not isinstance(schedule_data, dict):
+                schedule_data = {}
             sysadmin.reconcile_asset_slots(schedule_data)
 
             # 3. Controllo palinsesto
             future_slots = get_future_slots(hours_ahead=2)
             
             for slot_time, block_info in future_slots:
+                if not isinstance(block_info, dict):
+                    continue
                 character = block_info.get("type", "news")
                 title = block_info.get("title", "")
                 

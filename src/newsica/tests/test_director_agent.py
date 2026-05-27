@@ -172,6 +172,24 @@ class TestDirectorAgent(unittest.TestCase):
 
     @patch("newsica.broadcast.director_agent.get_wallclock_schedule_key")
     @patch("newsica.broadcast.director_agent.schedule_deadline")
+    def test_standard_block_fallback_music_rotation_continues_until_deadline(self, mock_deadline, mock_wallclock):
+        mock_wallclock.return_value = "09:00"
+        mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=10)
+        state = {
+            "status": "ON_AIR",
+            "scheduled_slot": "09:00",
+            "current_segment": "music_rotation_until_deadline",
+            "theme": None,
+        }
+
+        action = self.director._progress_current_block(
+            state, "flash_60s", "Mondo in 60 Secondi", "Meteo Update", "10:00", "09:00"
+        )
+
+        self.assertIsInstance(action, PlayMusicDeadlineEvent)
+
+    @patch("newsica.broadcast.director_agent.get_wallclock_schedule_key")
+    @patch("newsica.broadcast.director_agent.schedule_deadline")
     def test_music_only_progression_uses_deadline_event_until_slot_end(self, mock_deadline, mock_wallclock):
         mock_wallclock.return_value = "17:00"
         mock_deadline.return_value = datetime.datetime.now() + datetime.timedelta(minutes=10)

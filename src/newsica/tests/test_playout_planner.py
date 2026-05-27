@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import datetime
 
 from newsica.broadcast.planner import PlayoutPlanner
-from newsica.domain.playout_events import PlayVoiceMixEvent, PlayMusicDeadlineEvent, PlayJingleEvent
+from newsica.domain.playout_events import PlayVoiceMixEvent, PlayMusicDeadlineEvent, PlayJingleEvent, PlayMusicEvent, PlaySilenceFallbackEvent
 from newsica.config.paths import RUNTIME_DIR
 
 class TestPlayoutPlannerMusicOnly(unittest.TestCase):
@@ -80,6 +80,44 @@ class TestPlayoutPlannerMusicOnly(unittest.TestCase):
         self.assertEqual(events[1].segment, "intro")
         self.assertEqual(events[1].next_segment, "music_rotation")
         self.assertEqual(events[2].label, "music_rotation")
+
+
+class TestPlayoutPlannerFallback(unittest.TestCase):
+    def setUp(self):
+        self.music_selector = MagicMock(return_value="assets/music/song.mp3")
+        self.planner = PlayoutPlanner(self.music_selector)
+
+    @patch("newsica.broadcast.planner.os.path.exists")
+    def test_plan_block_without_ready_audio_switches_to_music_rotation_segment(
+        self,
+        mock_exists,
+    ):
+        mock_exists.return_value = False
+        with patch("newsica.broadcast.runtime_state.get_current_state") as mock_get_state, patch(
+            "newsica.broadcast.runtime_state.write_state_files"
+        ) as mock_write_state:
+            mock_get_state.return_value = {
+                "status": "ON_AIR",
+                "current_block": "flash_60s",
+                "current_title": "Mondo in 60 Secondi",
+                "current_segment": "voice_part_1",
+            }
+
+            events = self.planner.plan_block(
+                block_type="flash_60s",
+                title="Mondo in 60 Secondi",
+                next_time="10:00",
+                scheduled_slot="09:00",
+                theme=None,
+            )
+
+            self.assertIsInstance(events[0], PlayJingleEvent)
+            self.assertEqual(events[0].next_segment, "music_rotation_until_deadline")
+            self.assertIsInstance(events[1], PlaySilenceFallbackEvent)
+            self.assertIsInstance(events[2], PlayMusicEvent)
+            self.assertIsInstance(events[3], PlayMusicDeadlineEvent)
+            written_state = mock_write_state.call_args[0][0]
+            self.assertEqual(written_state["current_segment"], "music_rotation_until_deadline")
 
 if __name__ == "__main__":
     unittest.main()

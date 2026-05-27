@@ -25,12 +25,12 @@ class PlayoutPlanner:
         events = []
         
         # 1. Jingle d'apertura
-        # Il next_segment dipende dal tipo di blocco:
-        # - music_only → dopo il jingle inizia la rotazione musicale (non segmenti parlati)
-        # - altri blocchi → dopo il jingle inizia il contenuto vocale (voice_part_1)
+        # Il segmento reale viene corretto più sotto nel caso in cui il blocco
+        # non abbia audio pronto e debba cadere direttamente in rotazione musicale.
         jingle_file, jingle_label = get_jingle_for_block(block_type)
         jingle_next_seg = "music_rotation" if block_type == "music_only" else "voice_part_1"
-        events.append(PlayJingleEvent(jingle_file, jingle_label, next_segment=jingle_next_seg))
+        opening_jingle = PlayJingleEvent(jingle_file, jingle_label, next_segment=jingle_next_seg)
+        events.append(opening_jingle)
         
         if block_type == "music_only":
             ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot.replace(":", ""))
@@ -94,10 +94,12 @@ class PlayoutPlanner:
                     }
                     label = block_labels.get(block_type, block_type.title())
                     state["current_title"] = f"Rotazione Musicale - In attesa di {label}"
+                    state["current_segment"] = "music_rotation_until_deadline"
                     write_state_files(state)
             except Exception as e:
                 print(f"⚠️ [PlayoutPlanner] Errore aggiornamento stato in fallback: {e}")
 
+            opening_jingle.next_segment = "music_rotation_until_deadline"
             events.append(PlaySilenceFallbackEvent(2))
             music_file = self.music_selector(theme)
             if music_file:

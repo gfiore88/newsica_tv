@@ -90,7 +90,7 @@ class SystemAdminAgent:
             expected = schedule_data.get(slot_time)
 
             is_podcast = (character == "podcast" or (expected and expected.get("type") == "podcast"))
-            title_mismatch = False if is_podcast else (expected.get("title") != title)
+            title_mismatch = False if (is_podcast or not expected) else (expected.get("title") != title)
 
             if not expected or expected.get("type") != character or title_mismatch:
                 if preparing_dir.exists():
