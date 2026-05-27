@@ -116,8 +116,15 @@ export default function ShortsLibrary() {
                       className="aspect-[9/16] bg-slate-900 relative cursor-pointer"
                       onClick={(e) => { e.preventDefault(); setPlayingShort(short); }}
                     >
-                      {/* Simula un placeholder video */}
-                      <div className="absolute inset-0 bg-gradient-to-b from-indigo-900/20 to-black flex items-center justify-center">
+                      {/* Anteprima video reale */}
+                      <video 
+                        src={short.url}
+                        className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity pointer-events-none"
+                        preload="metadata"
+                        muted
+                        playsInline
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/80 flex items-center justify-center">
                         <div className="w-12 h-12 rounded-full bg-indigo-500/80 flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.5)] group-hover:scale-110 transition-transform">
                           <Play className="text-white ml-1" fill="currentColor" size={20} />
                         </div>

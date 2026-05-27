@@ -33,10 +33,10 @@ class ShortsAgent:
         self.tmp_bg = os.path.join(TMP_DIR, "shorts_bg.png")
 
     def _get_top_news(self) -> dict:
-        raw_news_file = os.path.join(TMP_DIR, "raw_news.json")
+        raw_news_file = os.path.join(TMP_DIR, 'raw_news.json')
         default_news = {
-            "title": "Nessuna notizia rilevante",
-            "description": "Al momento non ci sono notizie rilevanti in evidenza. Restate sintonizzati su NewsicaTV per i prossimi aggiornamenti.",
+            "title": "Nessuna notizia disponibile al momento",
+            "summary": "Stiamo aggiornando i nostri sistemi.",
             "category": "news"
         }
         
@@ -52,21 +52,22 @@ class ShortsAgent:
                 
             import random
             
-            # Per rendere il canale dinamico, scegliamo una notizia a caso invece di quella più grave.
-            # Questo garantisce che vengano toccati temi come sport, meteo, gossip, tech o benessere.
+            # Scegliamo una notizia a caso
             selected_item = random.choice(news_list)
             
-            # Assegniamo un "theme" fittizio basato sulle parole chiave per guidare i colori
-            title_lower = selected_item.get('title', '').lower()
-            if any(k in title_lower for k in ['sport', 'calcio', 'tennis', 'motori', 'atletica']):
+            # Targeting serio tramite SOURCE invece di usare string matching sul titolo
+            source = selected_item.get('source', '').lower()
+            
+            if 'sport' in source:
                 selected_item['theme_color'] = 'sport'
-            elif any(k in title_lower for k in ['meteo', 'pioggia', 'sole', 'caldo', 'freddo']):
-                selected_item['theme_color'] = 'meteo'
-            elif any(k in title_lower for k in ['benessere', 'salute', 'dieta', 'dormire', 'medico']):
+            elif 'salute' in source or 'benessere' in source or 'lifestyle' in source:
                 selected_item['theme_color'] = 'wellness'
-            elif any(k in title_lower for k in ['mort', 'guerra', 'attentato', 'grave']):
-                selected_item['theme_color'] = 'breaking'
+            elif 'tecnologia' in source or 'innovazione' in source:
+                selected_item['theme_color'] = 'tech'
+            elif 'meteo' in source:
+                selected_item['theme_color'] = 'meteo'
             else:
+                # Per cronaca, mondo, politica e ultimora
                 selected_item['theme_color'] = 'news'
 
             return selected_item
@@ -157,87 +158,125 @@ Notizia: {news_item.get('title')}
                 
                 current_time = end_time
 
-    def _generate_background(self, theme: str = 'news', title: str = ''):
+    def _download_image(self, img_url: str):
+        if not img_url:
+            return None
+        try:
+            headers = {"User-Agent": "NewsicaTV/1.0"}
+            response = requests.get(img_url, headers=headers, timeout=15)
+            response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "image" not in content_type:
+                logger.warning(f"URL non immagine: {img_url} - Content-Type: {content_type}")
+                return None
+            img = Image.open(io.BytesIO(response.content)).convert("RGBA")
+            min_w, min_h = 400, 300
+            if img.width < min_w or img.height < min_h:
+                logger.warning(f"Immagine troppo piccola scartata: {img.width}x{img.height} - {img_url}")
+                return None
+            return img
+        except Exception as e:
+            logger.warning(f"Download immagine fallito: {img_url} - {e}")
+            return None
+
+    def _apply_context_image_to_background(self, image: Image.Image, context_img: Image.Image):
+        # La mettiamo in un riquadro centrale per non coprire i loghi del base screen
+        width, height = image.size
+        box_w, box_h = 980, 700
+        
+        img_w, img_h = context_img.size
+        scale = max(box_w / img_w, box_h / img_h)
+        new_w = int(img_w * scale)
+        new_h = int(img_h * scale)
+        
+        context_img = context_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        left = (new_w - box_w) // 2
+        top = (new_h - box_h) // 2
+        context_img = context_img.crop((left, top, left + box_w, top + box_h))
+        
+        # Sfumatura ai bordi (effetto vignettatura) o opacità ridotta per amalgamarsi
+        context_img.putalpha(190)
+        
+        # Posizionala al centro-alto (lasciando spazio sotto per i testi)
+        y_pos = (height - box_h) // 2 - 150
+        x_pos = (width - box_w) // 2
+        
+        image.paste(context_img, (x_pos, y_pos), context_img)
+        return image
+
+    def _search_wikipedia_image_via_llm(self, title: str):
+        try:
+            import urllib.parse
+            prompt = f'Data la notizia: "{title}". Estrai una SINGOLA entità Wikipedia (una città, un personaggio pubblico, o un oggetto generico come "Ospedale" o "Polizia"). Rispondi SOLO con il nome dell entità, niente punteggiatura.'
+            payload = {"model": MODEL_NAME, "prompt": prompt, "stream": False, "options": {"temperature": 0.1}}
+            resp = requests.post(OLLAMA_URL, json=payload, timeout=10)
+            if resp.status_code == 200:
+                entity = resp.json().get("response", "").strip()
+                if entity:
+                    print(f"🔎 Entità Wikipedia estratta: {entity}")
+                    q = urllib.parse.quote(entity)
+                    url = f"https://it.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&generator=search&gsrsearch={q}&pithumbsize=1200"
+                    wiki_resp = requests.get(url, headers={"User-Agent": "NewsicaTV/1.0"}, timeout=10)
+                    if wiki_resp.status_code == 200:
+                        pages = wiki_resp.json().get("query", {}).get("pages", {})
+                        for _, page in pages.items():
+                            if "thumbnail" in page:
+                                return page["thumbnail"]["source"]
+        except Exception as e:
+            logger.warning(f"Errore Wikipedia via LLM: {e}")
+        return None
+
+    def _generate_background(self, theme: str = 'news', title: str = '', image_url: str = ''):
         print(f"🎨 Generazione background verticale dinamico (tema: {theme})...")
         width, height = 1080, 1920
-        image = Image.new("RGB", (width, height))
-        draw = ImageDraw.Draw(image)
         
-        import random
-        # Palette dinamica base su temi
-        if theme == 'sport':
-            base_r, base_g, base_b = 200, 80, 20
-        elif theme == 'meteo':
-            base_r, base_g, base_b = 20, 100, 220
-        elif theme == 'wellness':
-            base_r, base_g, base_b = 40, 180, 90
-        elif theme == 'breaking':
-            base_r, base_g, base_b = 220, 20, 30
+        base_bg_path = os.path.join(ASSETS_DIR, "shorts_backgrounds", "base_screens", f"{theme}.png")
+        if not os.path.exists(base_bg_path):
+            base_bg_path = os.path.join(ASSETS_DIR, "shorts_backgrounds", "base_screens", "news.png")
+            
+        if os.path.exists(base_bg_path):
+            image = Image.open(base_bg_path).convert("RGB")
+            if image.size != (width, height):
+                image = image.resize((width, height), Image.Resampling.LANCZOS)
         else:
-            palettes = [(140, 40, 220), (255, 60, 120), (10, 180, 200), (250, 180, 20)]
-            base_r, base_g, base_b = random.choice(palettes)
-
-        for y in range(height):
-            r = int(base_r * (1 - (y / height) * 0.8))
-            g = int(base_g * (1 - (y / height) * 0.8))
-            b = int(base_b * (1 - (y / height) * 0.8))
-            draw.line([(0, y), (width, y)], fill=(r, g, b))
+            image = Image.new("RGB", (width, height), color=(20, 20, 20))
             
-        # DuckDuckGo Image Search e Overlay Immagine
-        bg_image_added = False
-        if title:
-            try:
-                print(f"🔎 Ricerca immagine contestuale per: {title}")
-                with DDGS() as ddgs:
-                    results = list(ddgs.images(title, max_results=1))
-                    if results:
-                        img_url = results[0].get("image")
-                        print(f"🖼️ Immagine trovata: {img_url}")
-                        resp = requests.get(img_url, timeout=10)
-                        if resp.status_code == 200:
-                            context_img = Image.open(io.BytesIO(resp.content)).convert("RGBA")
-                            # Resize to cover width and keep aspect ratio
-                            w_percent = (width / float(context_img.size[0]))
-                            h_size = int((float(context_img.size[1]) * float(w_percent)))
-                            context_img = context_img.resize((width, h_size), Image.Resampling.LANCZOS)
-                            
-                            # Crea una sfocatura per non disturbare il testo
-                            context_img = context_img.filter(ImageFilter.GaussianBlur(15))
-                            
-                            # Applica l'immagine al centro e abbassa l'opacità per fonderla col gradiente
-                            context_img.putalpha(120)
-                            y_pos = (height - h_size) // 2
-                            image.paste(context_img, (0, y_pos), context_img)
-                            bg_image_added = True
-                            print("✅ Immagine di sfondo applicata con successo.")
-            except Exception as e:
-                logger.warning(f"Impossibile scaricare o applicare l'immagine da DDGS: {e}")
-
-        # Se fallisce DDGS, pattern astratti fallback
-        if not bg_image_added:
-            for _ in range(5):
-                cx = random.randint(0, width)
-                cy = random.randint(0, height)
-                radius = random.randint(300, 700)
-                alpha = random.randint(10, 40)
-                bbox = [cx - radius, cy - radius, cx + radius, cy + radius]
-                draw.ellipse(bbox, outline=(255, 255, 255, alpha), width=3)
+        context_img = None
+        
+        if image_url:
+            print(f"🖼️ Uso immagine originale dalla news: {image_url}")
+            context_img = self._download_image(image_url)
             
-        # Aggiungi il logo in cima (versione no background)
-        logo_path = os.path.join(ASSETS_DIR, "logo_no_bg.png")
-        if os.path.exists(logo_path):
-            try:
-                logo = Image.open(logo_path).convert("RGBA")
-                max_logo_w = 400
-                w_percent = (max_logo_w / float(logo.size[0]))
-                h_size = int((float(logo.size[1]) * float(w_percent)))
-                logo = logo.resize((max_logo_w, h_size), Image.Resampling.LANCZOS)
+        if not context_img and title:
+            print("🔎 Cerco immagine su Wikipedia...")
+            wiki_url = self._search_wikipedia_image_via_llm(title)
+            if wiki_url:
+                print(f"🖼️ Immagine Wikipedia trovata: {wiki_url}")
+                context_img = self._download_image(wiki_url)
                 
-                x = (width - max_logo_w) // 2
-                y = 150
-                image.paste(logo, (x, y), logo)
-            except Exception as e:
-                logger.error(f"Impossibile caricare logo: {e}")
+        # 5. Applica immagine
+        if context_img is not None:
+            image = self._apply_context_image_to_background(image, context_img)
+            print("✅ Immagine in sovraimpressione applicata con successo.")
+        else:
+            print("ℹ️ Nessuna immagine fornita dall'RSS. Uso solo lo sfondo tematico pulito.")
+
+        # Aggiungi il logo in cima (versione no background) - ATTUALMENTE DISABILITATO 
+        # (Il logo è già presente nativamente nei base_screens)
+        # logo_path = os.path.join(ASSETS_DIR, "logo_no_bg.png")
+        # if os.path.exists(logo_path):
+        #     try:
+        #         logo = Image.open(logo_path).convert("RGBA")
+        #         max_logo_w = 400
+        #         w_percent = (max_logo_w / float(logo.size[0]))
+        #         h_size = int((float(logo.size[1]) * float(w_percent)))
+        #         logo = logo.resize((max_logo_w, h_size), Image.Resampling.LANCZOS)
+        #         
+        #         x = (width - max_logo_w) // 2
+        #         y = 150
+        #         image.paste(logo, (x, y), logo)
+        #     except Exception as e:
+        #         logger.error(f"Impossibile caricare logo: {e}")
                 
         image.save(self.tmp_bg)
 
@@ -271,11 +310,13 @@ Notizia: {news_item.get('title')}
         width, height = bg.size
         
         try:
-            # Prova font Mac classici
-            if os.path.exists("/System/Library/Fonts/Helvetica.ttc"):
-                font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 65)
+            # Prova font Mac in grassetto per maggiore leggibilità
+            if os.path.exists("/System/Library/Fonts/Supplemental/Arial Bold.ttf"):
+                font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 75)
+            elif os.path.exists("/System/Library/Fonts/Helvetica.ttc"):
+                font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 75)
             elif os.path.exists("/Library/Fonts/Arial.ttf"):
-                font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 65)
+                font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 75)
             else:
                 font = ImageFont.load_default()
         except:
@@ -287,29 +328,40 @@ Notizia: {news_item.get('title')}
                 frame_path = os.path.join(TMP_DIR, f"frame_{i}.png")
                 frame = bg.copy()
                 
-                text = sub['text']
-                # Usa Pilmoji per calcolare la larghezza (pilmoji si comporta diversamente da draw.textbbox, facciamo un fallback rapido per il centering)
-                draw = ImageDraw.Draw(frame)
-                try:
-                    bbox = draw.textbbox((0, 0), text, font=font)
-                    tw = bbox[2] - bbox[0]
-                    # stima approssimativa extra per emoji, visto che draw.textbbox non sa bene come misurare le CBDT emoji
-                    tw += text.count(emoji.emojize(':smile:')[0]) * 30 # placeholder logica molto empirica, ma la riga seguente risolve quasi sempre:
-                except:
-                    tw = 800
-
-                x = (width - tw) / 2
-                y = height / 2 + 150 # Pozizione in basso
+                import textwrap
+                text = sub['text'].upper()
+                lines = textwrap.wrap(text, width=22)
                 
-                # Effetto Ombra / Bordo nero massiccio usando pilmoji
+                draw = ImageDraw.Draw(frame)
+                
+                try:
+                    # Calcolo altezza riga in base al font
+                    bbox_h = draw.textbbox((0, 0), "A", font=font)
+                    line_height = bbox_h[3] - bbox_h[1] + 20
+                except:
+                    line_height = 95
+
+                total_height = len(lines) * line_height
+                start_y = (height / 2 + 150) - (total_height / 2)
+                
                 with Pilmoji(frame) as pilmoji:
-                    stroke_width = 4
-                    for dx in range(-stroke_width, stroke_width+1, 2):
-                        for dy in range(-stroke_width, stroke_width+1, 2):
-                            pilmoji.text((x + dx, y + dy), text, font=font, fill=(0, 0, 0, 255))
-                    
-                    # Testo principale Giallo
-                    pilmoji.text((x, y), text, font=font, fill=(255, 230, 0, 255))
+                    for idx, line in enumerate(lines):
+                        try:
+                            bbox = draw.textbbox((0, 0), line, font=font)
+                            tw = bbox[2] - bbox[0]
+                            tw += line.count(emoji.emojize(':smile:')[0]) * 30
+                        except:
+                            tw = 800
+                            
+                        x = (width - tw) / 2
+                        y = start_y + (idx * line_height)
+                        
+                        stroke_width = 4
+                        for dx in range(-stroke_width, stroke_width+1, 2):
+                            for dy in range(-stroke_width, stroke_width+1, 2):
+                                pilmoji.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 255))
+                        
+                        pilmoji.text((x, y), line, font=font, fill=(255, 230, 0, 255))
                 
                 frame.save(frame_path)
                 
@@ -348,7 +400,8 @@ Notizia: {news_item.get('title')}
             script = self._generate_script(news)
             duration = self._generate_audio(script)
             self._generate_srt(script, duration)
-            self._generate_background(theme, news.get('title', ''))
+            img_url = news.get('image_url') or news.get('urlToImage', '')
+            self._generate_background(theme, news.get('title', ''), img_url)
             out_file = self._render_video()
             
             return {
