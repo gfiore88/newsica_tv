@@ -949,7 +949,7 @@ def shorts_publish():
     elif platform == "instagram":
         res = publisher.publish_to_instagram(video_path, full_caption)
     elif platform == "tiktok":
-        res = publisher.publish_to_tiktok(video_path, title)
+        res = publisher.publish_to_tiktok(video_path, title, full_caption)
     else:
         return jsonify({"status": "error", "message": "Piattaforma non supportata."}), 400
         
