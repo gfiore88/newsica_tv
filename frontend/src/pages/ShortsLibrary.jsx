@@ -1,13 +1,36 @@
 import React, { useEffect, useState } from 'react'
-import { Video, Calendar, Download, Play, RefreshCw, Copy } from 'lucide-react'
+import { Video, Calendar, Download, Play, RefreshCw, Copy, Trash2 } from 'lucide-react'
 import { useDialog } from '../context/DialogContext'
 
 export default function ShortsLibrary() {
+  const shortModes = [
+    { value: 'random', label: 'Casuale' },
+    { value: 'news', label: 'News' },
+    { value: 'breaking', label: 'Breaking News' },
+    { value: 'sport', label: 'Sport' },
+    { value: 'meteo', label: 'Meteo' },
+    { value: 'tech', label: 'Tech' },
+    { value: 'wellness', label: 'Wellness' },
+    { value: 'funfact', label: 'Curiosità / Fun Fact' },
+  ]
   const [shorts, setShorts] = useState([])
   const [loading, setLoading] = useState(true)
   const [playingShort, setPlayingShort] = useState(null)
   const [shortsLoading, setShortsLoading] = useState(false)
-  const { showAlert } = useDialog()
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [selectedMode, setSelectedMode] = useState('random')
+  const [selectedShorts, setSelectedShorts] = useState([])
+  const { showAlert, showConfirm } = useDialog()
+
+  const themeTagByValue = {
+    news: { label: 'News', className: 'bg-slate-900/85 text-slate-100 border-slate-600/70' },
+    breaking: { label: 'Breaking', className: 'bg-red-600/90 text-white border-red-300/30' },
+    sport: { label: 'Sport', className: 'bg-emerald-500/90 text-slate-950 border-emerald-200/30' },
+    meteo: { label: 'Meteo', className: 'bg-sky-500/90 text-slate-950 border-sky-200/30' },
+    tech: { label: 'Tech', className: 'bg-cyan-400/90 text-slate-950 border-cyan-200/30' },
+    wellness: { label: 'Wellness', className: 'bg-teal-400/90 text-slate-950 border-teal-200/30' },
+    funfact: { label: 'Fun Fact', className: 'bg-amber-400/95 text-slate-950 border-amber-100/40' },
+  }
 
   const fetchShorts = async () => {
     setLoading(true)
@@ -15,7 +38,11 @@ export default function ShortsLibrary() {
       const res = await fetch('/api/shorts_library')
       if (res.ok) {
         const data = await res.json()
-        setShorts(data.shorts || [])
+        const nextShorts = data.shorts || []
+        setShorts(nextShorts)
+        setSelectedShorts((current) =>
+          current.filter((filename) => nextShorts.some((short) => short.filename === filename))
+        )
       }
     } catch (e) {
       console.error("Errore caricamento libreria shorts:", e)
@@ -39,14 +66,32 @@ export default function ShortsLibrary() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const generateShort = async () => {
+  const generateShort = async (mode = 'news') => {
     setShortsLoading(true)
     try {
-      const res = await fetch('/api/generate_short', { method: 'POST' })
+      const res = await fetch('/api/generate_short', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      })
       const data = await res.json()
       if (res.ok) {
-        await showAlert(`Short generato con successo.`, 'Video Pronto')
+        const alertByMode = {
+          random: 'Short generato in modalità casuale.',
+          news: 'Short news generato con successo.',
+          breaking: 'Short breaking news generato con successo.',
+          sport: 'Short sport generato con successo.',
+          meteo: 'Short meteo generato con successo.',
+          tech: 'Short tech generato con successo.',
+          wellness: 'Short wellness generato con successo.',
+          funfact: 'Short curiosità generato con successo.',
+        }
+        await showAlert(
+          alertByMode[mode] || 'Short generato con successo.',
+          'Video Pronto'
+        )
         setPlayingShort({
+          filename: data.filename,
           url: data.video_url,
           news_title: data.news_title,
           script: data.script,
@@ -72,6 +117,67 @@ export default function ShortsLibrary() {
     acc[date].push(short)
     return acc
   }, {})
+
+  const allSelected = shorts.length > 0 && selectedShorts.length === shorts.length
+
+  const toggleShortSelection = (filename) => {
+    setSelectedShorts((current) =>
+      current.includes(filename)
+        ? current.filter((item) => item !== filename)
+        : [...current, filename]
+    )
+  }
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedShorts([])
+      return
+    }
+    setSelectedShorts(shorts.map((short) => short.filename))
+  }
+
+  const deleteSelectedShorts = async () => {
+    if (selectedShorts.length === 0) {
+      await showAlert('Seleziona almeno un reel da eliminare.', 'Nessuna Selezione')
+      return
+    }
+
+    const confirmed = await showConfirm(
+      `Vuoi eliminare ${selectedShorts.length} reel selezionati?\n\nL'operazione rimuoverà sia i record dal database sia i file MP4 e i metadati associati.`,
+      'Elimina Reel'
+    )
+    if (!confirmed) {
+      return
+    }
+
+    setDeleteLoading(true)
+    try {
+      const res = await fetch('/api/shorts_delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filenames: selectedShorts }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        await showAlert(`Errore: ${data.message || 'Eliminazione fallita.'}`, 'Errore Eliminazione')
+        return
+      }
+
+      if (playingShort && selectedShorts.includes(playingShort.filename)) {
+        setPlayingShort(null)
+      }
+      setSelectedShorts([])
+      await fetchShorts()
+      await showAlert(
+        `Eliminati ${data.deleted_files} reel dai file e ${data.deleted_rows} record dal database.`,
+        'Eliminazione Completata'
+      )
+    } catch (e) {
+      await showAlert('Errore di connessione al server.', 'Errore di Rete')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
 
   const copyText = async (value, label) => {
     if (!value) {
@@ -102,6 +208,21 @@ export default function ShortsLibrary() {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={toggleSelectAll}
+            disabled={loading || shorts.length === 0 || deleteLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm border border-slate-700 transition disabled:opacity-50"
+          >
+            {allSelected ? 'Deseleziona Tutti' : 'Seleziona Tutti'}
+          </button>
+          <button
+            onClick={deleteSelectedShorts}
+            disabled={selectedShorts.length === 0 || deleteLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-rose-700 hover:bg-rose-600 rounded-lg text-sm border border-rose-500/40 text-white transition disabled:opacity-50"
+          >
+            <Trash2 size={16} />
+            {deleteLoading ? 'Eliminazione...' : `Elimina Selezionati${selectedShorts.length ? ` (${selectedShorts.length})` : ''}`}
+          </button>
+          <button
             onClick={fetchShorts}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm border border-slate-700 transition disabled:opacity-50"
@@ -109,14 +230,28 @@ export default function ShortsLibrary() {
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             Aggiorna
           </button>
-          <button
-            onClick={generateShort}
-            disabled={shortsLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.3)] transition disabled:opacity-50"
-          >
-            <Play size={16} />
-            {shortsLoading ? 'Generazione...' : 'Genera Nuovo Short'}
-          </button>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/70 p-1">
+            <select
+              value={selectedMode}
+              onChange={(event) => setSelectedMode(event.target.value)}
+              disabled={shortsLoading}
+              className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition disabled:opacity-50"
+            >
+              {shortModes.map((mode) => (
+                <option key={mode.value} value={mode.value}>
+                  {mode.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => generateShort(selectedMode)}
+              disabled={shortsLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold shadow-[0_0_15px_rgba(79,70,229,0.3)] transition disabled:opacity-50"
+            >
+              <Play size={16} />
+              {shortsLoading ? 'Generazione...' : 'Genera Short'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -129,7 +264,7 @@ export default function ShortsLibrary() {
           <Video size={48} className="mx-auto text-slate-600 mb-4" />
           <h3 className="text-lg font-medium mb-2">Nessuno Short Generato</h3>
           <p className="text-slate-400 text-sm max-w-md mx-auto">
-            Usa il pulsante "Genera Nuovo Short" in alto per creare il tuo primo video verticale basato sulle notizie del giorno.
+            Usa il selettore in alto per scegliere la tematica dello short oppure generarlo in modalità casuale.
           </p>
         </div>
       ) : (
@@ -148,6 +283,25 @@ export default function ShortsLibrary() {
                       className="aspect-[9/16] bg-slate-900 relative cursor-pointer"
                       onClick={(e) => { e.preventDefault(); setPlayingShort(short); }}
                     >
+                      <div className="absolute left-2 top-2 z-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedShorts.includes(short.filename)}
+                          onChange={() => toggleShortSelection(short.filename)}
+                          onClick={(event) => event.stopPropagation()}
+                          className="h-4 w-4 rounded border-slate-500 bg-slate-950 text-indigo-500 focus:ring-indigo-500"
+                          aria-label={`Seleziona ${short.filename}`}
+                        />
+                      </div>
+                      {short.theme && (
+                        <div className="absolute right-2 top-2 z-10">
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] shadow-lg ${themeTagByValue[short.theme]?.className || 'bg-slate-900/85 text-white border-slate-500/60'}`}
+                          >
+                            {themeTagByValue[short.theme]?.label || short.theme}
+                          </span>
+                        </div>
+                      )}
                       {/* Anteprima video reale */}
                       <video 
                         src={short.url}

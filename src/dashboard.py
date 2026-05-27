@@ -30,6 +30,7 @@ from newsica.editorial.fallback_scripts import build_fallback_script
 from newsica.editorial.source_filters import fallback_general_news, filter_items_for_character
 from newsica.storage.database import get_connection
 from newsica.storage.repositories.audio_metadata_repository import get_metadata
+from newsica.storage.repositories.shorts_library_repository import delete_shorts, get_short
 
 
 def _format_memory_value(raw_value):
@@ -204,6 +205,24 @@ def _normalize_short_hashtags(raw_hashtags):
 
 
 def _read_short_metadata(video_path):
+    filename = os.path.basename(video_path)
+    db_row = get_short(filename)
+    if db_row:
+        try:
+            raw_hashtags = json.loads(db_row.get("hashtags_json") or "[]")
+        except Exception:
+            raw_hashtags = []
+        hashtags = _normalize_short_hashtags(raw_hashtags)
+        return {
+            "caption": str(db_row.get("caption", "")).strip(),
+            "hashtags": hashtags,
+            "hashtags_text": " ".join(hashtags),
+            "news_title": str(db_row.get("news_title", "")).strip(),
+            "script": str(db_row.get("script", "")).strip(),
+            "theme": str(db_row.get("theme", "")).strip(),
+            "mode": str(db_row.get("mode", "")).strip(),
+        }
+
     metadata_path = os.path.splitext(video_path)[0] + ".json"
     if not os.path.exists(metadata_path):
         return {}
@@ -220,6 +239,8 @@ def _read_short_metadata(video_path):
         "hashtags_text": " ".join(hashtags),
         "news_title": str(payload.get("news_title", "")).strip(),
         "script": str(payload.get("script", "")).strip(),
+        "theme": str(payload.get("theme", "")).strip(),
+        "mode": str(payload.get("mode", "")).strip(),
     }
 
 app = Flask(__name__)
@@ -876,11 +897,18 @@ def trigger_podcast():
 @app.route('/api/generate_short', methods=['POST'])
 def generate_short():
     import sys
+    import random
     sys.path.insert(0, os.path.join(BASE_DIR, "src"))
+    data = request.json or {}
+    mode = str(data.get("mode", "news")).strip().lower() or "news"
+    if mode == "random":
+        mode = random.choice(["news", "breaking", "sport", "meteo", "tech", "wellness", "funfact"])
+    if mode not in {"news", "breaking", "sport", "meteo", "tech", "wellness", "funfact"}:
+        return jsonify({"status": "error", "message": "Modalità short non valida."}), 400
     try:
         from newsica.agents.shorts_agent import ShortsAgent
         agent = ShortsAgent()
-        result = agent.run()
+        result = agent.run(mode=mode)
         if result.get("status") == "success":
             output_file = result.get("output", "")
             filename = os.path.basename(output_file) if output_file else ""
@@ -928,6 +956,8 @@ def shorts_library():
             "hashtags_text": metadata.get("hashtags_text", ""),
             "news_title": metadata.get("news_title", ""),
             "script": metadata.get("script", ""),
+            "theme": metadata.get("theme", ""),
+            "mode": metadata.get("mode", ""),
         })
         
     shorts.sort(key=lambda x: x["timestamp"], reverse=True)
@@ -937,6 +967,53 @@ def shorts_library():
 def serve_short_video(filename):
     shorts_dir = os.path.join(BASE_DIR, "output", "shorts")
     return send_from_directory(shorts_dir, filename)
+
+
+@app.route('/api/shorts_delete', methods=['POST'])
+def shorts_delete():
+    data = request.json or {}
+    raw_filenames = data.get("filenames") or []
+    if not isinstance(raw_filenames, list):
+        return jsonify({"status": "error", "message": "Payload non valido."}), 400
+
+    filenames = []
+    seen = set()
+    for value in raw_filenames:
+        filename = os.path.basename(str(value or "").strip())
+        if not filename or not filename.endswith(".mp4"):
+            continue
+        if filename in seen:
+            continue
+        seen.add(filename)
+        filenames.append(filename)
+
+    if not filenames:
+        return jsonify({"status": "error", "message": "Nessun reel selezionato."}), 400
+
+    shorts_dir = os.path.join(BASE_DIR, "output", "shorts")
+    deleted_files = 0
+    missing_files = []
+    for filename in filenames:
+        video_path = os.path.join(shorts_dir, filename)
+        metadata_path = os.path.splitext(video_path)[0] + ".json"
+        for path in (video_path, metadata_path):
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                    if path == video_path:
+                        deleted_files += 1
+                except Exception as e:
+                    return jsonify({"status": "error", "message": f"Eliminazione file fallita per {filename}: {e}"}), 500
+            elif path == video_path:
+                missing_files.append(filename)
+
+    deleted_rows = delete_shorts(filenames)
+    return jsonify({
+        "status": "OK",
+        "deleted_files": deleted_files,
+        "deleted_rows": deleted_rows,
+        "missing_files": missing_files,
+    })
 
 @app.route('/api/news', methods=['POST'])
 def trigger_news():

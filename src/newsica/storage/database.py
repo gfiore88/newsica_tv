@@ -136,6 +136,19 @@ def init_schema():
         metadata_json TEXT,
         created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS shorts_library (
+        filename TEXT PRIMARY KEY,
+        video_path TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        theme TEXT NOT NULL,
+        news_title TEXT,
+        script TEXT,
+        caption TEXT,
+        hashtags_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
     """
     
     try:

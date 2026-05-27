@@ -53,3 +53,7 @@
 | 50 | /orchestrator | ✅ Done | Fix live `flash_60s`: fallback non pronto ora resta in `music_rotation_until_deadline` senza silenzio; corretto anche crash `PreparationAgent` su asset slot non presenti nel palinsesto |
 | 51 | /orchestrator | ✅ Done | Resa esplicita e obbligatoria la policy “test sempre” nei workflow agenti e nella documentazione operativa con ADR 0049 |
 | 52 | /python_engineer | ✅ Done | Modal libreria shorts con blocchi copia/incolla per caption social e 5 hashtag pertinenti persistiti come metadati sidecar |
+| 53 | /python_engineer | ✅ Done | Riuso della ricerca trend/web dei podcast per generare short `funfact` e curiosità del momento con sfondo tematico dedicato |
+| 54 | /python_engineer | ✅ Done | Dropdown unica per generazione shorts con temi `news`, `breaking`, `sport`, `meteo`, `tech`, `wellness`, `funfact` e modalità casuale |
+| 55 | /python_engineer | ✅ Done | Badge tematico persistito su SQLite per ogni short e mostrato come tag in alto a destra sulle card della libreria |
+| 56 | /python_engineer | ✅ Done | Selezione multipla reel con `Seleziona Tutti` e cancellazione bulk da SQLite e da `output/shorts/` |

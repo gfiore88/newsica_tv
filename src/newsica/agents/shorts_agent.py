@@ -10,11 +10,13 @@ import soundfile as sf
 from kokoro_onnx import Kokoro
 from newsica.audio.tts_text import prepare_text_for_tts
 from newsica.editorial.gravity_assessor import calculate_heuristic_score
+from newsica.storage.repositories.shorts_library_repository import upsert_short
 import emoji
 from duckduckgo_search import DDGS
 import io
 import re
 import unicodedata
+from newsica.agents.content_strategist import ContentStrategistAgent
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +30,37 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "output", "shorts")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(TMP_DIR, exist_ok=True)
 
+SUPPORTED_SHORT_MODES = {
+    "news",
+    "breaking",
+    "sport",
+    "meteo",
+    "tech",
+    "wellness",
+    "funfact",
+}
+
 class ShortsAgent:
     def __init__(self):
         self.tmp_audio = os.path.join(TMP_DIR, "short_audio.wav")
         self.tmp_srt = os.path.join(TMP_DIR, "short.srt")
         self.tmp_bg = os.path.join(TMP_DIR, "shorts_bg.png")
+
+    def _classify_theme_from_source(self, source: str) -> str:
+        source = (source or "").lower()
+        if "ultimora" in source or "breaking" in source:
+            return "breaking"
+        if "funfact" in source or "curios" in source:
+            return "funfact"
+        if "sport" in source:
+            return "sport"
+        if "salute" in source or "benessere" in source or "lifestyle" in source:
+            return "wellness"
+        if "tecnologia" in source or "innovazione" in source:
+            return "tech"
+        if "meteo" in source:
+            return "meteo"
+        return "news"
 
     def _get_top_news(self) -> dict:
         raw_news_file = os.path.join(TMP_DIR, 'raw_news.json')
@@ -57,26 +85,102 @@ class ShortsAgent:
             # Scegliamo una notizia a caso
             selected_item = random.choice(news_list)
             
-            # Targeting serio tramite SOURCE invece di usare string matching sul titolo
-            source = selected_item.get('source', '').lower()
-            
-            if 'sport' in source:
-                selected_item['theme_color'] = 'sport'
-            elif 'salute' in source or 'benessere' in source or 'lifestyle' in source:
-                selected_item['theme_color'] = 'wellness'
-            elif 'tecnologia' in source or 'innovazione' in source:
-                selected_item['theme_color'] = 'tech'
-            elif 'meteo' in source:
-                selected_item['theme_color'] = 'meteo'
-            else:
-                # Per cronaca, mondo, politica e ultimora
-                selected_item['theme_color'] = 'news'
+            selected_item['theme_color'] = self._classify_theme_from_source(selected_item.get('source', ''))
 
             return selected_item
             
         except Exception as e:
             logger.error(f"Errore nella lettura news: {e}")
             return default_news
+
+    def _load_all_news(self) -> list[dict]:
+        strategist = ContentStrategistAgent()
+        return strategist._collect_news(force_fetch=True)
+
+    def _select_random_item(self, items: list[dict], default_item: dict) -> dict:
+        if not items:
+            return default_item
+        import random
+        return random.choice(items)
+
+    def _build_mode_news_item(self, mode: str) -> dict:
+        all_news = self._load_all_news()
+        default_item = {
+            "title": "Nessuna notizia disponibile al momento",
+            "summary": "Stiamo aggiornando i nostri sistemi.",
+            "description": "Stiamo aggiornando i nostri sistemi.",
+            "source": mode,
+            "theme_color": "news" if mode == "news" else mode,
+        }
+
+        mode_sources = {
+            "breaking": {"ansa_ultimora"},
+            "sport": {"ansa_sport", "agi_sport"},
+            "meteo": {"meteo"},
+            "tech": {"ansa_tecnologia", "agi_innovazione"},
+            "wellness": {"ansa_salute_benessere", "ansa_lifestyle"},
+        }
+
+        if mode == "news":
+            candidates = []
+            for item in all_news:
+                theme = self._classify_theme_from_source(item.get("source", ""))
+                if theme == "news":
+                    candidates.append(item)
+            selected_item = self._select_random_item(candidates, default_item)
+            selected_item["theme_color"] = "news"
+            return selected_item
+
+        candidates = [item for item in all_news if item.get("source") in mode_sources.get(mode, set())]
+        selected_item = self._select_random_item(candidates, default_item)
+        selected_item["theme_color"] = mode
+        return selected_item
+
+    def _build_funfact_news_item(self) -> dict:
+        strategist = ContentStrategistAgent()
+        all_news = self._load_all_news()
+        candidate_sources = {
+            "ansa_lifestyle",
+            "ansa_cultura",
+            "agi_cultura",
+            "ansa_tecnologia",
+            "agi_innovazione",
+            "ansa_salute_benessere",
+        }
+        rss_candidates = [item for item in all_news if item.get("source") in candidate_sources]
+        trend_brief = strategist.build_trend_brief(rss_items=rss_candidates[:6], format_type="shorts_funfact", deep_dive_results_limit=4)
+        topic = trend_brief["topic"]
+        deep_dive_results = trend_brief["deep_dive_results"]
+
+        summary_lines = []
+        for result in deep_dive_results[:4]:
+            title = self._normalize_text(result.get("title", ""))
+            snippet = self._normalize_text(result.get("snippet", ""))
+            if title and snippet:
+                summary_lines.append(f"{title}: {snippet}")
+            elif title:
+                summary_lines.append(title)
+            elif snippet:
+                summary_lines.append(snippet)
+
+        summary = "\n".join(summary_lines).strip()
+        if not summary:
+            summary = "Curiosità del momento raccolte dal web e dagli ultimi trend rilevati online."
+
+        return {
+            "title": topic.get("title", "Curiosità del momento"),
+            "summary": summary,
+            "description": summary,
+            "source": "funfact_web",
+            "theme_color": "funfact",
+        }
+
+    def _get_news_item_for_mode(self, mode: str) -> dict:
+        if mode == "funfact":
+            return self._build_funfact_news_item()
+        if mode in {"breaking", "sport", "meteo", "tech", "wellness", "news"}:
+            return self._build_mode_news_item(mode)
+        return self._get_top_news()
 
     def _generate_script(self, news_item: dict) -> str:
         prompt_path = os.path.join(BASE_DIR, "src", "newsica", "editorial", "prompts", "shorts.md")
@@ -163,9 +267,11 @@ Notizia: {news_item.get('title')}
 
         theme_hashtags = {
             "news": ["#Ultimora", "#Notizie", "#Italia"],
+            "breaking": ["#BreakingNews", "#UltimOra", "#NewsFlash"],
             "sport": ["#SportNews", "#Sport", "#Highlights"],
             "tech": ["#TechNews", "#Tecnologia", "#Innovazione"],
             "wellness": ["#Salute", "#Benessere", "#Lifestyle"],
+            "funfact": ["#FunFact", "#Curiosita", "#Viralita"],
             "meteo": ["#Meteo", "#Previsioni", "#Italia"],
         }
 
@@ -537,19 +643,35 @@ Notizia: {news_item.get('title')}
 
     def _write_metadata(self, output_file: str, news_item: dict, script: str, caption: str, hashtags: list[str]):
         metadata_path = os.path.splitext(output_file)[0] + ".json"
+        filename = os.path.basename(output_file)
+        theme = news_item.get("theme_color", "news")
+        mode = news_item.get("short_mode", theme)
         payload = {
             "news_title": news_item.get("title", ""),
             "script": script,
             "caption": caption,
             "hashtags": hashtags[:5],
+            "theme": theme,
+            "mode": mode,
             "created_at": datetime.datetime.now().isoformat(),
         }
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        upsert_short(
+            filename=filename,
+            video_path=output_file,
+            mode=mode,
+            theme=theme,
+            news_title=news_item.get("title", ""),
+            script=script,
+            caption=caption,
+            hashtags=hashtags[:5],
+        )
 
-    def run(self) -> dict:
+    def run(self, mode="news") -> dict:
         try:
-            news = self._get_top_news()
+            news = self._get_news_item_for_mode(mode)
+            news["short_mode"] = mode
             theme = news.get('theme_color', 'news')
             script = self._generate_script(news)
             caption, hashtags = self._generate_social_copy(news, script)
@@ -567,6 +689,7 @@ Notizia: {news_item.get('title')}
                 "news_title": news.get('title', ''),
                 "caption": caption,
                 "hashtags": hashtags,
+                "mode": mode,
             }
         except Exception as e:
             logger.error(f"Errore critico in ShortsAgent: {e}")

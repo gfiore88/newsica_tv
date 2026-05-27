@@ -78,4 +78,4 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 
 ## MVP 5 — Espansione dei Formati (Crescita)
 **Obiettivo:** Riciclare i contenuti H24 per massimizzare l'audience.
-- [x] **Shorts Automatici**: Estrazione e montaggio autonomo dei momenti/news salienti in file `.mp4` verticali pronti per l'upload quotidiano su Shorts. La Dashboard espone anche caption pronta e 5 hashtag pertinenti copiabili dalla modal del video. (Implementato in `shorts_agent.py` e integrato nella Dashboard)
+- [x] **Shorts Automatici**: Estrazione e montaggio autonomo dei momenti/news salienti in file `.mp4` verticali pronti per l'upload quotidiano su Shorts. La Dashboard espone anche caption pronta e 5 hashtag pertinenti copiabili dalla modal del video, oltre a una modalità `curiosità/fun fact` che riusa la ricerca trend sul web già introdotta per i podcast. (Implementato in `shorts_agent.py` e integrato nella Dashboard)
