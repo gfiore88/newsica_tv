@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Radio, Calendar, Wrench, Database, Activity, RefreshCw, MonitorPlay } from 'lucide-react'
+import { Radio, Calendar, Wrench, Database, Activity, RefreshCw, MonitorPlay, Video } from 'lucide-react'
 
 export default function AdminLayout() {
   const [state, setState] = useState({ status: 'OFFLINE' })
@@ -55,6 +55,7 @@ export default function AdminLayout() {
     { path: '/live', icon: Radio, label: 'Live & Regia' },
     { path: '/schedule', icon: Calendar, label: 'Palinsesto' },
     { path: '/tools', icon: Wrench, label: 'Strumenti Editoriali' },
+    { path: '/shorts', icon: Video, label: 'Libreria Shorts' },
     { path: '/database', icon: Database, label: 'Registro Storico' },
   ]
 

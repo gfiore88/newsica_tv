@@ -281,12 +281,13 @@ low quality, distorted vocals, abrupt ending
         }
         fake_response = Mock(status_code=200)
         fake_response.json.return_value = {"response": json.dumps(llm_payload)}
-        with patch.object(agent, "choose_music_mode", return_value="vocal_hook"):
-            with patch("newsica.agents.editorial_director.requests.post", return_value=fake_response):
-                result = agent.generate_music_prompt(
-                    "evening",
-                    custom_brief="k-pop in giapponese",
-                )
+        with patch("newsica.agents.editorial_director.get_recent_music_titles", return_value=[]):
+            with patch.object(agent, "choose_music_mode", return_value="vocal_hook"):
+                with patch("newsica.agents.editorial_director.requests.post", return_value=fake_response):
+                    result = agent.generate_music_prompt(
+                        "evening",
+                        custom_brief="k-pop in giapponese",
+                    )
 
         self.assertEqual(result["language"], "japanese")
         self.assertEqual(result["title"], "Tokyo Heartbeat")

@@ -832,6 +832,61 @@ def trigger_podcast():
         "tts_seconds": round(tts_seconds, 1),
     })
 
+@app.route('/api/generate_short', methods=['POST'])
+def generate_short():
+    import sys
+    sys.path.insert(0, os.path.join(BASE_DIR, "src"))
+    try:
+        from newsica.agents.shorts_agent import ShortsAgent
+        agent = ShortsAgent()
+        result = agent.run()
+        if result.get("status") == "success":
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/shorts_library', methods=['GET'])
+def shorts_library():
+    import glob
+    from datetime import datetime
+    import re
+    shorts_dir = os.path.join(BASE_DIR, "output", "shorts")
+    if not os.path.exists(shorts_dir):
+        return jsonify({"shorts": []})
+        
+    shorts = []
+    for filepath in glob.glob(os.path.join(shorts_dir, "*.mp4")):
+        filename = os.path.basename(filepath)
+        
+        match = re.search(r'short_(\d{8})_(\d{6})', filename)
+        if match:
+            date_str = match.group(1)
+            time_str = match.group(2)
+            try:
+                dt = datetime.strptime(f"{date_str}{time_str}", "%Y%m%d%H%M%S")
+            except:
+                dt = datetime.fromtimestamp(os.path.getmtime(filepath))
+        else:
+            dt = datetime.fromtimestamp(os.path.getmtime(filepath))
+            
+        shorts.append({
+            "filename": filename,
+            "url": f"/api/shorts_video/{filename}",
+            "timestamp": dt.isoformat(),
+            "date_display": dt.strftime("%d/%m/%Y"),
+            "time_display": dt.strftime("%H:%M")
+        })
+        
+    shorts.sort(key=lambda x: x["timestamp"], reverse=True)
+    return jsonify({"shorts": shorts})
+
+@app.route('/api/shorts_video/<path:filename>')
+def serve_short_video(filename):
+    shorts_dir = os.path.join(BASE_DIR, "output", "shorts")
+    return send_from_directory(shorts_dir, filename)
+
 @app.route('/api/news', methods=['POST'])
 def trigger_news():
     """Genera il notiziario Chiara via Ollama, lo sintetizza e lo manda in onda."""

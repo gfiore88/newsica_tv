@@ -39,7 +39,7 @@ class TestDirectorRestartRecovery(unittest.TestCase):
             "per forzare la re-inizializzazione immediata senza silenzio.",
         )
 
-    @patch("schedule_generator.get_current_schedule")
+    @patch("director.scheduler.get_current_schedule")
     def test_restart_during_music_only_music_rotation_realigns_to_schedule(self, mock_schedule):
         """
         Anche con current_segment='music_rotation' (già in rotazione musicale),
@@ -126,7 +126,7 @@ class TestDirectorRestartRecovery(unittest.TestCase):
 
         self.assertEqual(recovered["current_segment"], "music_rotation_until_deadline")
 
-    @patch("schedule_generator.get_current_schedule")
+    @patch("director.scheduler.get_current_schedule")
     def test_restart_realigns_stale_immediate_state_to_current_slot_show(self, mock_schedule):
         mock_schedule.return_value = {
             "17:00": {"title": "Rock & Roll Arena", "type": "music_only", "theme": "rock"}
