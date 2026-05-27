@@ -395,11 +395,12 @@ Notizia: {news_item.get('title')}
         context_img = context_img.convert("RGBA")
         context_img = ImageOps.fit(context_img, (box_w, box_h), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
         
-        # 2. Maschera per bordi arrotondati della foto
+        # 2. Maschera per bordi arrotondati della foto con opacità per renderla semi-trasparente (~84% opacità)
         radius = 40
         mask = Image.new("L", (box_w, box_h), 0)
         draw_mask = ImageDraw.Draw(mask)
-        draw_mask.rounded_rectangle((0, 0, box_w, box_h), radius=radius, fill=255)
+        image_opacity = 215  # 84% opacity (215/255) per far trasparire lo sfondo
+        draw_mask.rounded_rectangle((0, 0, box_w, box_h), radius=radius, fill=image_opacity)
         context_img.putalpha(mask)
         
         # 3. Creazione del Bordo (Card Background)
@@ -409,11 +410,20 @@ Notizia: {news_item.get('title')}
         card = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
         draw_card = ImageDraw.Draw(card)
         
-        # Bordo bianco tondeggiante
-        draw_card.rounded_rectangle((0, 0, card_w, card_h), radius=radius + border_thickness, fill=(255, 255, 255, 255))
+        # Disegniamo solo il bordo bianco tondeggiante con trasparenza (~70% opacità)
+        # Usando 'outline' e disegnando un rettangolo cavo, evitiamo che ci sia uno sfondo solido 
+        # sotto la foto, consentendo così allo sfondo principale di intravedersi direttamente.
+        half_b = border_thickness // 2
+        border_opacity = 180  # 70% opacity (180/255)
+        draw_card.rounded_rectangle(
+            (half_b, half_b, card_w - half_b, card_h - half_b),
+            radius=radius + half_b,
+            outline=(255, 255, 255, border_opacity),
+            width=border_thickness
+        )
         
-        # 4. Incolla la foto sopra la card bianca
-        card.paste(context_img, (border_thickness, border_thickness), mask=context_img)
+        # 4. Incolla la foto sopra la card usando alpha_composite per preservare correttamente la trasparenza
+        card.alpha_composite(context_img, dest=(border_thickness, border_thickness))
         
         # 5. Posiziona la card finita sul background principale
         y_pos = (height - card_h) // 2 - 150
