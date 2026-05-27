@@ -473,10 +473,19 @@ Notizia: {news_item.get('title')}
     def _generate_background(self, theme: str = 'news', title: str = '', image_url: str = ''):
         print(f"🎨 Generazione background verticale dinamico (tema: {theme})...")
         width, height = 1080, 1920
-        
-        base_bg_path = os.path.join(ASSETS_DIR, "shorts_backgrounds", "base_screens", f"{theme}.png")
-        if not os.path.exists(base_bg_path):
-            base_bg_path = os.path.join(ASSETS_DIR, "shorts_backgrounds", "base_screens", "news.png")
+
+        base_screens_dir = os.path.join(ASSETS_DIR, "shorts_backgrounds", "base_screens")
+
+        def resolve_base_screen(name: str) -> str:
+            for ext in ("jpeg", "jpg", "png", "webp"):
+                candidate = os.path.join(base_screens_dir, f"{name}.{ext}")
+                if os.path.exists(candidate):
+                    return candidate
+            return ""
+
+        base_bg_path = resolve_base_screen(theme)
+        if not base_bg_path:
+            base_bg_path = resolve_base_screen("news")
             
         if os.path.exists(base_bg_path):
             image = Image.open(base_bg_path).convert("RGB")
