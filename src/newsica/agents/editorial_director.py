@@ -2,6 +2,7 @@ import os
 import json
 import random
 import logging
+import re
 import requests
 from itertools import product
 from datetime import date
@@ -358,12 +359,64 @@ Esempio di struttura richiesta:
         return None
 
     @staticmethod
+    def _extract_language_hint_from_brief(custom_brief: str | None) -> str | None:
+        if not custom_brief:
+            return None
+
+        brief = custom_brief.lower()
+        language_aliases = {
+            "italian": ("italiano", "italiana", "italian"),
+            "english": ("inglese", "english"),
+            "spanish": ("spagnolo", "spagnola", "spanish", "español", "espanol"),
+            "japanese": ("giapponese", "japanese"),
+            "korean": ("coreano", "coreana", "korean"),
+            "neapolitan": ("napoletano", "napoletana", "neapolitan"),
+            "french": ("francese", "french"),
+            "german": ("tedesco", "tedesca", "german"),
+            "portuguese": ("portoghese", "portuguese"),
+            "arabic": ("arabo", "araba", "arabic"),
+            "chinese": ("cinese", "chinese"),
+            "hindi": ("hindi",),
+        }
+        for normalized, aliases in language_aliases.items():
+            if any(alias in brief for alias in aliases):
+                return normalized
+
+        match = re.search(
+            r"\b(?:in|lingua)\s+([a-zà-ÿ][a-zà-ÿ' -]{1,30})\b",
+            brief,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+
+        candidate = match.group(1).strip(" .,:;!?-")
+        candidate = re.split(r"\b(?:con|su|per|ma|che|molto|piu|più|meno|vibes|mood)\b", candidate, maxsplit=1)[0]
+        candidate = " ".join(candidate.split())
+        if not candidate or len(candidate.split()) > 3:
+            return None
+        return candidate.lower()
+
+    @staticmethod
+    def _normalize_language_tag(language: str | None) -> str:
+        return " ".join(str(language or "").strip().lower().split())
+
+    @staticmethod
     def _language_display(language: str) -> str:
         return {
             "italian": "Italian",
             "english": "English",
             "spanish": "Spanish",
             "instrumental": "Instrumental",
+            "japanese": "Japanese",
+            "korean": "Korean",
+            "neapolitan": "Neapolitan",
+            "french": "French",
+            "german": "German",
+            "portuguese": "Portuguese",
+            "arabic": "Arabic",
+            "chinese": "Chinese",
+            "hindi": "Hindi",
         }.get(language, language.title())
 
     def choose_music_language(
@@ -563,6 +616,8 @@ Esempio di struttura richiesta:
         duration_seconds: int,
         music_mode: str,
         lyrics_language: str,
+        custom_brief: str | None,
+        language_hint: str | None,
         t_intro: str,
         t_verse1: str,
         t_build: str,
@@ -577,6 +632,15 @@ Esempio di struttura richiesta:
             if lyrics_language == "instrumental"
             else f"Lyrics language: {self._language_display(lyrics_language)}."
         )
+        request_block = ""
+        if custom_brief:
+            request_block = (
+                "\nUser request:\n"
+                f"- Primary creative constraint: {custom_brief}\n"
+                "- Respect any explicitly requested genre, mood, instrumentation, culture, language or dialect.\n"
+            )
+        if language_hint and lyrics_language != "instrumental":
+            request_block += f"Requested lyrics/vocal language: {self._language_display(language_hint)}.\n"
         return f"""
 Create a modern {duration_seconds}-second electro pop song for a web radio / web TV broadcast.
 
@@ -608,6 +672,7 @@ Negative prompt:
 low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy bass, harsh highs, old-fashioned arrangement, theatrical singing, opera vocals, excessive vibrato, abrupt ending, spoken outro, crackle, noise, clipping, overcompressed, random tempo changes, long silence
 
 {language_line}
+{request_block}
 """.strip()
 
     def generate_music_prompt(
@@ -649,6 +714,7 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
         t_fade = f"{format_time(chorus2_end)} - {format_time(duration_seconds)}"
         if music_mode is None:
             music_mode = self.choose_music_mode()
+        language_hint = self._extract_language_hint_from_brief(custom_brief)
         lyrics_language = self.choose_music_language(
             music_mode=music_mode,
             theme=theme,
@@ -662,6 +728,8 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
                 duration_seconds=duration_seconds,
                 music_mode=music_mode,
                 lyrics_language=lyrics_language,
+                custom_brief=custom_brief,
+                language_hint=language_hint,
                 t_intro=t_intro,
                 t_verse1=t_verse1,
                 t_build=t_build,
@@ -726,12 +794,12 @@ Non aggiungere spiegazioni.
 JSON richiesto:
 {{
   "title": "Titolo originale breve del brano",
-  "title_language": "{lyrics_language}",
+  "title_language": "Language or dialect used for the title",
   "genre": "Genere scelto",
   "mood": "Mood del brano",
   "tempo_bpm": 120,
   "mode": "{music_mode}",
-  "lyrics_language": "{lyrics_language}",
+  "lyrics_language": "Language or dialect used for lyrics or vocals",
   "duration_seconds": {duration_seconds},
   "fade_out_seconds": 8,
   "prompt": "Prompt completo in inglese da inviare ad ACE-Step"
@@ -740,11 +808,13 @@ JSON richiesto:
 CONTESTO:
 - Fascia oraria: {time_of_day}
 - Modalità musicale richiesta: {music_mode}
-- Lingua target dei testi/vocali: {self._language_display(lyrics_language)}
+- Lingua di default dei testi/vocali se la richiesta utente è generica: {self._language_display(lyrics_language)}
 - Durata: {duration_seconds} secondi
 - Fade out: ultimi 8 secondi
 - Uso: rotazione radio / webTV / filler musicale / palinsesto NewsicaTV
 - Titoli musicali recenti da evitare: {recent_music_titles_str}
+{"- Lingua o dialetto esplicitamente richiesto dall'utente: " + self._language_display(language_hint) if language_hint else ""}
+{"- Richiesta utente da rispettare come vincolo primario: " + custom_brief if custom_brief else ""}
 
 {genre_guideline}
 
@@ -790,6 +860,8 @@ REGOLE PER IL PROMPT:
 18. Anche se il campo "prompt" è in inglese, le lyrics devono essere scritte nella lingua target richiesta.
 19. Dentro la sezione "Lyrics:" inserisci solo testo finale cantabile. Vietati placeholder, note redazionali, istruzioni tra parentesi, etichette come "Example:" o spiegazioni sul tipo di lyrics da scrivere.
 20. Se mode = "full_lyrics", le lyrics devono essere complete e direttamente cantabili, non descrizioni di lyrics future.
+21. Se la richiesta utente cita esplicitamente un genere, una lingua, un dialetto, un mood, una cultura musicale o uno strumento, trattali come vincoli prioritari e riportali coerentemente nel prompt finale.
+22. Se l'utente chiede una lingua o un dialetto non mainstream, non normalizzarlo forzatamente in italiano/inglese/spagnolo: usa il tag più fedele possibile in "lyrics_language" e rendi coerenti titolo, hook e lyrics.
 
 REGOLE PER LA FASCIA ORARIA:
 - night / late night / 00:00-05:00: chill, lounge, synthwave, deep house, soft electronic.
@@ -821,9 +893,11 @@ REGOLE PER LA MODALITÀ MUSICALE:
   Niente spoken words.
 
 REGOLE PER LA LINGUA TARGET:
+- Se la richiesta utente esplicita una lingua o un dialetto, questa richiesta prevale sulla distribuzione di default.
 - Se lyrics_language = "italian", scrivi lyrics o hook in italiano naturale, contemporaneo e radiofonico.
 - Se lyrics_language = "english", scrivi lyrics o hook in inglese semplice, internazionale e radiofonico.
 - Se lyrics_language = "spanish", scrivi lyrics o hook in spagnolo moderno e popolare, specialmente per sonorità latin/reggaeton/dembow/merengue.
+- Per altre lingue o dialetti esplicitamente richiesti dall'utente, usa quella lingua o dialetto in modo coerente per titolo, hook e lyrics.
 - Se lyrics_language = "instrumental", niente testo cantato.
 
 FORMATO INTERNO DEL CAMPO "prompt":
@@ -874,8 +948,8 @@ Lyrics:
 
                 if self._is_valid_music_prompt(prompt):
                     parsed_title = " ".join(str(parsed.get("title", "")).split())
-                    resolved_language = parsed.get("lyrics_language", lyrics_language)
-                    title_language = parsed.get("title_language", resolved_language)
+                    resolved_language = self._normalize_language_tag(parsed.get("lyrics_language", lyrics_language)) or lyrics_language
+                    title_language = self._normalize_language_tag(parsed.get("title_language", resolved_language)) or resolved_language
                     title_language_matches = title_language == resolved_language
                     
                     if (

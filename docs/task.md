@@ -49,3 +49,4 @@
 | 46 | /orchestrator | ✅ Done | Overlay `A seguire` allineato alla single source of truth runtime/DB: rimosso il coupling con `schedule_next.txt` e `current_program.txt` per la timeline live |
 | 47 | /orchestrator | ✅ Done | Hardening director state machine: rimosso reset `OFFLINE` superfluo nei cambi fascia/skip e protetto il merge metadati display da sovrascritture dello stato runtime |
 | 48 | /orchestrator | ✅ Done | Preparazione obbligatoria musica tematica per slot `music_only`: queue per theme, soglia minima catalogo e fallback editoriale coerente con ADR 0047 |
+| 49 | /orchestrator | ✅ Done | Richieste musicali chat freeform come vincolo primario del prompt ACE-Step: parser meno distruttivo, hint lingua/dialetto e supporto LLM a `lyrics_language` non canonici con ADR 0048 |

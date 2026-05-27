@@ -7,7 +7,7 @@ import time
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(BASE_DIR)
 
-from chat_agent import clean_text, is_moderated, PROFANITY_BLACKLIST, user_last_message_time
+from chat_agent import clean_text, extract_music_request, is_moderated, PROFANITY_BLACKLIST, user_last_message_time
 
 
 class TestChatModeration(unittest.TestCase):
@@ -41,6 +41,16 @@ class TestChatModeration(unittest.TestCase):
         
         # Un altro utente nello stesso istante: ammesso
         self.assertFalse(is_moderated("UserClean", "Ciao da un utente diverso!"))
+
+    def test_extract_music_request_preserves_non_canonical_constraints(self):
+        intent = extract_music_request("vorrei ascoltare un brano rock in napoletano")
+        self.assertEqual(intent["theme"], "rock")
+        self.assertEqual(intent["custom_brief"], "rock in napoletano")
+
+    def test_extract_music_request_keeps_freeform_request_text(self):
+        intent = extract_music_request("metti una canzone k-pop in giapponese")
+        self.assertIsNone(intent["theme"])
+        self.assertEqual(intent["custom_brief"], "k-pop in giapponese")
 
 
 if __name__ == "__main__":

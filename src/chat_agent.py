@@ -77,6 +77,27 @@ MUSIC_REQUEST_PATTERNS = (
 )
 
 
+def _strip_music_request_lead_in(message: str) -> str:
+    text = clean_text(message)
+    if not text:
+        return ""
+
+    lowered = text.lower()
+    matched_trigger = None
+    for trigger in sorted(MUSIC_REQUEST_PATTERNS, key=len, reverse=True):
+        idx = lowered.find(trigger)
+        if idx != -1:
+            matched_trigger = (idx, idx + len(trigger))
+            break
+
+    if matched_trigger:
+        text = text[matched_trigger[1]:].strip(" ,:;-")
+
+    text = re.sub(r"^(un|una)\s+(brano|canzone|pezzo|track)\b", "", text, flags=re.IGNORECASE).strip(" ,:;-")
+    text = re.sub(r"^(musica|genere)\b", "", text, flags=re.IGNORECASE).strip(" ,:;-")
+    return clean_text(text)
+
+
 def clean_text(text):
     if not text:
         return ""
@@ -151,7 +172,8 @@ def pick_live_video_id(candidate_ids, source_label):
 
 
 def extract_music_request(message):
-    normalized = clean_text(message).lower()
+    cleaned_message = clean_text(message)
+    normalized = cleaned_message.lower()
     if not normalized:
         return None
 
@@ -167,16 +189,11 @@ def extract_music_request(message):
             theme = canonical
             break
 
-    custom_brief = compact
-    for trigger in MUSIC_REQUEST_PATTERNS:
-        custom_brief = custom_brief.replace(trigger, " ")
-    for token in ("un brano", "una canzone", "un pezzo", "di", "del", "della", "genre", "genere", "musica"):
-        custom_brief = custom_brief.replace(token, " ")
-    custom_brief = " ".join(custom_brief.split())
+    custom_brief = _strip_music_request_lead_in(cleaned_message)
 
     return {
         "theme": theme,
-        "custom_brief": custom_brief[:120] if custom_brief else "",
+        "custom_brief": custom_brief[:240] if custom_brief else "",
     }
 
 

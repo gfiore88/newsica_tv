@@ -88,6 +88,11 @@ class TestEditorialDirectorMusicTitles(unittest.TestCase):
             )
         self.assertEqual(language, "spanish")
 
+    def test_extract_language_hint_from_brief_supports_non_canonical_languages(self):
+        agent = EditorialDirectorAgent()
+        self.assertEqual(agent._extract_language_hint_from_brief("brano rock in napoletano"), "neapolitan")
+        self.assertEqual(agent._extract_language_hint_from_brief("canzone k-pop in giapponese"), "japanese")
+
     def test_generate_music_prompt_fallback_carries_target_language(self):
         agent = EditorialDirectorAgent()
         fake_response = Mock(status_code=500)
@@ -106,6 +111,20 @@ class TestEditorialDirectorMusicTitles(unittest.TestCase):
         self.assertIn("Baila cerca de mí", result["prompt"])
         self.assertNotIn("(Spanish lyrics", result["prompt"])
         self.assertNotIn("Example:", result["prompt"])
+
+    def test_generate_music_prompt_fallback_includes_user_request_verbatim(self):
+        agent = EditorialDirectorAgent()
+        fake_response = Mock(status_code=500)
+        with patch.object(agent, "choose_music_mode", return_value="full_lyrics"):
+            with patch.object(agent, "_build_localized_music_title", return_value="Silent Echoes"):
+                with patch("newsica.agents.editorial_director.requests.post", return_value=fake_response):
+                    result = agent.generate_music_prompt(
+                        "evening",
+                        custom_brief="k-pop in giapponese con energia da arena",
+                    )
+
+        self.assertIn("Primary creative constraint: k-pop in giapponese con energia da arena", result["prompt"])
+        self.assertIn("Requested lyrics/vocal language: Japanese.", result["prompt"])
 
     def test_valid_music_prompt_rejects_placeholder_lyrics(self):
         agent = EditorialDirectorAgent()
@@ -215,6 +234,62 @@ low quality, distorted vocals, abrupt ending
         self.assertEqual(result["language"], "italian")
         self.assertEqual(result["title"], "Luce Dorata")
         self.assertNotEqual(result["title"], "Golden Hour")
+
+    def test_generate_music_prompt_accepts_non_canonical_language_from_llm(self):
+        agent = EditorialDirectorAgent()
+        llm_payload = {
+            "title": "Tokyo Heartbeat",
+            "title_language": "japanese",
+            "genre": "k-pop",
+            "mood": "arena energy",
+            "tempo_bpm": 128,
+            "mode": "vocal_hook",
+            "lyrics_language": "japanese",
+            "duration_seconds": 180,
+            "fade_out_seconds": 8,
+            "prompt": """
+Create an HIGH PRODUCTION 180-second K-pop song.
+
+Mood: bright, explosive, arena-ready.
+Tempo: 128 BPM.
+Style: polished K-pop crossover with huge synth leads and tight drums.
+Production: glossy, modern, streaming-ready, radio-ready.
+Instruments: synth bass, layered synth stabs, punchy drums, pop FX.
+
+Structure:
+0:00 - 0:14 intro
+0:14 - 0:50 verse/groove
+0:50 - 1:08 build/pre-chorus
+1:08 - 1:44 chorus/drop/main hook
+1:44 - 2:20 second verse or soft bridge
+2:20 - 2:52 final chorus/drop/main hook
+2:52 - 3:00 final chorus continues with smooth fade out
+
+Vocals:
+Short, memorable Japanese vocal hook with clean modern delivery.
+
+Lyrics:
+Motto takaku
+Kokoro no beat
+
+Ending:
+The final 8 seconds must fade out smoothly and naturally. No abrupt ending. No spoken outro.
+
+Negative prompt:
+low quality, distorted vocals, abrupt ending
+""".strip(),
+        }
+        fake_response = Mock(status_code=200)
+        fake_response.json.return_value = {"response": json.dumps(llm_payload)}
+        with patch.object(agent, "choose_music_mode", return_value="vocal_hook"):
+            with patch("newsica.agents.editorial_director.requests.post", return_value=fake_response):
+                result = agent.generate_music_prompt(
+                    "evening",
+                    custom_brief="k-pop in giapponese",
+                )
+
+        self.assertEqual(result["language"], "japanese")
+        self.assertEqual(result["title"], "Tokyo Heartbeat")
 
 
 if __name__ == "__main__":
