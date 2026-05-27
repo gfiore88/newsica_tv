@@ -426,7 +426,7 @@ Notizia: {news_item.get('title')}
         card.alpha_composite(context_img, dest=(border_thickness, border_thickness))
         
         # 5. Posiziona la card finita sul background principale
-        y_pos = (height - card_h) // 2 - 150
+        y_pos = (height - card_h) // 2 - 100
         x_pos = (width - card_w) // 2
         
         # Applica usando la card stessa come maschera per gestire i bordi trasparenti esterni
