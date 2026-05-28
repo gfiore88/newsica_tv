@@ -159,9 +159,12 @@ Notizia: {news_item.get('title')}
             hashtags=hashtags[:5],
         )
 
-    def run(self, mode="news") -> dict:
+    def run(self, mode="news", news_item: dict = None) -> dict:
         try:
-            news = self._get_news_item_for_mode(mode)
+            if news_item:
+                news = news_item
+            else:
+                news = self._get_news_item_for_mode(mode)
             news["short_mode"] = mode
             is_valid, validation_error = self._validate_news_item_for_short(news, mode)
             if not is_valid:

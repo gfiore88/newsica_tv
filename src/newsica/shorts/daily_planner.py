@@ -3,7 +3,7 @@ from datetime import datetime, date, time, timedelta
 from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
-from newsica.editorial.gravity_assessor import calculate_heuristic_score
+from newsica.editorial.gravity_assessor import calculate_heuristic_score, assess_news_gravity
 from newsica.storage.repositories.shorts_plan_repository import (
     add_plan_item,
     get_daily_plan,
@@ -293,7 +293,7 @@ class DailyShortsPlanner:
                 age_hours = (now_local - published_dt).total_seconds() / 3600.0
                 if age_hours > self.breaking_max_age_hours:
                     continue
-            score = calculate_heuristic_score(title, summary, category="breaking")
+            score, _, _ = assess_news_gravity(title, summary, category="breaking")
             ranked.append((score, item))
 
         if not ranked:
@@ -302,7 +302,7 @@ class DailyShortsPlanner:
                 summary = item.get("summary") or item.get("description") or ""
                 if not title:
                     continue
-                score = calculate_heuristic_score(title, summary, category="breaking")
+                score, _, _ = assess_news_gravity(title, summary, category="breaking")
                 ranked.append((score, item))
 
         if not ranked:

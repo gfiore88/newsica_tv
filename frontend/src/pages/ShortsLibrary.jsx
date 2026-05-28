@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Video, Calendar, Download, Play, RefreshCw, Copy, Trash2, Share2, CheckCircle2 } from 'lucide-react'
+import { Video, Calendar, Download, Play, RefreshCw, Copy, Trash2, Share2, CheckCircle2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
 import { useDialog } from '../context/DialogContext'
 
 export default function ShortsLibrary() {
@@ -23,6 +23,7 @@ export default function ShortsLibrary() {
   const [planState, setPlanState] = useState({ date: '', summary: {}, items: [] })
   const [selectedMode, setSelectedMode] = useState('random')
   const [selectedShorts, setSelectedShorts] = useState([])
+  const [showPlanDetails, setShowPlanDetails] = useState(false)
   const { showAlert, showConfirm } = useDialog()
 
   const themeTagByValue = {
@@ -422,6 +423,17 @@ export default function ShortsLibrary() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => setShowPlanDetails(!showPlanDetails)}
+              className={`flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:opacity-50 ${
+                showPlanDetails 
+                  ? 'border-slate-500 bg-slate-800 text-white' 
+                  : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500 hover:text-white'
+              }`}
+            >
+              {showPlanDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {showPlanDetails ? 'Nascondi Log/Piano' : 'Dettagli Piano & Log'}
+            </button>
+            <button
               onClick={fetchPlanStatus}
               disabled={planLoading}
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white disabled:opacity-50"
@@ -444,6 +456,96 @@ export default function ShortsLibrary() {
             </button>
           </div>
         </div>
+
+        {showPlanDetails && (
+          <div className="mt-4 border-t border-slate-800/80 pt-4">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+              <Calendar size={14} className="text-indigo-400" />
+              Coda ed Esecuzione degli Shorts Giornalieri
+            </div>
+            {planState.items.length === 0 ? (
+              <div className="text-xs text-slate-500 py-2">Nessun elemento presente nel piano di oggi. Clicca su "Rigenera Piano Oggi" per crearne uno.</div>
+            ) : (
+              <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+                {planState.items.map((item) => {
+                  const statusColors = {
+                    planned: 'bg-slate-900 text-slate-400 border-slate-800',
+                    generating: 'bg-orange-500/10 text-orange-400 border-orange-500/20 animate-pulse',
+                    scheduled: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+                    failed: 'bg-rose-500/15 text-rose-400 border-rose-500/20',
+                    skipped: 'bg-slate-950 text-slate-650 border-slate-900',
+                    posted: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20',
+                  }
+
+                  const modeTheme = themeTagByValue[item.mode] || { 
+                    label: item.mode, 
+                    className: 'bg-slate-900 text-slate-300 border-slate-700' 
+                  }
+
+                  return (
+                    <div 
+                      key={item.id} 
+                      className={`rounded-lg border p-3 transition ${
+                        item.status === 'failed' 
+                          ? 'border-rose-950 bg-rose-950/10' 
+                          : 'border-slate-800/80 bg-slate-900/20 hover:bg-slate-900/40'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${modeTheme.className}`}>
+                            {modeTheme.label}
+                          </span>
+                          <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${statusColors[item.status] || 'bg-slate-900 text-slate-300 border-slate-800'}`}>
+                            {item.status}
+                          </span>
+                          {item.priority > 0 && (
+                            <span className="text-[10px] font-medium text-slate-500">
+                              Priorità: {item.priority}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          ID: #{item.id}
+                        </div>
+                      </div>
+
+                      <div className="mt-2">
+                        <div className="text-xs font-semibold text-slate-200">
+                          {item.source_title || 'Nessun articolo associato (Esecuzione Standard)'}
+                        </div>
+                        {item.reason && (
+                          <div className="mt-1 text-[10px] text-slate-400 italic">
+                            Motivazione: {item.reason}
+                          </div>
+                        )}
+                      </div>
+
+                      {item.status === 'failed' && item.error && (
+                        <div className="mt-2 rounded bg-rose-950/20 border border-rose-900/30 p-2 text-[11px] font-mono break-words flex gap-2">
+                          <AlertCircle size={14} className="text-rose-400 shrink-0 mt-0.5" />
+                          <div className="grow">
+                            <span className="font-bold text-rose-400 uppercase text-[9px] tracking-wider block mb-1">
+                              Errore della Regia / Log di Generazione:
+                            </span>
+                            <span className="text-rose-300">{item.error}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {item.status === 'posted' && item.short_filename && (
+                        <div className="mt-2 text-[10px] text-indigo-400 font-mono flex items-center gap-1.5">
+                          <CheckCircle2 size={12} className="text-indigo-400" />
+                          File generato con successo: <code className="bg-slate-950 px-1 py-0.5 rounded border border-slate-800 text-slate-300 text-[10px]">{item.short_filename}</code>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {loading && shorts.length === 0 ? (

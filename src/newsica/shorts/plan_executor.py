@@ -33,7 +33,17 @@ def process_one_planned_short_item(due_within_minutes: int | None = None) -> dic
     update_item_status(item_id, "generating")
     try:
         agent = ShortsAgent()
-        result = agent.run(mode=mode)
+        
+        # Mappa l'articolo pianificato dal database nel payload richiesto dall'agente
+        news_payload = {
+            "title": item.get("source_title", ""),
+            "summary": item.get("source_summary", ""),
+            "description": item.get("source_summary", ""),
+            "source": mode,
+            "theme_color": mode,
+        }
+        
+        result = agent.run(mode=mode, news_item=news_payload)
         if result.get("status") != "success":
             update_item_status(item_id, "failed", error=result.get("message", "generazione short fallita"))
             return {"status": "error", "message": result.get("message", "Generazione short fallita."), "item_id": item_id}
