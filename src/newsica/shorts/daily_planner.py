@@ -194,25 +194,32 @@ class DailyShortsPlanner:
         items = []
         for index, (mode, rule_type) in enumerate(planned_modes):
             picked = self._pick_candidate(candidates_by_mode.get(mode, []), selected_titles)
+            
+            # Se la categoria specifica non ha articoli unici disponibili,
+            # proviamo a pescare l'articolo alternativo più rilevante e unico dal pool "news"!
+            if not picked and mode != "news":
+                print(f"⚠️ Nessun articolo unico in '{mode}'. Cerco fallback dal pool 'news'...")
+                picked = self._pick_candidate(candidates_by_mode.get("news", []), selected_titles)
+                
             if picked:
                 selected_titles.add((picked.get("title") or "").strip().lower())
-            source_title = (picked or {}).get("title", "")
-            source_summary = (picked or {}).get("summary") or (picked or {}).get("description", "")
-            source_score = int((picked or {}).get("_shorts_score", 0))
-            scheduled_for = self._compute_platform_schedule(target_day, index, now_local=now_local)
-            items.append(
-                {
-                    "mode": mode,
-                    "rule_type": rule_type,
-                    "reason": self._build_reason(mode, rule_type, source_score),
-                    "priority": max(1, 100 - (index * 10)),
-                    "source_title": source_title,
-                    "source_summary": source_summary,
-                    "source_score": source_score,
-                    "scheduled_for": scheduled_for,
-                    "status": "planned",
-                }
-            )
+                source_title = picked.get("title", "")
+                source_summary = picked.get("summary") or picked.get("description", "")
+                source_score = int(picked.get("_shorts_score", 0))
+                scheduled_for = self._compute_platform_schedule(target_day, len(items), now_local=now_local)
+                items.append(
+                    {
+                        "mode": mode,
+                        "rule_type": rule_type,
+                        "reason": self._build_reason(mode, rule_type, source_score),
+                        "priority": max(1, 100 - (len(items) * 10)),
+                        "source_title": source_title,
+                        "source_summary": source_summary,
+                        "source_score": source_score,
+                        "scheduled_for": scheduled_for,
+                        "status": "planned",
+                    }
+                )
         return items
 
     def _build_reason(self, mode: str, rule_type: str, score: int) -> str:
@@ -373,7 +380,7 @@ class DailyShortsPlanner:
             if not title_key or title_key in selected_titles:
                 continue
             return item
-        return ranked_candidates[0] if ranked_candidates else None
+        return None
 
     def _rank_candidates(self, mode: str, all_news: list[dict]) -> list[dict]:
         pool = self._filter_mode_pool(mode, all_news)

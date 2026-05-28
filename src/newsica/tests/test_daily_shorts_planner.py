@@ -106,6 +106,32 @@ class TestDailyShortsPlanner(unittest.TestCase):
         self.assertEqual(result["status"], "below_threshold")
         self.assertFalse(mock_add_item.called)
 
+    def test_pick_candidate_returns_none_for_duplicate_titles(self):
+        planner = DailyShortsPlanner()
+        candidates = [
+            {"title": "Amazon lancia nuova flotta", "summary": "Consegne con droni", "source": "ansa_tecnologia"},
+        ]
+        selected_titles = {"amazon lancia nuova flotta"}
+        
+        picked = planner._pick_candidate(candidates, selected_titles)
+        self.assertIsNone(picked, "Dovrebbe ritornare None se l'articolo è già stato selezionato per prevenire duplicati.")
+
+    def test_build_items_applies_fallback_to_prevent_mode_overlap(self):
+        planner = DailyShortsPlanner()
+        fake_news = [
+            {"title": "Amazon lancia nuova flotta", "summary": "Consegne con droni", "source": "ansa_tecnologia"},
+            {"title": "Notizia generale unica", "summary": "Cronaca pulita", "source": "sky_tg24"},
+        ]
+        # tech e funfact hanno entrambi "Amazon lancia nuova flotta" nel loro pool.
+        # Poiché tech viene elaborata prima di funfact (in ALWAYS_MODES),
+        # funfact dovrebbe andare in fallback sul pool "news" e scegliere "Notizia generale unica".
+        items = planner._build_items(fake_news, target_day=date(2026, 5, 27))
+        
+        titles = [item["source_title"] for item in items if item["source_title"]]
+        # Verifica che non ci siano duplicati
+        self.assertEqual(len(titles), len(set(titles)), "Gli articoli programmati non devono contenere duplicati.")
+        self.assertIn("Notizia generale unica", titles)
+
 
 if __name__ == "__main__":
     unittest.main()
