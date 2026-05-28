@@ -1,18 +1,5 @@
 from newsica.config.paths import TMP_DIR
-from newsica.sources.registry import (
-    NEWS_PREFERRED_SOURCES,
-    NEWS_ROTATION_LIMIT,
-    NEWS_SOURCES,
-    RSS_FEEDS,
-    SPORT_PREFERRED_SOURCES,
-    SPORT_ROTATION_LIMIT,
-    SPORT_SOURCES,
-    WELLNESS_SOURCES,
-    MOTORI_PREFERRED_SOURCES,
-    MOTORI_ROTATION_LIMIT,
-    MOTORI_SOURCES,
-    max_items_for_source,
-)
+from newsica.sources.loader import load_sources_registry
 from newsica.sources.rotation import select_rotating_items
 from newsica.sources.rss import fetch_latest_news
 from newsica.sources.weather import fetch_weather
@@ -23,24 +10,27 @@ RECENT_WELLNESS_FILE = TMP_DIR / "recent_wellness.json"
 
 
 def collect_news_items():
+    registry = load_sources_registry()
     all_news = []
     news_pool = []
     sport_pool = []
     wellness_pool = []
     motori_pool = []
 
-    for category, url in RSS_FEEDS.items():
-        print(f"Recupero {category}...")
-        news = fetch_latest_news(url, max_items=max_items_for_source(category))
+    for source_id, entry in registry["feeds"].items():
+        url = entry["url"]
+        print(f"Recupero {source_id}...")
+        max_items = 12 if source_id in registry["news_sources"] else 8
+        news = fetch_latest_news(url, max_items=max_items)
         for item in news:
-            item["source"] = category
-        if category in WELLNESS_SOURCES:
+            item["source"] = source_id
+        if source_id in registry["wellness_sources"]:
             wellness_pool.extend(news)
-        elif category in SPORT_SOURCES:
+        elif source_id in registry["sport_sources"]:
             sport_pool.extend(news)
-        elif category in MOTORI_SOURCES:
+        elif source_id in registry["motori_sources"]:
             motori_pool.extend(news)
-        elif category in NEWS_SOURCES:
+        elif source_id in registry["news_sources"]:
             news_pool.extend(news)
         else:
             all_news.extend(news)
@@ -48,23 +38,23 @@ def collect_news_items():
     all_news.extend(select_rotating_items(
         news_pool,
         "news",
-        limit=NEWS_ROTATION_LIMIT,
+        limit=registry["news_rotation_limit"],
         recent_file=RECENT_NEWS_FILE,
-        preferred_sources=NEWS_PREFERRED_SOURCES,
+        preferred_sources=registry["news_preferred_sources"],
     ))
     all_news.extend(select_rotating_items(
         sport_pool,
         "sport",
-        limit=SPORT_ROTATION_LIMIT,
+        limit=registry["sport_rotation_limit"],
         recent_file=RECENT_NEWS_FILE,
-        preferred_sources=SPORT_PREFERRED_SOURCES,
+        preferred_sources=registry["sport_preferred_sources"],
     ))
     all_news.extend(select_rotating_items(
         motori_pool,
         "motori",
-        limit=MOTORI_ROTATION_LIMIT,
+        limit=registry["motori_rotation_limit"],
         recent_file=RECENT_NEWS_FILE,
-        preferred_sources=MOTORI_PREFERRED_SOURCES,
+        preferred_sources=registry["motori_preferred_sources"],
     ))
 
     if wellness_pool:

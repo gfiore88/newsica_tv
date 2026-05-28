@@ -14,6 +14,7 @@ from newsica.web.history_routes import register_history_routes
 from newsica.web.system_routes import register_system_routes
 from newsica.shorts.daily_planner import DailyShortsPlanner
 from newsica.web.shorts_routes import register_shorts_routes
+from newsica.web.sources_routes import register_sources_routes
 
 
 app = Flask(__name__)
@@ -38,6 +39,7 @@ if not os.path.exists(PYTHON_EXEC):
 register_shorts_routes(app, base_dir=BASE_DIR, shorts_daily_planner=shorts_daily_planner)
 register_history_routes(app, runtime_dir=RUNTIME_DIR)
 register_control_routes(app, control_file=CONTROL_FILE, runtime_dir=RUNTIME_DIR)
+register_sources_routes(app)
 
 SERVICES = {
     "director": {

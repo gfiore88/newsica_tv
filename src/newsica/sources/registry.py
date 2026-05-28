@@ -1,45 +1,55 @@
+RSS_FEED_DEFINITIONS = {
+    "ansa_cronaca": {"url": "https://www.ansa.it/sito/notizie/cronaca/cronaca_rss.xml", "category": "news"},
+    "ansa_cultura": {"url": "https://www.ansa.it/sito/notizie/cultura/cultura_rss.xml", "category": "cultura"},
+    "ansa_economia": {"url": "https://www.ansa.it/sito/notizie/economia/economia_rss.xml", "category": "economia"},
+    "ansa_lifestyle": {"url": "https://www.ansa.it/canale_lifestyle/notizie/lifestyle_rss.xml", "category": "wellness"},
+    "ansa_mondo": {"url": "https://www.ansa.it/sito/notizie/mondo/mondo_rss.xml", "category": "news"},
+    "ansa_motori": {"url": "https://www.ansa.it/canale_motori/notizie/motori_rss.xml", "category": "motori"},
+    "ansa_politica": {"url": "https://www.ansa.it/sito/notizie/politica/politica_rss.xml", "category": "news"},
+    "ansa_salute_benessere": {"url": "https://www.ansa.it/canale_saluteebenessere/notizie/saluteebenessere_rss.xml", "category": "wellness"},
+    "ansa_sport": {"url": "https://www.ansa.it/sito/notizie/sport/sport_rss.xml", "category": "sport"},
+    "ansa_tecnologia": {"url": "https://www.ansa.it/sito/notizie/tecnologia/tecnologia_rss.xml", "category": "tech"},
+    "ansa_ultimora": {"url": "https://www.ansa.it/sito/ansait_rss.xml", "category": "breaking"},
+    "agi_cronaca": {"url": "https://www.agi.it/cronaca/rss", "category": "news"},
+    "agi_cultura": {"url": "https://www.agi.it/cultura/rss", "category": "cultura"},
+    "agi_economia": {"url": "https://www.agi.it/economia/rss", "category": "economia"},
+    "agi_estero": {"url": "https://www.agi.it/estero/rss", "category": "news"},
+    "agi_innovazione": {"url": "https://www.agi.it/innovazione/rss", "category": "tech"},
+    "agi_politica": {"url": "https://www.agi.it/politica/rss", "category": "news"},
+    "agi_sport": {"url": "https://www.agi.it/sport/rss", "category": "sport"},
+    "sky_tg24": {"url": "https://tg24.sky.it/rss/tg24.xml", "category": "news"},
+}
+
+GENERAL_NEWS_CATEGORIES = {"breaking", "cultura", "economia", "general", "news", "tech"}
+
 RSS_FEEDS = {
-    "ansa_ultimora": "https://www.ansa.it/sito/ansait_rss.xml",
-    "ansa_mondo": "https://www.ansa.it/sito/notizie/mondo/mondo_rss.xml",
-    "ansa_cronaca": "https://www.ansa.it/sito/notizie/cronaca/cronaca_rss.xml",
-    "ansa_politica": "https://www.ansa.it/sito/notizie/politica/politica_rss.xml",
-    "ansa_economia": "https://www.ansa.it/sito/notizie/economia/economia_rss.xml",
-    "ansa_cultura": "https://www.ansa.it/sito/notizie/cultura/cultura_rss.xml",
-    "ansa_tecnologia": "https://www.ansa.it/sito/notizie/tecnologia/tecnologia_rss.xml",
-    "ansa_sport": "https://www.ansa.it/sito/notizie/sport/sport_rss.xml",
-    "ansa_salute_benessere": "https://www.ansa.it/canale_saluteebenessere/notizie/saluteebenessere_rss.xml",
-    "ansa_lifestyle": "https://www.ansa.it/canale_lifestyle/notizie/lifestyle_rss.xml",
-    "ansa_motori": "https://www.ansa.it/canale_motori/notizie/motori_rss.xml",
-    "sky_tg24": "https://tg24.sky.it/rss/tg24.xml",
-    "agi_cronaca": "https://www.agi.it/cronaca/rss",
-    "agi_politica": "https://www.agi.it/politica/rss",
-    "agi_estero": "https://www.agi.it/estero/rss",
-    "agi_economia": "https://www.agi.it/economia/rss",
-    "agi_innovazione": "https://www.agi.it/innovazione/rss",
-    "agi_cultura": "https://www.agi.it/cultura/rss",
-    "agi_sport": "https://www.agi.it/sport/rss",
+    feed_id: entry["url"]
+    for feed_id, entry in RSS_FEED_DEFINITIONS.items()
 }
 
 NEWS_SOURCES = {
-    "ansa_ultimora",
-    "ansa_mondo",
-    "ansa_cronaca",
-    "ansa_politica",
-    "ansa_economia",
-    "ansa_cultura",
-    "ansa_tecnologia",
-    "sky_tg24",
-    "agi_cronaca",
-    "agi_politica",
-    "agi_estero",
-    "agi_economia",
-    "agi_innovazione",
-    "agi_cultura",
+    feed_id
+    for feed_id, entry in RSS_FEED_DEFINITIONS.items()
+    if entry.get("category", "news") in GENERAL_NEWS_CATEGORIES
 }
 
-SPORT_SOURCES = {"ansa_sport", "agi_sport"}
-WELLNESS_SOURCES = {"ansa_salute_benessere", "ansa_lifestyle"}
-MOTORI_SOURCES = {"ansa_motori"}
+SPORT_SOURCES = {
+    feed_id
+    for feed_id, entry in RSS_FEED_DEFINITIONS.items()
+    if entry.get("category") == "sport"
+}
+
+WELLNESS_SOURCES = {
+    feed_id
+    for feed_id, entry in RSS_FEED_DEFINITIONS.items()
+    if entry.get("category") == "wellness"
+}
+
+MOTORI_SOURCES = {
+    feed_id
+    for feed_id, entry in RSS_FEED_DEFINITIONS.items()
+    if entry.get("category") == "motori"
+}
 
 NEWS_PREFERRED_SOURCES = [
     "ansa_ultimora",
@@ -51,9 +61,11 @@ NEWS_PREFERRED_SOURCES = [
     "agi_estero",
     "sky_tg24",
 ]
+
 SPORT_PREFERRED_SOURCES = ["ansa_sport", "agi_sport"]
 WELLNESS_PREFERRED_SOURCES = ("ansa_lifestyle", "ansa_salute_benessere")
 MOTORI_PREFERRED_SOURCES = ["ansa_motori"]
+
 NEWS_ROTATION_LIMIT = 10
 SPORT_ROTATION_LIMIT = 4
 MOTORI_ROTATION_LIMIT = 4

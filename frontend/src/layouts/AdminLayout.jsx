@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Radio, Calendar, Wrench, Database, Activity, RefreshCw, MonitorPlay, Video } from 'lucide-react'
+import { Radio, Calendar, Wrench, Database, Activity, RefreshCw, MonitorPlay, Video, Rss } from 'lucide-react'
 import { useDialog } from '../context/DialogContext'
 
 export default function AdminLayout() {
@@ -61,6 +61,7 @@ export default function AdminLayout() {
     { path: '/live', icon: Radio, label: 'Live & Regia' },
     { path: '/schedule', icon: Calendar, label: 'Palinsesto' },
     { path: '/tools', icon: Wrench, label: 'Strumenti Editoriali' },
+    { path: '/sources', icon: Rss, label: 'Fonti RSS' },
     { path: '/shorts', icon: Video, label: 'Libreria Shorts' },
     { path: '/database', icon: Database, label: 'Registro Storico' },
   ]
