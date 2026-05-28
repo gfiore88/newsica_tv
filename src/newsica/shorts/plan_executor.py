@@ -12,6 +12,56 @@ from newsica.storage.repositories.shorts_plan_repository import (
 )
 
 
+def _normalize_text(value: str) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def _find_matching_news_item(title: str, summary: str) -> dict | None:
+    normalized_title = _normalize_text(title)
+    normalized_summary = _normalize_text(summary)
+    if not normalized_title and not normalized_summary:
+        return None
+
+    from newsica.agents.content_strategist import ContentStrategistAgent
+
+    strategist = ContentStrategistAgent()
+    for force_fetch in (False, True):
+        try:
+            all_news = strategist._collect_news(force_fetch=force_fetch) or []
+        except Exception:
+            all_news = []
+
+        for item in all_news:
+            item_title = _normalize_text(item.get("title", ""))
+            item_summary = _normalize_text(item.get("summary") or item.get("description") or "")
+            if normalized_title and item_title == normalized_title:
+                return item
+            if normalized_summary and item_summary == normalized_summary:
+                return item
+    return None
+
+
+def _build_news_payload(item: dict, mode: str) -> dict:
+    title = item.get("source_title", "")
+    summary = item.get("source_summary", "")
+    matched_news_item = _find_matching_news_item(title=title, summary=summary)
+    if matched_news_item:
+        payload = dict(matched_news_item)
+        payload["title"] = payload.get("title") or title
+        payload["summary"] = payload.get("summary") or payload.get("description") or summary
+        payload["description"] = payload.get("description") or payload.get("summary") or summary
+        payload["theme_color"] = mode
+        return payload
+
+    return {
+        "title": title,
+        "summary": summary,
+        "description": summary,
+        "source": mode,
+        "theme_color": mode,
+    }
+
+
 def process_one_planned_short_item(due_within_minutes: int | None = None) -> dict:
     """
     Esegue un solo item del piano shorts in stato `planned`.
@@ -33,16 +83,11 @@ def process_one_planned_short_item(due_within_minutes: int | None = None) -> dic
     update_item_status(item_id, "generating")
     try:
         agent = ShortsAgent()
-        
-        # Mappa l'articolo pianificato dal database nel payload richiesto dall'agente
-        news_payload = {
-            "title": item.get("source_title", ""),
-            "summary": item.get("source_summary", ""),
-            "description": item.get("source_summary", ""),
-            "source": mode,
-            "theme_color": mode,
-        }
-        
+
+        # Prova a riallineare l'item pianificato con la news reale per mantenere
+        # la provenienza editoriale corretta al momento della pubblicazione.
+        news_payload = _build_news_payload(item, mode)
+
         result = agent.run(mode=mode, news_item=news_payload)
         if result.get("status") != "success":
             update_item_status(item_id, "failed", error=result.get("message", "generazione short fallita"))
