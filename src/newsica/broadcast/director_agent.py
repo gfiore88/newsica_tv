@@ -10,7 +10,6 @@ from newsica.domain.playout_events import (
     PlayoutEvent,
     PlaySilenceFallbackEvent,
     PlayVoiceEvent,
-    PlayVoiceMixEvent,
     TriggerNextBlockEvent,
 )
 
@@ -42,6 +41,7 @@ from newsica.audio.jingles import get_jingle_for_block, CLASSIC_JINGLE_FILE
 from newsica.audio.music_library import DEFAULT_THEMED_MIN_TRACKS, GENERIC_THEMELESS_MUSIC_TITLE, MusicLibrary
 from newsica.broadcast.shorts_reconcile_policy import ShortsReconcilePolicy
 from newsica.broadcast.interrupt_recovery_policy import InterruptRecoveryPolicy
+from newsica.broadcast.special_broadcast_policy import SpecialBroadcastPolicy
 from newsica.shorts.daily_planner import DailyShortsPlanner
 
 EVENING_PODCAST_SLOT = "20:00"
@@ -59,6 +59,7 @@ class DirectorAgent:
             breaking_probe_interval_seconds=int(os.getenv("SHORTS_BREAKING_SCAN_INTERVAL_SECONDS", "600")),
         )
         self.interrupt_recovery_policy = InterruptRecoveryPolicy()
+        self.special_broadcast_policy = SpecialBroadcastPolicy()
 
     def _resolve_music_slot_editorial_guardrail(self, block_type, title, theme):
         if block_type != "music_only" or not theme:
@@ -364,45 +365,13 @@ class DirectorAgent:
         Copertura speciale (Edizione Straordinaria).
         Riproduce ripetutamente bollettini di aggiornamento intervallati da musica tesa o stacchi.
         """
-        current_segment = state.get("current_segment", "init")
-        bn_file = os.path.join(TMP_DIR, "breaking_news.wav")
-        
-        # Sottofondo sonoro dedicato alle emergenze
-        special_theme = os.path.join(ASSETS_DIR, "music", "special_broadcast_theme.mp3")
-        if not os.path.exists(special_theme):
-            # Fallback se il tema speciale non è presente
-            special_theme = self._select_non_repeated_music()
-            
-        if current_segment == "init" or current_segment == "intro":
-            if os.path.exists(bn_file):
-                state["current_segment"] = "broadcast_body"
-                write_state_files(state)
-                return PlayVoiceMixEvent(
-                    voice_file=bn_file,
-                    music_file=special_theme,
-                    character="breaking_news",
-                    title="EDIZIONE STRAORDINARIA",
-                    segment="Bollettino Speciale",
-                )
-            else:
-                return PlaySilenceFallbackEvent(5)
-                
-        elif current_segment == "broadcast_body":
-            # Finito il bollettino, se non c'è una revoca manuale o se non sono passati abbastanza minuti,
-            # riproduciamo musica di attesa o un altro jingle e poi ripetiamo il ciclo
-            state["current_segment"] = "broadcast_waiting"
-            write_state_files(state)
-            
-            # Sfondi tesi di attesa
-            return PlayMusicEvent(special_theme, "attesa_edizione_straordinaria")
-            
-        elif current_segment == "broadcast_waiting":
-            # Ripete il bollettino speciale aggiornato
-            state["current_segment"] = "intro"
-            write_state_files(state)
-            return PlaySilenceFallbackEvent(5)
-            
-        return PlaySilenceFallbackEvent(2)
+        return self.special_broadcast_policy.handle(
+            state=state,
+            tmp_dir=TMP_DIR,
+            assets_dir=ASSETS_DIR,
+            write_state_files=write_state_files,
+            select_non_repeated_music=self._select_non_repeated_music,
+        )
 
     def notify_interrupt(self, reason, severity_score=0):
         """
