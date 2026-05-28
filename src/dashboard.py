@@ -30,15 +30,8 @@ from newsica.editorial.fallback_scripts import build_fallback_script
 from newsica.editorial.source_filters import fallback_general_news, filter_items_for_character
 from newsica.storage.database import get_connection
 from newsica.storage.repositories.audio_metadata_repository import get_metadata
-from newsica.storage.repositories.shorts_library_repository import delete_shorts, mark_short_social_posts
-from newsica.storage.repositories.shorts_plan_repository import (
-    get_daily_plan,
-    list_plan_items,
-    summarize_plan_status,
-)
 from newsica.shorts.daily_planner import DailyShortsPlanner
-from newsica.shorts.plan_executor import process_one_planned_short_item
-from newsica.shorts.metadata_reader import read_short_metadata
+from newsica.web.shorts_routes import register_shorts_routes
 
 
 def _format_memory_value(raw_value):
@@ -209,6 +202,8 @@ if not os.path.exists(PYTHON_EXEC):
     PYTHON_EXEC = os.path.join(BASE_DIR, "venv", "bin", "python")
 if not os.path.exists(PYTHON_EXEC):
     PYTHON_EXEC = "python3"
+
+register_shorts_routes(app, base_dir=BASE_DIR, shorts_daily_planner=shorts_daily_planner)
 
 SERVICES = {
     "director": {
@@ -841,212 +836,6 @@ def trigger_podcast():
         "generation_seconds": round(total_seconds, 1),
         "llm_seconds": round(llm_seconds, 1),
         "tts_seconds": round(tts_seconds, 1),
-    })
-
-@app.route('/api/generate_short', methods=['POST'])
-def generate_short():
-    import sys
-    import random
-    sys.path.insert(0, os.path.join(BASE_DIR, "src"))
-    data = request.json or {}
-    mode = str(data.get("mode", "news")).strip().lower() or "news"
-    if mode == "random":
-        mode = random.choice(["news", "breaking", "sport", "meteo", "tech", "wellness", "funfact"])
-    if mode not in {"news", "breaking", "sport", "meteo", "tech", "wellness", "funfact"}:
-        return jsonify({"status": "error", "message": "Modalità short non valida."}), 400
-    try:
-        from newsica.agents.shorts_agent import ShortsAgent
-        agent = ShortsAgent()
-        result = agent.run(mode=mode)
-        if result.get("status") == "success":
-            output_file = result.get("output", "")
-            filename = os.path.basename(output_file) if output_file else ""
-            result["filename"] = filename
-            result["video_url"] = f"/api/shorts_video/{filename}" if filename else ""
-            return jsonify(result), 200
-        else:
-            return jsonify(result), 500
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/api/shorts_publish', methods=['POST'])
-def shorts_publish():
-    data = request.json or {}
-    filename = data.get("filename")
-    platform = data.get("platform")  # 'youtube', 'instagram', 'tiktok', 'all'
-    
-    if not filename or not platform:
-        return jsonify({"status": "error", "message": "Parametri mancanti."}), 400
-        
-    shorts_dir = os.path.join(BASE_DIR, "output", "shorts")
-    video_path = os.path.join(shorts_dir, filename)
-    
-    if not os.path.exists(video_path):
-        return jsonify({"status": "error", "message": "File video non trovato."}), 404
-        
-    metadata = read_short_metadata(video_path)
-    title = metadata.get("news_title", "Short NewsicaTV")
-    caption = metadata.get("caption", "")
-    hashtags = metadata.get("hashtags_text", "")
-    full_caption = f"{caption}\n\n{hashtags}" if hashtags else caption
-    
-    from newsica.utils.social_publisher import SocialPublisher
-    publisher = SocialPublisher()
-    
-    if platform == "youtube":
-        res = publisher.publish_to_youtube(video_path, title, full_caption)
-    elif platform == "instagram":
-        res = publisher.publish_to_instagram(video_path, full_caption)
-    elif platform == "tiktok":
-        res = publisher.publish_to_tiktok(video_path, title, full_caption)
-    elif platform == "all":
-        res = publisher.publish_to_all_socials(video_path, title, full_caption)
-    else:
-        return jsonify({"status": "error", "message": "Piattaforma non supportata."}), 400
-
-    platform_results = res.get("results")
-    if not isinstance(platform_results, dict):
-        platform_results = {platform: res}
-    social_posts = mark_short_social_posts(filename, platform_results)
-        
-    if res.get("status") == "success":
-        return jsonify({"status": "OK", "message": res.get("message"), "social_posts": social_posts}), 200
-    if res.get("status") == "partial":
-        return jsonify({"status": "partial", "message": res.get("message"), "results": res.get("results", {}), "social_posts": social_posts}), 200
-    else:
-        return jsonify({"status": res.get("status", "config_missing"), "message": res.get("message"), "results": res.get("results", {}), "social_posts": social_posts}), 200
-
-
-def _process_one_shorts_plan_item():
-    return process_one_planned_short_item()
-
-
-@app.route('/api/shorts_plan_today', methods=['GET'])
-def shorts_plan_today():
-    from datetime import datetime
-    target_date = request.args.get("date") or datetime.now().strftime("%Y-%m-%d")
-    day = get_daily_plan(target_date)
-    items = list_plan_items(target_date)
-    summary = summarize_plan_status(target_date)
-    return jsonify({
-        "date": target_date,
-        "plan": day or {},
-        "summary": summary,
-        "items": items,
-    })
-
-
-@app.route('/api/shorts_plan_rebuild', methods=['POST'])
-def shorts_plan_rebuild():
-    data = request.json or {}
-    force = bool(data.get("force", True))
-    result = shorts_daily_planner.reconcile_today_plan(force=force)
-    code = 200 if result.get("status") in {"planned", "existing", "disabled"} else 500
-    return jsonify(result), code
-
-
-@app.route('/api/shorts_plan_process_once', methods=['POST'])
-def shorts_plan_process_once():
-    result = _process_one_shorts_plan_item()
-    code = 200 if result.get("status") in {"success", "partial", "idle"} else 500
-    return jsonify(result), code
-
-@app.route('/api/shorts_library', methods=['GET'])
-def shorts_library():
-    import glob
-    from datetime import datetime
-    import re
-    shorts_dir = os.path.join(BASE_DIR, "output", "shorts")
-    if not os.path.exists(shorts_dir):
-        return jsonify({"shorts": []})
-        
-    shorts = []
-    for filepath in glob.glob(os.path.join(shorts_dir, "*.mp4")):
-        filename = os.path.basename(filepath)
-        
-        match = re.search(r'short_(\d{8})_(\d{6})', filename)
-        if match:
-            date_str = match.group(1)
-            time_str = match.group(2)
-            try:
-                dt = datetime.strptime(f"{date_str}{time_str}", "%Y%m%d%H%M%S")
-            except:
-                dt = datetime.fromtimestamp(os.path.getmtime(filepath))
-        else:
-            dt = datetime.fromtimestamp(os.path.getmtime(filepath))
-            
-        metadata = read_short_metadata(filepath)
-        shorts.append({
-            "filename": filename,
-            "url": f"/api/shorts_video/{filename}",
-            "timestamp": dt.isoformat(),
-            "date_display": dt.strftime("%d/%m/%Y"),
-            "time_display": dt.strftime("%H:%M"),
-            "caption": metadata.get("caption", ""),
-            "hashtags": metadata.get("hashtags", []),
-            "hashtags_text": metadata.get("hashtags_text", ""),
-            "news_title": metadata.get("news_title", ""),
-            "script": metadata.get("script", ""),
-            "theme": metadata.get("theme", ""),
-            "mode": metadata.get("mode", ""),
-            "social_posts": metadata.get("social_posts", {}),
-            "posted_any": metadata.get("posted_any", False),
-            "posted_platforms": metadata.get("posted_platforms", []),
-        })
-        
-    shorts.sort(key=lambda x: x["timestamp"], reverse=True)
-    return jsonify({"shorts": shorts})
-
-@app.route('/api/shorts_video/<path:filename>')
-def serve_short_video(filename):
-    shorts_dir = os.path.join(BASE_DIR, "output", "shorts")
-    return send_from_directory(shorts_dir, filename)
-
-
-@app.route('/api/shorts_delete', methods=['POST'])
-def shorts_delete():
-    data = request.json or {}
-    raw_filenames = data.get("filenames") or []
-    if not isinstance(raw_filenames, list):
-        return jsonify({"status": "error", "message": "Payload non valido."}), 400
-
-    filenames = []
-    seen = set()
-    for value in raw_filenames:
-        filename = os.path.basename(str(value or "").strip())
-        if not filename or not filename.endswith(".mp4"):
-            continue
-        if filename in seen:
-            continue
-        seen.add(filename)
-        filenames.append(filename)
-
-    if not filenames:
-        return jsonify({"status": "error", "message": "Nessun reel selezionato."}), 400
-
-    shorts_dir = os.path.join(BASE_DIR, "output", "shorts")
-    deleted_files = 0
-    missing_files = []
-    for filename in filenames:
-        video_path = os.path.join(shorts_dir, filename)
-        metadata_path = os.path.splitext(video_path)[0] + ".json"
-        for path in (video_path, metadata_path):
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                    if path == video_path:
-                        deleted_files += 1
-                except Exception as e:
-                    return jsonify({"status": "error", "message": f"Eliminazione file fallita per {filename}: {e}"}), 500
-            elif path == video_path:
-                missing_files.append(filename)
-
-    deleted_rows = delete_shorts(filenames)
-    return jsonify({
-        "status": "OK",
-        "deleted_files": deleted_files,
-        "deleted_rows": deleted_rows,
-        "missing_files": missing_files,
     })
 
 @app.route('/api/news', methods=['POST'])
