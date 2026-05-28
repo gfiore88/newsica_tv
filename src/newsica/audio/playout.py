@@ -813,6 +813,82 @@ class AudioPlayout:
 
         return metadata, voice_proc, ducker
 
+    def _stream_music_with_optional_sidechain(
+        self,
+        music_file,
+        voice_proc=None,
+        ducker=None,
+        deadline=None,
+        stream_label="music_track",
+    ):
+        process = subprocess.Popen(
+            self._music_decode_command(music_file),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        self.current_process = process
+
+        fade_duration = 2.5
+        if deadline is not None:
+            import numpy as np
+        else:
+            np = None
+
+        try:
+            while True:
+                now = datetime.datetime.now()
+                if deadline is not None and now >= deadline:
+                    break
+
+                if self.is_interrupted():
+                    process.terminate()
+                    break
+
+                data = process.stdout.read(PCM_CHUNK_BYTES)
+                if not data:
+                    break
+
+                if voice_proc:
+                    voice_data = voice_proc.stdout.read(len(data))
+                    if voice_data:
+                        data = ducker.mix(data, voice_data)
+                    else:
+                        self._safe_wait(voice_proc, name=f"{stream_label}_voice_proc", timeout=2.0)
+                        voice_proc = None
+                elif ducker and ducker.current_gain < 0.99:
+                    silence_chunk = b"\x00" * len(data)
+                    data = ducker.mix(data, silence_chunk)
+
+                if deadline is not None:
+                    time_left = (deadline - now).total_seconds()
+                    if time_left < fade_duration:
+                        factor = max(0.0, time_left / fade_duration)
+                        samples = np.frombuffer(data, dtype=np.int16).copy()
+                        data = (samples * factor).astype(np.int16).tobytes()
+
+                if not self.queue_item({"type": "audio", "data": data}):
+                    process.terminate()
+                    break
+        finally:
+            if voice_proc:
+                try:
+                    if voice_proc.stdout:
+                        voice_proc.stdout.close()
+                    voice_proc.terminate()
+                    self._safe_wait(voice_proc, name=f"{stream_label}_voice_cleanup", timeout=1.0)
+                except Exception:
+                    pass
+
+        if process.poll() is None:
+            try:
+                if process.stdout:
+                    process.stdout.close()
+            except Exception:
+                pass
+            process.terminate()
+        self._safe_wait(process, name=f"{stream_label}_bg_music", timeout=2.0)
+        self.current_process = None
+
     def queue_music_track(
         self,
         deadline,
@@ -857,70 +933,13 @@ class AudioPlayout:
         )
 
         print(f"🎵 Brano musicale di riempimento: {os.path.basename(music_file)}")
-        process = subprocess.Popen(
-            self._music_decode_command(music_file),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+        self._stream_music_with_optional_sidechain(
+            music_file=music_file,
+            voice_proc=voice_proc,
+            ducker=ducker,
+            deadline=deadline,
+            stream_label="music_track",
         )
-        self.current_process = process
-
-        import numpy as np
-        fade_duration = 2.5
-        
-        try:
-            while True:
-                now = datetime.datetime.now()
-                if now >= deadline:
-                    break
-                    
-                if self.is_interrupted():
-                    process.terminate()
-                    break
-
-                data = process.stdout.read(PCM_CHUNK_BYTES)
-                if not data:
-                    break
-                    
-                # Applica mix sidechain con l'annuncio vocale se attivo
-                if voice_proc:
-                    voice_data = voice_proc.stdout.read(len(data))
-                    if voice_data:
-                        data = ducker.mix(data, voice_data)
-                    else:
-                        voice_proc.wait()
-                        voice_proc = None
-                elif ducker and ducker.current_gain < 0.99:
-                    # Dissolvenza di rilascio post-annuncio per ripristinare il volume della musica
-                    silence_chunk = b"\x00" * len(data)
-                    data = ducker.mix(data, silence_chunk)
-
-                time_left = (deadline - now).total_seconds()
-                if time_left < fade_duration:
-                    # Applica fade-out lineare sugli ultimi secondi
-                    factor = max(0.0, time_left / fade_duration)
-                    samples = np.frombuffer(data, dtype=np.int16).copy()
-                    data = (samples * factor).astype(np.int16).tobytes()
-
-                if not self.queue_item({"type": "audio", "data": data}):
-                    process.terminate()
-                    break
-        finally:
-            if voice_proc:
-                try:
-                    voice_proc.stdout.close()
-                    voice_proc.terminate()
-                    self._safe_wait(voice_proc, name="announcement_cleanup", timeout=0.2)
-                except Exception:
-                    pass
-
-        if process.poll() is None:
-            try:
-                process.stdout.close()
-            except Exception:
-                pass
-            process.terminate()
-        self._safe_wait(process, name="music_track_process", timeout=0.2)
-        self.current_process = None
 
     def queue_single_music_track(
         self,
@@ -962,49 +981,10 @@ class AudioPlayout:
         )
 
         print(f"🎵 Brano musicale intermedio (Full Track): {os.path.basename(music_file)}")
-        process = subprocess.Popen(
-            self._music_decode_command(music_file),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+        self._stream_music_with_optional_sidechain(
+            music_file=music_file,
+            voice_proc=voice_proc,
+            ducker=ducker,
+            deadline=None,
+            stream_label="chat_request",
         )
-        self.current_process = process
-
-        try:
-            while True:
-                if self.is_interrupted():
-                    process.terminate()
-                    break
-
-                data = process.stdout.read(PCM_CHUNK_BYTES)
-                if not data:
-                    break
-                    
-                # Applica mix sidechain con l'annuncio vocale se attivo
-                if voice_proc:
-                    voice_data = voice_proc.stdout.read(len(data))
-                    if voice_data:
-                        data = ducker.mix(data, voice_data)
-                    else:
-                        print("💬 [CHAT SIDECHAIN] Fine lettura annuncio, attesa processo...")
-                        self._safe_wait(voice_proc, name="chat_request_voice_proc", timeout=2.0)
-                        voice_proc = None
-                elif ducker and ducker.current_gain < 0.99:
-                    # Dissolvenza di rilascio post-annuncio per ripristinare il volume della musica
-                    silence_chunk = b"\x00" * len(data)
-                    data = ducker.mix(data, silence_chunk)
-
-                if not self.queue_item({"type": "audio", "data": data}):
-                    process.terminate()
-                    break
-        finally:
-            if voice_proc:
-                try:
-                    voice_proc.terminate()
-                    self._safe_wait(voice_proc, name="chat_request_voice_cleanup", timeout=1.0)
-                except Exception:
-                    pass
-
-        if process.poll() is None:
-            process.terminate()
-        self._safe_wait(process, name="chat_request_bg_music", timeout=2.0)
-        self.current_process = None
