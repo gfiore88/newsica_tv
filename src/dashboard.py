@@ -30,7 +30,7 @@ from newsica.editorial.fallback_scripts import build_fallback_script
 from newsica.editorial.source_filters import fallback_general_news, filter_items_for_character
 from newsica.storage.database import get_connection
 from newsica.storage.repositories.audio_metadata_repository import get_metadata
-from newsica.storage.repositories.shorts_library_repository import delete_shorts, get_short, mark_short_social_posts
+from newsica.storage.repositories.shorts_library_repository import delete_shorts, mark_short_social_posts
 from newsica.storage.repositories.shorts_plan_repository import (
     get_daily_plan,
     list_plan_items,
@@ -38,6 +38,7 @@ from newsica.storage.repositories.shorts_plan_repository import (
 )
 from newsica.shorts.daily_planner import DailyShortsPlanner
 from newsica.shorts.plan_executor import process_one_planned_short_item
+from newsica.shorts.metadata_reader import read_short_metadata
 
 
 def _format_memory_value(raw_value):
@@ -189,96 +190,6 @@ def _load_rotation_runtime():
         "block_events": block_events,
     }
 
-
-def _normalize_short_hashtags(raw_hashtags):
-    if not isinstance(raw_hashtags, list):
-        return []
-    hashtags = []
-    seen = set()
-    for value in raw_hashtags:
-        tag = str(value or "").strip()
-        if not tag:
-            continue
-        if not tag.startswith("#"):
-            tag = f"#{tag}"
-        lowered = tag.lower()
-        if lowered in seen:
-            continue
-        seen.add(lowered)
-        hashtags.append(tag)
-        if len(hashtags) == 5:
-            break
-    return hashtags
-
-
-def _normalize_short_social_posts(raw_social_posts):
-    if not isinstance(raw_social_posts, dict):
-        return {}
-    normalized = {}
-    for platform in ("youtube", "instagram", "tiktok"):
-        payload = raw_social_posts.get(platform)
-        if not isinstance(payload, dict):
-            continue
-        posted_at = str(payload.get("posted_at", "")).strip()
-        message = str(payload.get("message", "")).strip()
-        if not posted_at:
-            continue
-        normalized[platform] = {
-            "posted_at": posted_at,
-            "message": message,
-        }
-    return normalized
-
-
-def _read_short_metadata(video_path):
-    filename = os.path.basename(video_path)
-    db_row = get_short(filename)
-    if db_row:
-        try:
-            raw_hashtags = json.loads(db_row.get("hashtags_json") or "[]")
-        except Exception:
-            raw_hashtags = []
-        try:
-            raw_social_posts = json.loads(db_row.get("social_posts_json") or "{}")
-        except Exception:
-            raw_social_posts = {}
-        hashtags = _normalize_short_hashtags(raw_hashtags)
-        social_posts = _normalize_short_social_posts(raw_social_posts)
-        return {
-            "caption": str(db_row.get("caption", "")).strip(),
-            "hashtags": hashtags,
-            "hashtags_text": " ".join(hashtags),
-            "news_title": str(db_row.get("news_title", "")).strip(),
-            "script": str(db_row.get("script", "")).strip(),
-            "theme": str(db_row.get("theme", "")).strip(),
-            "mode": str(db_row.get("mode", "")).strip(),
-            "social_posts": social_posts,
-            "posted_any": bool(social_posts),
-            "posted_platforms": sorted(social_posts.keys()),
-        }
-
-    metadata_path = os.path.splitext(video_path)[0] + ".json"
-    if not os.path.exists(metadata_path):
-        return {}
-    try:
-        with open(metadata_path, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-    except Exception:
-        return {}
-
-    hashtags = _normalize_short_hashtags(payload.get("hashtags"))
-    return {
-        "caption": str(payload.get("caption", "")).strip(),
-        "hashtags": hashtags,
-        "hashtags_text": " ".join(hashtags),
-        "news_title": str(payload.get("news_title", "")).strip(),
-        "script": str(payload.get("script", "")).strip(),
-        "theme": str(payload.get("theme", "")).strip(),
-        "mode": str(payload.get("mode", "")).strip(),
-        "social_posts": {},
-        "posted_any": False,
-        "posted_platforms": [],
-    }
 
 app = Flask(__name__)
 shorts_daily_planner = DailyShortsPlanner()
@@ -973,7 +884,7 @@ def shorts_publish():
     if not os.path.exists(video_path):
         return jsonify({"status": "error", "message": "File video non trovato."}), 404
         
-    metadata = _read_short_metadata(video_path)
+    metadata = read_short_metadata(video_path)
     title = metadata.get("news_title", "Short NewsicaTV")
     caption = metadata.get("caption", "")
     hashtags = metadata.get("hashtags_text", "")
@@ -1064,7 +975,7 @@ def shorts_library():
         else:
             dt = datetime.fromtimestamp(os.path.getmtime(filepath))
             
-        metadata = _read_short_metadata(filepath)
+        metadata = read_short_metadata(filepath)
         shorts.append({
             "filename": filename,
             "url": f"/api/shorts_video/{filename}",
