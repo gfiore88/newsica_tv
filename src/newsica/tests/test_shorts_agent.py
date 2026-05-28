@@ -26,8 +26,13 @@ class TestShortsAgent(unittest.TestCase):
 
         agent = ShortsAgent()
 
-        # Evitiamo di sovrascrivere raw_news.json vero se esiste
-        with patch.object(agent, '_get_top_news', return_value={"title": "Test Title", "description": "Test Desc"}):
+        with patch.object(agent, "_get_news_item_for_mode", return_value={
+            "title": "Test Title",
+            "description": "Test Desc",
+            "summary": "Test Desc",
+            "source": "ansa_ultimora",
+            "theme_color": "news",
+        }):
             result = agent.run()
 
         self.assertEqual(result["status"], "success")
