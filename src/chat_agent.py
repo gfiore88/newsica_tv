@@ -18,6 +18,7 @@ RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
 
 LIVE_VIDEO_ID_FILE = os.path.join(TMP_DIR, "live_video_id.txt")
 LIVE_VIDEO_CACHE_FILE = os.path.join(TMP_DIR, "live_video_cache.txt")
+PUBLIC_VERIFIED_VIDEO_ID_FILE = os.path.join(TMP_DIR, "public_verified_video_id.txt")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 YOUTUBE_CHAT_USE_API = os.getenv("YOUTUBE_CHAT_USE_API", "false").lower() == "true"
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "UCQOA9AoLRA8XG2g9ruogE1g")
@@ -657,6 +658,31 @@ def main():
             
         print(f"🎯 [CHAT AGENT] Trovata sessione live attiva con ID: {video_id}")
         
+        # Verifica ed effettua lo switch a PUBBLICO se non è già stato fatto per questa sessione live
+        already_public = False
+        if os.path.exists(PUBLIC_VERIFIED_VIDEO_ID_FILE):
+            try:
+                with open(PUBLIC_VERIFIED_VIDEO_ID_FILE, "r", encoding="utf-8") as f:
+                    cached_verified = f.read().strip()
+                    if cached_verified == video_id:
+                        already_public = True
+            except Exception:
+                pass
+
+        if not already_public:
+            print(f"⏳ [CHAT AGENT] Rilevato nuovo ID video live '{video_id}' non verificato come pubblico. Tentativo di switch a PUBBLICO...")
+            try:
+                from newsica.utils.youtube_live_helper import force_live_stream_public
+                result = force_live_stream_public(video_id)
+                if result.get("status") == "success":
+                    print(f"🎉 [CHAT AGENT] {result.get('message')}")
+                    with open(PUBLIC_VERIFIED_VIDEO_ID_FILE, "w", encoding="utf-8") as f:
+                        f.write(video_id)
+                else:
+                    print(f"⚠️ [CHAT AGENT] Impossibile impostare la live su pubblico [{result.get('status')}]: {result.get('message')}")
+            except Exception as se:
+                print(f"❌ [CHAT AGENT] Eccezione durante il tentativo di switch privacy live: {se}")
+
         # Tentativo di usare l'API ufficiale
         if YOUTUBE_API_KEY and YOUTUBE_CHAT_USE_API:
             print("🔑 [CHAT AGENT] Chiave API rilevata e abilitata in .env. Risoluzione liveChatId...")
