@@ -756,27 +756,11 @@ class AudioPlayout:
 
         return True
 
-    def queue_music_track(
-        self,
-        deadline,
-        preferred_music_file=None,
-        history_slot=None,
-        history_label="music_rotation",
-        history_event_type="PlayMusicDeadlineEvent",
-        history_segment="rotation_deadline",
-    ):
-        if isinstance(deadline, str):
-            deadline = datetime.datetime.fromisoformat(deadline)
-            
-        if datetime.datetime.now() >= deadline or self.is_interrupted():
-            return
-
-        if self._play_telegram_voice_if_available(log_prefix="TELEGRAM SIDECHAIN"):
-            return
-
+    def _resolve_next_music_track(self, preferred_music_file=None):
         request = consume_next_ready_request()
         music_file = None
         is_requested = False
+
         if request:
             music_file = request.get("asset_path")
             if music_file and Path(music_file).exists():
@@ -795,35 +779,26 @@ class AudioPlayout:
 
         if not music_file:
             music_file = self.get_random_music(exclude=self.last_music_file, remember=False)
-            
         if not music_file:
-            time.sleep(1)
-            return
+            return None, request, is_requested
+
         if not str(Path(music_file).name).startswith("ai_track_request_"):
             music_file = self._ensure_music_allowed_by_mode(music_file)
         if not music_file:
-            time.sleep(1)
-            return
-            
-        self.last_music_file = music_file
-        self.remember_music_track(music_file)
-        self._log_music_history(
-            slot_time=history_slot,
-            label=history_label,
-            event_type=history_event_type,
-            segment=history_segment,
-            music_file=music_file,
-        )
-        
-        metadata = self.build_music_metadata(music_file)
-        
-        # Gestione Annuncio Vocale in Sidechain
+            return None, request, is_requested
+
+        return music_file, request, is_requested
+
+    def _prepare_chat_request_sidechain(self, metadata, request, is_requested):
         voice_proc = None
         ducker = None
+
         if is_requested and request:
             metadata["requested_by"] = request.get("author", "Anonimo")
-            metadata["requested_title"] = metadata.get("current_music_title") or request.get("generated_title") or "Brano Richiesto"
-            
+            metadata["requested_title"] = (
+                metadata.get("current_music_title") or request.get("generated_title") or "Brano Richiesto"
+            )
+
             announcement_file = TMP_DIR / "request_announcement.wav"
             if _generate_request_announcement(metadata["requested_by"], metadata["requested_title"], announcement_file):
                 voice_proc = subprocess.Popen(
@@ -835,6 +810,44 @@ class AudioPlayout:
         else:
             metadata["requested_by"] = ""
             metadata["requested_title"] = ""
+
+        return metadata, voice_proc, ducker
+
+    def queue_music_track(
+        self,
+        deadline,
+        preferred_music_file=None,
+        history_slot=None,
+        history_label="music_rotation",
+        history_event_type="PlayMusicDeadlineEvent",
+        history_segment="rotation_deadline",
+    ):
+        if isinstance(deadline, str):
+            deadline = datetime.datetime.fromisoformat(deadline)
+            
+        if datetime.datetime.now() >= deadline or self.is_interrupted():
+            return
+
+        if self._play_telegram_voice_if_available(log_prefix="TELEGRAM SIDECHAIN"):
+            return
+
+        music_file, request, is_requested = self._resolve_next_music_track(preferred_music_file=preferred_music_file)
+        if not music_file:
+            time.sleep(1)
+            return
+
+        self.last_music_file = music_file
+        self.remember_music_track(music_file)
+        self._log_music_history(
+            slot_time=history_slot,
+            label=history_label,
+            event_type=history_event_type,
+            segment=history_segment,
+            music_file=music_file,
+        )
+
+        metadata = self.build_music_metadata(music_file)
+        metadata, voice_proc, ducker = self._prepare_chat_request_sidechain(metadata, request, is_requested)
 
         self.audio_queue.put(
             {
@@ -923,32 +936,11 @@ class AudioPlayout:
         if self._play_telegram_voice_if_available(log_prefix="TELEGRAM SINGLE SIDECHAIN"):
             return
 
-        request = consume_next_ready_request()
-        is_requested = False
-        if request:
-            music_file = request.get("asset_path")
-            if music_file and Path(music_file).exists():
-                is_requested = True
-                print(
-                    f"🎵 [CHAT REQUEST] Il prossimo brano sara' una richiesta della chat: "
-                    f"{os.path.basename(music_file)}"
-                )
-            else:
-                if music_file:
-                    print(f"⚠️ Richiesta musicale {request.get('id')} pronta ma senza file valido: {music_file}")
-                music_file = None
+        music_file, request, is_requested = self._resolve_next_music_track(preferred_music_file=music_file)
+        if not music_file:
+            time.sleep(1)
+            return
 
-        if not music_file:
-            music_file = self.get_random_music(exclude=self.last_music_file, remember=False)
-        if not music_file:
-            time.sleep(1)
-            return
-        if not str(Path(music_file).name).startswith("ai_track_request_"):
-            music_file = self._ensure_music_allowed_by_mode(music_file)
-        if not music_file:
-            time.sleep(1)
-            return
-            
         self.last_music_file = music_file
         self.remember_music_track(music_file)
         self._log_music_history(
@@ -958,27 +950,9 @@ class AudioPlayout:
             segment=history_segment,
             music_file=music_file,
         )
-        
+
         metadata = self.build_music_metadata(music_file)
-        
-        # Gestione Annuncio Vocale in Sidechain
-        voice_proc = None
-        ducker = None
-        if is_requested and request:
-            metadata["requested_by"] = request.get("author", "Anonimo")
-            metadata["requested_title"] = metadata.get("current_music_title") or request.get("generated_title") or "Brano Richiesto"
-            
-            announcement_file = TMP_DIR / "request_announcement.wav"
-            if _generate_request_announcement(metadata["requested_by"], metadata["requested_title"], announcement_file):
-                voice_proc = subprocess.Popen(
-                    self._pcm_decode_command(str(announcement_file)),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                )
-                ducker = PlayoutSidechainDucker(PCM_SAMPLE_RATE)
-        else:
-            metadata["requested_by"] = ""
-            metadata["requested_title"] = ""
+        metadata, voice_proc, ducker = self._prepare_chat_request_sidechain(metadata, request, is_requested)
 
         self.audio_queue.put(
             {
