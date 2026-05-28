@@ -157,6 +157,34 @@ def init_schema():
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS shorts_daily_plans (
+        target_date TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        reason TEXT,
+        plan_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS shorts_daily_plan_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_date TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        rule_type TEXT NOT NULL,
+        reason TEXT,
+        priority INTEGER NOT NULL DEFAULT 0,
+        source_title TEXT,
+        source_summary TEXT,
+        source_score INTEGER,
+        scheduled_for_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'planned',
+        short_filename TEXT,
+        publish_result_json TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
     """
     
     try:

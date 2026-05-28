@@ -120,5 +120,25 @@ class TestShortsAgent(unittest.TestCase):
         if os.path.exists(metadata_path):
             os.remove(metadata_path)
 
+    def test_shorts_agent_skips_generation_when_news_retrieval_is_placeholder(self):
+        agent = ShortsAgent()
+        with patch.object(agent, "_get_news_item_for_mode", return_value={
+            "title": "Nessuna notizia disponibile al momento",
+            "summary": "Stiamo aggiornando i nostri sistemi.",
+            "description": "Stiamo aggiornando i nostri sistemi.",
+            "source": "news",
+            "theme_color": "news",
+        }), patch.object(agent, "_generate_script") as mock_script, patch.object(agent, "_generate_audio") as mock_audio, patch.object(
+            agent, "_render_video"
+        ) as mock_render, patch.object(agent, "_write_metadata") as mock_meta:
+            result = agent.run(mode="news")
+
+        self.assertEqual(result["status"], "retrieval_failed")
+        self.assertIn("Retrieve news degradato", result["message"])
+        self.assertFalse(mock_script.called)
+        self.assertFalse(mock_audio.called)
+        self.assertFalse(mock_render.called)
+        self.assertFalse(mock_meta.called)
+
 if __name__ == '__main__':
     unittest.main()

@@ -18,6 +18,8 @@ export default function ShortsLibrary() {
   const [playingShort, setPlayingShort] = useState(null)
   const [shortsLoading, setShortsLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [planLoading, setPlanLoading] = useState(false)
+  const [planState, setPlanState] = useState({ date: '', summary: {}, items: [] })
   const [selectedMode, setSelectedMode] = useState('random')
   const [selectedShorts, setSelectedShorts] = useState([])
   const { showAlert, showConfirm } = useDialog()
@@ -83,8 +85,24 @@ export default function ShortsLibrary() {
     }
   }
 
+  const fetchPlanStatus = async () => {
+    try {
+      const res = await fetch('/api/shorts_plan_today')
+      if (!res.ok) return
+      const data = await res.json()
+      setPlanState({
+        date: data.date || '',
+        summary: data.summary || {},
+        items: data.items || [],
+      })
+    } catch (e) {
+      console.error('Errore caricamento piano shorts:', e)
+    }
+  }
+
   useEffect(() => {
     fetchShorts()
+    fetchPlanStatus()
   }, [])
 
   useEffect(() => {
@@ -282,6 +300,50 @@ export default function ShortsLibrary() {
     }
   }
 
+  const rebuildDailyPlan = async () => {
+    setPlanLoading(true)
+    try {
+      const res = await fetch('/api/shorts_plan_rebuild', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
+      })
+      const data = await res.json()
+      await fetchPlanStatus()
+      if (res.ok) {
+        await showAlert(data.message || `Piano shorts aggiornato (${data.item_count || 0} item).`, 'Piano Aggiornato')
+      } else {
+        await showAlert(data.message || 'Impossibile rigenerare il piano shorts.', 'Errore Piano')
+      }
+    } catch (e) {
+      await showAlert('Errore di rete durante la rigenerazione del piano.', 'Errore di Rete')
+    } finally {
+      setPlanLoading(false)
+    }
+  }
+
+  const processOnePlanItem = async () => {
+    setPlanLoading(true)
+    try {
+      const res = await fetch('/api/shorts_plan_process_once', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const data = await res.json()
+      await fetchPlanStatus()
+      await fetchShorts()
+      if (res.ok) {
+        await showAlert(data.message || 'Item shorts processato.', 'Piano Shorts')
+      } else {
+        await showAlert(data.message || 'Errore durante il processamento item.', 'Errore Piano')
+      }
+    } catch (e) {
+      await showAlert('Errore di rete durante il processamento item.', 'Errore di Rete')
+    } finally {
+      setPlanLoading(false)
+    }
+  }
+
   return (
     <div className="pb-8">
       <div className="flex items-center justify-between mb-8">
@@ -338,6 +400,44 @@ export default function ShortsLibrary() {
             >
               <Play size={16} />
               {shortsLoading ? 'Generazione...' : 'Genera Short'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Autonomia Shorts Giornaliera</div>
+            <div className="mt-1 text-sm text-slate-200">
+              Data: <span className="font-semibold text-white">{planState.date || '-'}</span> |
+              {' '}planned: <span className="font-semibold text-slate-100">{planState.summary.planned || 0}</span> |
+              {' '}generating: <span className="font-semibold text-slate-100">{planState.summary.generating || 0}</span> |
+              {' '}scheduled: <span className="font-semibold text-emerald-300">{planState.summary.scheduled || 0}</span> |
+              {' '}failed: <span className="font-semibold text-rose-300">{planState.summary.failed || 0}</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={fetchPlanStatus}
+              disabled={planLoading}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white disabled:opacity-50"
+            >
+              Aggiorna Piano
+            </button>
+            <button
+              onClick={rebuildDailyPlan}
+              disabled={planLoading}
+              className="rounded-lg border border-indigo-500/40 bg-indigo-600/20 px-3 py-2 text-xs font-semibold text-indigo-200 transition hover:border-indigo-400 hover:text-white disabled:opacity-50"
+            >
+              {planLoading ? 'Attendi...' : 'Rigenera Piano Oggi'}
+            </button>
+            <button
+              onClick={processOnePlanItem}
+              disabled={planLoading}
+              className="rounded-lg border border-emerald-500/40 bg-emerald-600/20 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-white disabled:opacity-50"
+            >
+              Processa 1 Item
             </button>
           </div>
         </div>

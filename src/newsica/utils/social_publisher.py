@@ -2,11 +2,31 @@ import os
 import logging
 import time
 import hashlib
+from datetime import datetime, timedelta, timezone
 from newsica.utils.audit_logger import log_decision
 
 logger = logging.getLogger(__name__)
 
 class SocialPublisher:
+    @staticmethod
+    def _normalize_due_at_utc(due_at_utc: str | None) -> str | None:
+        if not due_at_utc:
+            return None
+        try:
+            raw = due_at_utc.strip()
+            if raw.endswith("Z"):
+                raw = raw.replace("Z", "+00:00")
+            due_dt = datetime.fromisoformat(raw)
+            if due_dt.tzinfo is None:
+                due_dt = due_dt.replace(tzinfo=timezone.utc)
+            due_dt = due_dt.astimezone(timezone.utc)
+            now_utc = datetime.now(timezone.utc)
+            if due_dt <= now_utc + timedelta(minutes=1):
+                due_dt = now_utc + timedelta(minutes=5)
+            return due_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            return due_at_utc
+
     @staticmethod
     def is_auto_post_enabled() -> bool:
         return os.getenv("AUTO_POST_SHORTS", "false").lower() == "true"
@@ -76,6 +96,8 @@ class SocialPublisher:
         service_name: str,
         title: str = None,
         post_type: str = None,
+        publish_mode: str = "share_now",
+        due_at_utc: str | None = None,
     ) -> dict:
         """Pubblica lo short tramite Buffer GraphQL API cercando il canale con il service specificato."""
         access_token = os.getenv("BUFFER_ACCESS_TOKEN")
@@ -189,14 +211,28 @@ class SocialPublisher:
                       }}
                     }}"""
 
+            scheduling_fragment = """
+                    schedulingType: automatic,
+                    mode: shareNow,"""
+            if publish_mode == "scheduled":
+                if not due_at_utc:
+                    return {
+                        "status": "error",
+                        "message": "Configurazione scheduling incompleta: manca due_at_utc.",
+                    }
+                due_at_utc = self._normalize_due_at_utc(due_at_utc)
+                scheduling_fragment = f"""
+                    schedulingType: automatic,
+                    mode: customScheduled,
+                    dueAt: "{due_at_utc}","""
+
             post_mutation = {
                 "query": f"""
                 mutation {{
                   createPost(input: {{
                     text: "{escaped_caption}",
                     channelId: "{channel_id}",
-                    schedulingType: automatic,
-                    mode: shareNow,
+{scheduling_fragment}
                     assets: [
                       {{
                         video: {{
@@ -418,6 +454,54 @@ class SocialPublisher:
             "message": self._bulk_message_from_results(results),
             "results": results,
         }
+
+    def schedule_to_all_socials(self, video_path: str, title: str, caption: str, due_at_by_platform: dict) -> dict:
+        """
+        Schedula la pubblicazione dello short su YouTube, Instagram e TikTok usando Buffer.
+        due_at_by_platform deve contenere timestamp UTC ISO8601 (es. 2026-05-27T18:30:00Z).
+        """
+        if os.getenv("BUFFER_USE_INTEGRATION", "false").lower() != "true":
+            return {
+                "status": "config_missing",
+                "message": "Scheduling multi-social richiede BUFFER_USE_INTEGRATION=true.",
+            }
+        try:
+            video_url = self._upload_to_cloudinary(video_path)
+            results = {
+                "youtube": self._publish_via_buffer(
+                    video_url,
+                    caption,
+                    "youtube",
+                    title=title,
+                    publish_mode="scheduled",
+                    due_at_utc=(due_at_by_platform.get("youtube") or {}).get("utc"),
+                ),
+                "instagram": self._publish_via_buffer(
+                    video_url,
+                    caption,
+                    "instagram",
+                    post_type="reel",
+                    publish_mode="scheduled",
+                    due_at_utc=(due_at_by_platform.get("instagram") or {}).get("utc"),
+                ),
+                "tiktok": self._publish_via_buffer(
+                    video_url,
+                    caption,
+                    "tiktok",
+                    publish_mode="scheduled",
+                    due_at_utc=(due_at_by_platform.get("tiktok") or {}).get("utc"),
+                ),
+            }
+            return {
+                "status": self._bulk_status_from_results(results),
+                "message": self._bulk_message_from_results(results),
+                "results": results,
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Errore durante la schedulazione multi-social via Buffer: {e}",
+            }
 
     def publish_to_tiktok(self, video_path: str, title: str, description: str = None) -> dict:
         """Pubblica lo short su TikTok usando la TikTok Content Posting API v2 reale con Refresh Token."""

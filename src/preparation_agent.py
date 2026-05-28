@@ -4,6 +4,7 @@ import shutil
 import sys
 import os
 import fcntl
+import json
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
@@ -16,6 +17,11 @@ from newsica.agents.system_admin import SystemAdminAgent, ASSETS_DIR
 from newsica.audio.ai_music_runtime import schedule_rotation_fill_job
 from newsica.audio.music_library import DEFAULT_THEMED_MIN_TRACKS, MusicLibrary
 from newsica.storage.repositories.ai_music_jobs_repository import count_active_jobs
+from newsica.storage.repositories.shorts_plan_repository import (
+    get_pending_generation_items,
+    update_item_status,
+)
+from newsica.storage.repositories.shorts_library_repository import mark_short_social_posts
 
 RUNTIME_DIR = BASE_DIR / "runtime"
 _singleton_lock = None
@@ -105,6 +111,11 @@ def run_loop():
     
     strategist = ContentStrategistAgent()
     sysadmin = SystemAdminAgent()
+    from newsica.agents.shorts_agent import ShortsAgent
+    from newsica.utils.social_publisher import SocialPublisher
+    shorts_agent = ShortsAgent()
+    social_publisher = SocialPublisher()
+    shorts_generation_lead_minutes = int(os.getenv("SHORTS_GENERATION_LEAD_MINUTES", "90"))
 
     # Al boot: puliamo le cartelle "preparing" orfane, MA preserviamo quelle
     # per slot futuri validi con generazione in corso (es. podcast già a metà Chatterbox).
@@ -229,6 +240,54 @@ def run_loop():
                         
                     except Exception as e:
                         sysadmin.fail_slot(slot_time, preparing_dir, error=str(e))
+
+            # 4. Esecuzione autonoma piano shorts giornaliero (1 item per ciclo)
+            for item in get_pending_generation_items(limit=1, due_within_minutes=shorts_generation_lead_minutes):
+                item_id = int(item.get("id", 0))
+                mode = str(item.get("mode", "news")).strip().lower() or "news"
+                due_at_by_platform = item.get("scheduled_for") or {}
+                if not item_id:
+                    continue
+                update_item_status(item_id, "generating")
+                try:
+                    result = shorts_agent.run(mode=mode)
+                    if result.get("status") != "success":
+                        update_item_status(item_id, "failed", error=result.get("message", "generazione short fallita"))
+                        continue
+
+                    output_file = result.get("output", "")
+                    filename = os.path.basename(output_file) if output_file else ""
+                    title = result.get("news_title", "Short NewsicaTV")
+                    caption = result.get("caption", "")
+                    hashtags = result.get("hashtags") or []
+                    full_caption = f"{caption}\n\n{' '.join(hashtags)}" if hashtags else caption
+
+                    scheduled = social_publisher.schedule_to_all_socials(
+                        video_path=output_file,
+                        title=title,
+                        caption=full_caption,
+                        due_at_by_platform=due_at_by_platform,
+                    )
+                    if scheduled.get("status") in {"success", "partial"}:
+                        platform_results = scheduled.get("results")
+                        if isinstance(platform_results, dict):
+                            mark_short_social_posts(filename, platform_results)
+                        update_item_status(
+                            item_id,
+                            "scheduled",
+                            short_filename=filename,
+                            publish_result_json=json.dumps(scheduled, ensure_ascii=False),
+                        )
+                    else:
+                        update_item_status(
+                            item_id,
+                            "failed",
+                            short_filename=filename,
+                            error=scheduled.get("message", "schedulazione social fallita"),
+                            publish_result_json=json.dumps(scheduled, ensure_ascii=False),
+                        )
+                except Exception as e:
+                    update_item_status(item_id, "failed", error=str(e))
                         
         except Exception as e:
             print(f"⚠️ [PreparationAgent] Errore critico nel loop: {e}")

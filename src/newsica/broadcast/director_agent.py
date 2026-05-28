@@ -2,6 +2,7 @@ import os
 import json
 import datetime
 import random
+import time
 import wave
 from newsica.config.paths import TMP_DIR, RUNTIME_DIR, ASSETS_DIR
 from newsica.utils.audit_logger import log_decision
@@ -42,6 +43,7 @@ from newsica.storage.repositories.editorial_memory_repository import (
 )
 from newsica.audio.jingles import get_jingle_for_block, CLASSIC_JINGLE_FILE
 from newsica.audio.music_library import DEFAULT_THEMED_MIN_TRACKS, GENERIC_THEMELESS_MUSIC_TITLE, MusicLibrary
+from newsica.shorts.daily_planner import DailyShortsPlanner
 
 EVENING_PODCAST_SLOT = "20:00"
 EVENING_PODCAST_TITLE = "Newsica Podcast - Dopo Sera"
@@ -52,6 +54,11 @@ class DirectorAgent:
         self.playout = playout
         # Carica percorsi jingle
         self.classic_jingle = str(CLASSIC_JINGLE_FILE)
+        self.shorts_planner = DailyShortsPlanner()
+        self._last_shorts_plan_date = None
+        self._last_shorts_pre_dawn_skip_date = None
+        self._last_breaking_shorts_probe_at = 0.0
+        self._breaking_shorts_probe_interval_seconds = int(os.getenv("SHORTS_BREAKING_SCAN_INTERVAL_SECONDS", "600"))
 
     def _resolve_music_slot_editorial_guardrail(self, block_type, title, theme):
         if block_type != "music_only" or not theme:
@@ -80,6 +87,8 @@ class DirectorAgent:
         Analizza lo stato corrente e il palinsesto per determinare l'azione immediata.
         Restituisce un dizionario contenente l'azione e i relativi parametri.
         """
+        self._reconcile_daily_shorts_plan_if_needed()
+        self._reconcile_breaking_shorts_if_needed()
         state = get_current_state()
         status = state.get("status", "OFFLINE")
         current_block = state.get("current_block", "")
@@ -103,6 +112,44 @@ class DirectorAgent:
             res = self._progress_current_block(state, block_type, title, next_title, next_time, current_time)
             
         return self._attach_active_index(res, active_idx)
+
+    def _reconcile_daily_shorts_plan_if_needed(self):
+        now_local = self.shorts_planner.now_local()
+        today = now_local.date().isoformat()
+        if self._last_shorts_plan_date == today:
+            return
+        if not self.shorts_planner.should_run_automatic_reconcile(now_local=now_local):
+            if self._last_shorts_pre_dawn_skip_date != today:
+                dawn = self.shorts_planner.get_today_dawn(now_local=now_local)
+                print(
+                    f"🌅 [DirectorAgent] Pianificazione shorts rinviata: prima dell'alba "
+                    f"({dawn.strftime('%H:%M')} {self.shorts_planner.timezone})."
+                )
+                self._last_shorts_pre_dawn_skip_date = today
+            return
+        try:
+            result = self.shorts_planner.reconcile_today_plan(force=False)
+            status = result.get("status")
+            if status in {"planned", "existing", "disabled"}:
+                self._last_shorts_plan_date = today
+        except Exception as e:
+            print(f"⚠️ [DirectorAgent] Errore pianificazione shorts giornaliera: {e}")
+
+    def _reconcile_breaking_shorts_if_needed(self):
+        now_ts = time.time()
+        if self._last_breaking_shorts_probe_at and (
+            now_ts - self._last_breaking_shorts_probe_at < max(30, self._breaking_shorts_probe_interval_seconds)
+        ):
+            return
+        self._last_breaking_shorts_probe_at = now_ts
+        try:
+            result = self.shorts_planner.ensure_breaking_extra_if_needed()
+            if result.get("status") == "planned":
+                title = result.get("title", "breaking news")
+                score = result.get("score", 0)
+                print(f"🚨 [DirectorAgent] Inserito short breaking straordinario (score={score}): {title}")
+        except Exception as e:
+            print(f"⚠️ [DirectorAgent] Errore controllo shorts breaking straordinari: {e}")
 
     def _attach_active_index(self, result, active_idx):
         if isinstance(result, list):

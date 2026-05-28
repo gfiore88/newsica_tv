@@ -40,6 +40,11 @@ SUPPORTED_SHORT_MODES = {
     "funfact",
 }
 
+RETRIEVAL_PLACEHOLDER_SNIPPETS = {
+    "nessuna notizia disponibile al momento",
+    "stiamo aggiornando i nostri sistemi",
+}
+
 class ShortsAgent:
     def __init__(self):
         self.tmp_audio = os.path.join(TMP_DIR, "short_audio.wav")
@@ -181,6 +186,26 @@ class ShortsAgent:
         if mode in {"breaking", "sport", "meteo", "tech", "wellness", "news"}:
             return self._build_mode_news_item(mode)
         return self._get_top_news()
+
+    def _is_retrieval_placeholder(self, value: str) -> bool:
+        normalized = self._normalize_text(value).lower()
+        if not normalized:
+            return True
+        for snippet in RETRIEVAL_PLACEHOLDER_SNIPPETS:
+            if snippet in normalized:
+                return True
+        return False
+
+    def _validate_news_item_for_short(self, news_item: dict, mode: str) -> tuple[bool, str]:
+        title = self._normalize_text(news_item.get("title", ""))
+        summary = self._normalize_text(news_item.get("summary") or news_item.get("description") or "")
+        source = self._normalize_text(news_item.get("source", "")).lower()
+
+        if self._is_retrieval_placeholder(title) or self._is_retrieval_placeholder(summary):
+            return False, "Retrieve news degradato: placeholder rilevato nel contenuto."
+        if mode in {"news", "breaking"} and source in {"news", "breaking"}:
+            return False, "Retrieve news degradato: sorgente fallback non editoriale."
+        return True, ""
 
     def _generate_script(self, news_item: dict) -> str:
         prompt_path = os.path.join(BASE_DIR, "src", "newsica", "editorial", "prompts", "shorts.md")
@@ -692,6 +717,14 @@ Notizia: {news_item.get('title')}
         try:
             news = self._get_news_item_for_mode(mode)
             news["short_mode"] = mode
+            is_valid, validation_error = self._validate_news_item_for_short(news, mode)
+            if not is_valid:
+                logger.error(f"Short annullato [{mode}]: {validation_error}")
+                return {
+                    "status": "retrieval_failed",
+                    "message": validation_error,
+                    "mode": mode,
+                }
             theme = news.get('theme_color', 'news')
             script = self._generate_script(news)
             caption, hashtags = self._generate_social_copy(news, script)
