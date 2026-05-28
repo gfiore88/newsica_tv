@@ -113,6 +113,17 @@ Da qui puoi selezionare il format editoriale da un dropdown e lanciare test on-d
 
 Il pannello usa la pipeline locale esistente e invia alla regia un playout immediato coerente con il `character_id`, cosi' overlay, ticker e stato runtime riflettono il format reale in onda.
 
+### 📰 Gestione Fonti RSS da Dashboard
+La dashboard include ora una vista `Fonti RSS` dedicata alla manutenzione del registry editoriale.
+
+Da qui puoi:
+* vedere tutte le fonti attive lette da `src/newsica/sources/registry.py`;
+* aprire un'anteprima live del feed per controllare titoli e pubblicazione;
+* aggiungere una nuova fonte con `id`, `url` e `category`;
+* rimuovere una fonte esistente.
+
+Le modifiche scrivono direttamente su `registry.py` e il collector rilegge il file a ogni ciclo di raccolta, quindi la regia vede i cambi senza restart manuale del processo.
+
 ## 🚀 Esecuzione e Gestione
 
 Per semplificare l'avvio, l'arresto e il monitoraggio di tutti i servizi in locale (Dashboard, Regia, Ticker, Chime e Streamer FFmpeg), è disponibile il tool unificato **`manage.sh`** nella root del progetto.
