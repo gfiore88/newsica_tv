@@ -108,8 +108,8 @@ Notizia: {news_item.get('title')}
         text = re.sub(r"\s+", " ", str(text)).strip()
         return text
 
-    def _generate_audio(self, text: str) -> float:
-        return self.render_pipeline.generate_audio(text)
+    def _generate_audio(self, text: str, theme_or_mode: str = None) -> float:
+        return self.render_pipeline.generate_audio(text, theme_or_mode)
 
     def _generate_srt(self, text: str, duration: float):
         self.render_pipeline.generate_srt(text, duration)
@@ -174,7 +174,7 @@ Notizia: {news_item.get('title')}
             theme = news.get('theme_color', 'news')
             script = self._generate_script(news)
             caption, hashtags = generate_social_copy(news, script)
-            duration = self._generate_audio(script)
+            duration = self._generate_audio(script, mode)
             self._generate_srt(script, duration)
             img_url = news.get('image_url') or news.get('urlToImage', '')
             self._generate_background(theme, news.get('title', ''), img_url)

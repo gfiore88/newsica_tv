@@ -281,6 +281,10 @@ def generate_audio():
         try:
             kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
             
+            # Carica lo stile vocale personalizzato (vettore perturbato o stringa base)
+            from newsica.utils.voice_helper import get_voice_style_for_character
+            voice_style = get_voice_style_for_character(kokoro, character.id)
+            
             if "[MUSIC_BREAK]" in raw_text:
                 parts = [p.strip() for p in raw_text.split("[MUSIC_BREAK]") if p.strip()]
                 num_parts = len(parts)
@@ -298,7 +302,7 @@ def generate_audio():
                     part_text = prepare_text_for_tts(part)
                     part_num = idx + 1
                     print(f"Generazione Parte {part_num} di {num_parts}...")
-                    samples, sample_rate = kokoro.create(part_text, voice=voice, speed=speed, lang="it")
+                    samples, sample_rate = kokoro.create(part_text, voice=voice_style, speed=speed, lang="it")
                     sf.write(os.path.join(TMP_DIR, f"audio_part{part_num}.wav"), samples, sample_rate)
                     
                 with open(multipart_file, "w") as sf_file:
@@ -307,7 +311,7 @@ def generate_audio():
             else:
                 print("Copione standard a parte singola.")
                 text = prepare_text_for_tts(raw_text)
-                samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang="it")
+                samples, sample_rate = kokoro.create(text, voice=voice_style, speed=speed, lang="it")
                 sf.write(OUTPUT_AUDIO, samples, sample_rate)
                 
                 if os.path.exists(multipart_file):

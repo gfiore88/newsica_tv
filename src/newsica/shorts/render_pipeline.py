@@ -26,8 +26,8 @@ class ShortRenderPipeline:
         self.tmp_srt = os.path.join(tmp_dir, "short.srt")
         self.tmp_bg = os.path.join(tmp_dir, "shorts_bg.png")
 
-    def generate_audio(self, text: str) -> float:
-        print("🎙️ Generazione audio TTS per lo Short...")
+    def generate_audio(self, text: str, theme_or_mode: str = None) -> float:
+        print(f"🎙️ Generazione audio TTS per lo Short (Tema/Modo: {theme_or_mode})...")
         tts_text = text.replace("#", "")
         tts_text = emoji.replace_emoji(tts_text, replace="")
         clean_text = prepare_text_for_tts(tts_text)
@@ -35,11 +35,37 @@ class ShortRenderPipeline:
         kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
         import random
 
-        voices = ["if_sara", "im_nicola"]
-        selected_voice = random.choice(voices)
-        print(f"🗣️ Voce TTS selezionata: {selected_voice}")
+        # Mappatura dei temi per diversificare le voci
+        if not theme_or_mode:
+            theme_or_mode = random.choice(["chiara", "maya", "leo", "giorgio", "colonnello"])
+        elif theme_or_mode == "funfact":
+            theme_or_mode = random.choice(["chiara", "maya", "leo", "giorgio", "colonnello"])
+        elif theme_or_mode == "tech":
+            theme_or_mode = "chiara"
 
-        samples, sample_rate = kokoro.create(clean_text, voice=selected_voice, speed=1.1, lang="it")
+        # Risolvi lo stile vocale con get_voice_style_for_character
+        from newsica.utils.voice_helper import get_voice_style_for_character
+        selected_voice = get_voice_style_for_character(kokoro, theme_or_mode)
+        print(f"🗣️ Voce TTS risolta per '{theme_or_mode}'")
+
+        # Velocità dinamiche su misura per ogni conduttore negli Shorts
+        speeds = {
+            "chiara": 1.1,
+            "news": 1.1,
+            "breaking": 1.1,
+            "breaking_news": 1.1,
+            "maya": 0.95,
+            "wellness": 0.95,
+            "leo": 1.1,
+            "sport": 1.1,
+            "giorgio": 1.05,
+            "motori": 1.05,
+            "colonnello": 1.0,
+            "meteo": 1.0,
+        }
+        selected_speed = speeds.get(theme_or_mode, 1.1)
+
+        samples, sample_rate = kokoro.create(clean_text, voice=selected_voice, speed=selected_speed, lang="it")
         sf.write(self.tmp_audio, samples, sample_rate)
         return len(samples) / sample_rate
 

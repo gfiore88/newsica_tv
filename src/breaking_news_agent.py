@@ -140,7 +140,11 @@ def generate_breaking_news(force=True):
         onnx_path = os.path.join(BASE_DIR, "kokoro-v1.0.onnx")
         voices_path = os.path.join(BASE_DIR, "voices-v1.0.bin")
         kokoro = Kokoro(onnx_path, voices_path)
-        samples, sample_rate = kokoro.create(testo, voice=character.voice, speed=character.speed, lang="it")
+        
+        from newsica.utils.voice_helper import get_voice_style_for_character
+        voice_style = get_voice_style_for_character(kokoro, character.id)
+        
+        samples, sample_rate = kokoro.create(testo, voice=voice_style, speed=character.speed, lang="it")
         sf.write(voice_audio, samples, sample_rate)
         print("✅ Voce Breaking News generata con successo.")
     except Exception as e:
