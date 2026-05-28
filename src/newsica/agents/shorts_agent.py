@@ -731,15 +731,18 @@ Notizia: {news_item.get('title')}
             self._write_metadata(out_file, news, script, caption, hashtags)
             
             # Pubblicazione automatica sui social se abilitata nell'ambiente
+            from newsica.shorts.social_service import (
+                build_full_caption,
+                publish_short,
+                track_social_posts,
+            )
             from newsica.utils.social_publisher import SocialPublisher
             if SocialPublisher.is_auto_post_enabled():
                 print("📢 Auto-posting abilitato! Avvio della pubblicazione automatica...")
-                publisher = SocialPublisher()
                 title = news.get("title", "Short NewsicaTV")
-                full_caption = f"{caption}\n\n{' '.join(hashtags)}" if hashtags else caption
-                publisher.publish_to_youtube(out_file, title, full_caption)
-                publisher.publish_to_instagram(out_file, full_caption)
-                publisher.publish_to_tiktok(out_file, title)
+                full_caption = build_full_caption(caption, hashtags)
+                post_result = publish_short(out_file, title, full_caption, "all")
+                track_social_posts(os.path.basename(out_file), "all", post_result)
             
             return {
                 "status": "success" if out_file else "failed",

@@ -1,7 +1,11 @@
 import json
 import os
 
-from newsica.storage.repositories.shorts_library_repository import mark_short_social_posts
+from newsica.shorts.social_service import (
+    build_full_caption,
+    schedule_short_to_all,
+    track_social_posts,
+)
 from newsica.storage.repositories.shorts_plan_repository import (
     get_pending_generation_items,
     update_item_status,
@@ -18,7 +22,6 @@ def process_one_planned_short_item(due_within_minutes: int | None = None) -> dic
         return {"status": "idle", "message": "Nessun item shorts pianificato in attesa."}
 
     from newsica.agents.shorts_agent import ShortsAgent
-    from newsica.utils.social_publisher import SocialPublisher
 
     item = pending[0]
     item_id = int(item.get("id", 0))
@@ -40,19 +43,16 @@ def process_one_planned_short_item(due_within_minutes: int | None = None) -> dic
         title = result.get("news_title", "Short NewsicaTV")
         caption = result.get("caption", "")
         hashtags = result.get("hashtags") or []
-        full_caption = f"{caption}\n\n{' '.join(hashtags)}" if hashtags else caption
+        full_caption = build_full_caption(caption, hashtags)
 
-        publisher = SocialPublisher()
-        scheduled = publisher.schedule_to_all_socials(
+        scheduled = schedule_short_to_all(
             video_path=output_file,
             title=title,
             caption=full_caption,
             due_at_by_platform=due_at_by_platform,
         )
         if scheduled.get("status") in {"success", "partial"}:
-            platform_results = scheduled.get("results")
-            if isinstance(platform_results, dict):
-                mark_short_social_posts(filename, platform_results)
+            track_social_posts(filename, "all", scheduled)
             update_item_status(
                 item_id,
                 "scheduled",

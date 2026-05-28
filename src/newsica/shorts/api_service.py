@@ -6,7 +6,12 @@ from datetime import datetime
 
 from newsica.shorts.constants import SHORT_MODES
 from newsica.shorts.metadata_reader import read_short_metadata
-from newsica.storage.repositories.shorts_library_repository import delete_shorts, mark_short_social_posts
+from newsica.shorts.social_service import (
+    build_full_caption,
+    publish_short,
+    track_social_posts,
+)
+from newsica.storage.repositories.shorts_library_repository import delete_shorts
 
 
 def normalize_short_mode(raw_mode: str) -> str | None:
@@ -51,26 +56,14 @@ def publish_short_payload(base_dir: str, filename: str, platform: str) -> tuple[
     title = metadata.get("news_title", "Short NewsicaTV")
     caption = metadata.get("caption", "")
     hashtags = metadata.get("hashtags_text", "")
-    full_caption = f"{caption}\n\n{hashtags}" if hashtags else caption
+    full_caption = build_full_caption(caption, hashtags)
 
-    from newsica.utils.social_publisher import SocialPublisher
-
-    publisher = SocialPublisher()
-    if platform == "youtube":
-        result = publisher.publish_to_youtube(video_path, title, full_caption)
-    elif platform == "instagram":
-        result = publisher.publish_to_instagram(video_path, full_caption)
-    elif platform == "tiktok":
-        result = publisher.publish_to_tiktok(video_path, title, full_caption)
-    elif platform == "all":
-        result = publisher.publish_to_all_socials(video_path, title, full_caption)
-    else:
+    try:
+        result = publish_short(video_path, title, full_caption, platform)
+    except ValueError:
         return {"status": "error", "message": "Piattaforma non supportata."}, 400
 
-    platform_results = result.get("results")
-    if not isinstance(platform_results, dict):
-        platform_results = {platform: result}
-    social_posts = mark_short_social_posts(filename, platform_results)
+    social_posts = track_social_posts(filename, platform, result)
 
     if result.get("status") == "success":
         return {"status": "OK", "message": result.get("message"), "social_posts": social_posts}, 200
@@ -171,4 +164,3 @@ def delete_shorts_payload(base_dir: str, raw_filenames) -> tuple[dict, int]:
         "deleted_rows": deleted_rows,
         "missing_files": missing_files,
     }, 200
-
