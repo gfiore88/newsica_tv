@@ -194,13 +194,11 @@ class DailyShortsPlanner:
         items = []
         for index, (mode, rule_type) in enumerate(planned_modes):
             picked = self._pick_candidate(candidates_by_mode.get(mode, []), selected_titles)
-            
-            # Se la categoria specifica non ha articoli unici disponibili,
-            # proviamo a pescare l'articolo alternativo più rilevante e unico dal pool "news"!
-            if not picked and mode != "news":
-                print(f"⚠️ Nessun articolo unico in '{mode}'. Cerco fallback dal pool 'news'...")
-                picked = self._pick_candidate(candidates_by_mode.get("news", []), selected_titles)
-                
+
+            if not picked:
+                print(f"⚠️ Nessun articolo unico disponibile per '{mode}'. Rubrica saltata per evitare off-topic.")
+                continue
+
             if picked:
                 selected_titles.add((picked.get("title") or "").strip().lower())
                 source_title = picked.get("title", "")

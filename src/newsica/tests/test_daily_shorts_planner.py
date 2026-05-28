@@ -7,7 +7,21 @@ from newsica.shorts.daily_planner import DailyShortsPlanner
 
 
 class TestDailyShortsPlanner(unittest.TestCase):
-    def test_build_items_enforces_always_constraints_and_conditional_relevance(self):
+    @patch("newsica.shorts.daily_planner.calculate_heuristic_score")
+    def test_build_items_enforces_always_constraints_and_conditional_relevance(self, mock_score):
+        def score_side_effect(title, summary, category=None):
+            mapping = {
+                ("Governo approva nuova manovra", "news"): 95,
+                ("Nuovo modello AI rivoluziona i chip", "news"): 50,
+                ("Nuovo modello AI rivoluziona i chip", "tech"): 92,
+                ("Trend social curioso del giorno", "funfact"): 88,
+                ("Alluvione con allerta rossa in Liguria", "meteo"): 80,
+                ("Finale europea decisa ai rigori", "sport"): 70,
+                ("Routine benessere per migliorare il sonno", "wellness"): 68,
+            }
+            return mapping.get((title, category), 10)
+
+        mock_score.side_effect = score_side_effect
         planner = DailyShortsPlanner()
         fake_news = [
             {"title": "Governo approva nuova manovra", "summary": "Economia e politica", "source": "ansa_politica"},
@@ -116,20 +130,33 @@ class TestDailyShortsPlanner(unittest.TestCase):
         picked = planner._pick_candidate(candidates, selected_titles)
         self.assertIsNone(picked, "Dovrebbe ritornare None se l'articolo è già stato selezionato per prevenire duplicati.")
 
-    def test_build_items_applies_fallback_to_prevent_mode_overlap(self):
+    @patch("newsica.shorts.daily_planner.calculate_heuristic_score")
+    def test_build_items_skips_mode_when_only_candidate_is_already_used(self, mock_score):
+        def score_side_effect(title, summary, category=None):
+            mapping = {
+                ("Amazon lancia nuova flotta", "news"): 10,
+                ("Amazon lancia nuova flotta", "tech"): 95,
+                ("Amazon lancia nuova flotta", "funfact"): 90,
+                ("Notizia generale unica", "news"): 98,
+            }
+            return mapping.get((title, category), 5)
+
+        mock_score.side_effect = score_side_effect
         planner = DailyShortsPlanner()
         fake_news = [
             {"title": "Amazon lancia nuova flotta", "summary": "Consegne con droni", "source": "ansa_tecnologia"},
             {"title": "Notizia generale unica", "summary": "Cronaca pulita", "source": "sky_tg24"},
         ]
-        # tech e funfact hanno entrambi "Amazon lancia nuova flotta" nel loro pool.
-        # Poiché tech viene elaborata prima di funfact (in ALWAYS_MODES),
-        # funfact dovrebbe andare in fallback sul pool "news" e scegliere "Notizia generale unica".
+        # tech e funfact condividono lo stesso unico candidato. Il secondo mode che
+        # resta senza contenuti unici deve essere saltato, non riempito con una news generica.
         items = planner._build_items(fake_news, target_day=date(2026, 5, 27))
-        
+
+        items_by_mode = {item["mode"]: item for item in items}
         titles = [item["source_title"] for item in items if item["source_title"]]
-        # Verifica che non ci siano duplicati
         self.assertEqual(len(titles), len(set(titles)), "Gli articoli programmati non devono contenere duplicati.")
+        self.assertIn("funfact", items_by_mode)
+        self.assertEqual(items_by_mode["funfact"]["source_title"], "Amazon lancia nuova flotta")
+        self.assertNotIn("tech", items_by_mode)
         self.assertIn("Notizia generale unica", titles)
 
 
