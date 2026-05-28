@@ -89,7 +89,7 @@ Notizia: {news_item.get('title')}
             "model": MODEL_NAME,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0.8, "num_predict": 100}
+            "options": {"temperature": 0.8, "num_predict": 300}
         }
         
         try:
