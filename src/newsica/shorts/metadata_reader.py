@@ -1,6 +1,7 @@
 import json
 import os
 
+from newsica.shorts.constants import SHORT_SOCIAL_PLATFORMS
 from newsica.storage.repositories.shorts_library_repository import get_short
 
 
@@ -29,7 +30,7 @@ def normalize_short_social_posts(raw_social_posts):
     if not isinstance(raw_social_posts, dict):
         return {}
     normalized = {}
-    for platform in ("youtube", "instagram", "tiktok"):
+    for platform in SHORT_SOCIAL_PLATFORMS:
         payload = raw_social_posts.get(platform)
         if not isinstance(payload, dict):
             continue
@@ -93,4 +94,3 @@ def read_short_metadata(video_path):
         "posted_any": False,
         "posted_platforms": [],
     }
-

@@ -4,6 +4,7 @@ import time
 import hashlib
 from datetime import datetime, timedelta, timezone
 from newsica.utils.audit_logger import log_decision
+from newsica.shorts.constants import SHORT_SOCIAL_PLATFORMS
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class SocialPublisher:
             "tiktok": "TikTok",
         }
         lines = []
-        for platform in ("youtube", "instagram", "tiktok"):
+        for platform in SHORT_SOCIAL_PLATFORMS:
             result = results.get(platform, {})
             label = labels[platform]
             status = result.get("status", "error")

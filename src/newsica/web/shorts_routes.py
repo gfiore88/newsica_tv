@@ -5,6 +5,7 @@ from datetime import datetime
 
 from flask import jsonify, request, send_from_directory
 
+from newsica.shorts.constants import SHORT_MODES
 from newsica.shorts.metadata_reader import read_short_metadata
 from newsica.shorts.plan_executor import process_one_planned_short_item
 from newsica.storage.repositories.shorts_library_repository import delete_shorts, mark_short_social_posts
@@ -21,8 +22,8 @@ def register_shorts_routes(app, *, base_dir, shorts_daily_planner):
         data = request.json or {}
         mode = str(data.get("mode", "news")).strip().lower() or "news"
         if mode == "random":
-            mode = random.choice(["news", "breaking", "sport", "meteo", "tech", "wellness", "funfact"])
-        if mode not in {"news", "breaking", "sport", "meteo", "tech", "wellness", "funfact"}:
+            mode = random.choice(list(SHORT_MODES))
+        if mode not in set(SHORT_MODES):
             return jsonify({"status": "error", "message": "Modalità short non valida."}), 400
         try:
             from newsica.agents.shorts_agent import ShortsAgent
@@ -208,4 +209,3 @@ def register_shorts_routes(app, *, base_dir, shorts_daily_planner):
             "deleted_rows": deleted_rows,
             "missing_files": missing_files,
         })
-

@@ -11,6 +11,7 @@ from kokoro_onnx import Kokoro
 from newsica.audio.tts_text import prepare_text_for_tts
 from newsica.editorial.gravity_assessor import calculate_heuristic_score
 from newsica.storage.repositories.shorts_library_repository import upsert_short
+from newsica.shorts.constants import SHORT_MODES
 import emoji
 from duckduckgo_search import DDGS
 import io
@@ -31,13 +32,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(TMP_DIR, exist_ok=True)
 
 SUPPORTED_SHORT_MODES = {
-    "news",
-    "breaking",
-    "sport",
-    "meteo",
-    "tech",
-    "wellness",
-    "funfact",
+    *SHORT_MODES,
 }
 
 RETRIEVAL_PLACEHOLDER_SNIPPETS = {
