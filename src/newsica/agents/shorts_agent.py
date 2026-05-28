@@ -108,7 +108,8 @@ Notizia: {news_item.get('title')}
         text = re.sub(r"\s+", " ", str(text)).strip()
         return text
 
-    def _generate_audio(self, text: str, theme_or_mode: str = None) -> float:
+    def _generate_audio(self, text: str, theme_or_mode: str = None) -> tuple[float, str]:
+        """Delega a render_pipeline e propaga la tupla (durata, testo_pulito)."""
         return self.render_pipeline.generate_audio(text, theme_or_mode)
 
     def _generate_srt(self, text: str, duration: float):
@@ -177,8 +178,8 @@ Notizia: {news_item.get('title')}
             theme = news.get('theme_color', 'news')
             script = self._generate_script(news)
             caption, hashtags = generate_social_copy(news, script)
-            duration = self._generate_audio(script, mode)
-            self._generate_srt(script, duration)
+            duration, clean_script = self._generate_audio(script, mode)
+            self._generate_srt(clean_script, duration)
             img_url = news.get('image_url') or news.get('urlToImage', '')
             self._generate_background(theme, news.get('title', ''), img_url)
             out_file = self._render_video()

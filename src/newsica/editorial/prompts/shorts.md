@@ -86,7 +86,7 @@ Il copione deve seguire questa struttura:
 
 4. **Chiusura fissa obbligatoria**
    - Il copione deve terminare sempre con questa frase:
-   “Seguici sui social e guarda la diretta YouTube di NewsicaTV, 24 ore su 24.”
+   “Seguici sui social e guarda la diretta YouTube di NewsicaTV 24 ore su 24! 🔥"
    - Puoi aggiungere una o due emoji coerenti all’interno o alla fine della frase finale.
    - Non modificare il senso della frase.
    - Non aggiungere altre parole dopo la frase finale.
@@ -98,11 +98,11 @@ Il copione deve seguire questa struttura:
 
 Il copione deve chiudersi sempre con questa call to action:
 
-“Seguici sui social e guarda la diretta YouTube di NewsicaTV, 24 ore su 24.”
+“Seguici sui social e guarda la diretta YouTube di NewsicaTV 24 ore su 24! 📺"
 
 Versione con emoji consentita:
 
-“Seguici sui social e guarda la diretta YouTube di NewsicaTV, 24 ore su 24 📺⚡”
+“Seguici sui social e guarda la diretta YouTube di NewsicaTV 24 ore su 24! 📺”
 
 La frase può contenere emoji finali, ma non deve essere sostituita da altre call to action.
 
