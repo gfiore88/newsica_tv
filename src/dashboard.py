@@ -11,21 +11,15 @@ import subprocess
 import time
 import numpy as np
 import soundfile as sf
-from schedule_generator import get_current_schedule, generate_schedule
+from schedule_generator import generate_schedule
 from newsica.audio.ai_music_runtime import resolve_ace_step_python
 from newsica.audio.settings import resolve_ffmpeg_cmd
-from newsica.audio.music_library import MusicLibrary
-from newsica.audio.music_mode import (
-    MUSIC_MODE_AI_ONLY,
-    MUSIC_MODE_MIXED,
-    read_music_mode,
-    write_music_mode,
-)
 from newsica.agents.ai_integrator import AIIntegratorAgent
 from newsica.agents.content_strategist import ContentStrategistAgent
 from newsica.domain.characters import get_character, load_characters
 from newsica.editorial.fallback_scripts import build_fallback_script
 from newsica.editorial.source_filters import fallback_general_news, filter_items_for_character
+from newsica.web.control_routes import register_control_routes
 from newsica.web.history_routes import register_history_routes
 from newsica.web.system_routes import register_system_routes
 from newsica.shorts.daily_planner import DailyShortsPlanner
@@ -53,6 +47,7 @@ if not os.path.exists(PYTHON_EXEC):
 
 register_shorts_routes(app, base_dir=BASE_DIR, shorts_daily_planner=shorts_daily_planner)
 register_history_routes(app, runtime_dir=RUNTIME_DIR)
+register_control_routes(app, control_file=CONTROL_FILE, runtime_dir=RUNTIME_DIR)
 
 SERVICES = {
     "director": {
@@ -395,41 +390,6 @@ def _generate_manual_event(character_id, title, brief):
         "tts_seconds": round(tts_seconds, 1),
     }, 200
 
-
-
-@app.route('/api/state')
-def get_state():
-    try:
-        schedule_data = get_current_schedule()
-        sorted_times = sorted(schedule_data.keys())
-        schedule_list = []
-        for idx, t in enumerate(sorted_times):
-            schedule_list.append({
-                "time": t,
-                "title": schedule_data[t]["title"],
-                "type": schedule_data[t]["type"],
-                "index": idx
-            })
-    except Exception as e:
-        print(f"⚠️ Errore caricamento palinsesto: {e}")
-        schedule_list = []
-
-    from newsica.broadcast.runtime_state import get_current_state
-    state = get_current_state()
-    state["schedule"] = schedule_list
-    return jsonify(state)
-
-@app.route('/api/command', methods=['POST'])
-def send_command():
-    data = request.json
-    cmd = data.get('command')
-    if cmd:
-        with open(CONTROL_FILE, "w") as f:
-            f.write(cmd)
-        return jsonify({"status": "OK", "command": cmd})
-    return jsonify({"status": "INVALID"})
-
-
 @app.route('/api/chime', methods=['POST'])
 def trigger_chime():
     """Genera il segnale orario manuale: jingle + voce con ora reale."""
@@ -479,59 +439,6 @@ def trigger_chime():
         return jsonify({"status": "ERROR", "message": f"Scrittura controllo fallita: {e}"}), 500
 
     return jsonify({"status": "OK", "text": text})
-
-def music_mode_payload(status="OK", warning=None):
-    mode = read_music_mode()
-    counts = MusicLibrary().get_counts()
-    label = "Solo Musica AI" if mode == MUSIC_MODE_AI_ONLY else "Mix cartella music + Musica AI"
-    payload = {
-        "status": status,
-        "mode": mode,
-        "label": label,
-        "counts": counts,
-    }
-    if warning:
-        payload["warning"] = warning
-    return payload
-
-
-@app.route("/api/music_mode", methods=["GET", "POST"])
-def api_music_mode():
-    if request.method == "POST":
-        data = request.json or {}
-        mode = data.get("mode")
-        if mode not in {MUSIC_MODE_MIXED, MUSIC_MODE_AI_ONLY}:
-            return jsonify({
-                "status": "ERROR",
-                "message": "Modalità non valida. Usa 'mixed' oppure 'ai_only'.",
-            }), 400
-
-        write_music_mode(mode)
-        counts = MusicLibrary().get_counts()
-        warning = None
-        if mode == MUSIC_MODE_AI_ONLY and counts.get("ai", 0) == 0:
-            warning = "Modalità solo AI attiva, ma assets/ai_music non contiene brani riproducibili."
-        return jsonify(music_mode_payload(warning=warning))
-
-    return jsonify(music_mode_payload())
-
-
-@app.route("/api/audit-log", methods=["GET"])
-def api_audit_log():
-    audit_file = os.path.join(RUNTIME_DIR, "audit_trail.log")
-    try:
-        if not os.path.exists(audit_file):
-            return jsonify({"lines": ["L'Audit Log è attualmente vuoto o in attesa di dati..."]})
-        
-        with open(audit_file, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        
-        # Ritorniamo le ultime 100 righe, in ordine inverso (le più recenti in alto)
-        recent_lines = [line.strip() for line in lines[-100:] if line.strip()]
-        return jsonify({"lines": list(reversed(recent_lines))})
-    except Exception as e:
-        return jsonify({"lines": [f"Errore caricamento log: {str(e)}"]})
-
 
 @app.route('/api/manual-event-formats')
 def get_manual_event_formats():
