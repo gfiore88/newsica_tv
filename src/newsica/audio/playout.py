@@ -1,16 +1,22 @@
 import datetime
-import json
 import os
 import queue
 import random
 import subprocess
 import time
-from functools import lru_cache
 from pathlib import Path
 
 from newsica.audio.music_library import MusicLibrary
 from newsica.storage.repositories.chat_music_requests_repository import consume_next_ready_request
 from newsica.storage.repositories import broadcast_history_repository
+from newsica.audio.music_metadata import (
+    build_music_metadata as build_music_metadata_payload,
+    build_post_telegram_restore_metadata as build_post_telegram_restore_metadata_payload,
+    display_title_for_music_file,
+    probe_music_tags,
+    read_ai_sidecar_title,
+    read_music_tags,
+)
 from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, read_music_mode
 from newsica.audio.settings import PCM_CHANNELS, PCM_CHUNK_BYTES, PCM_SAMPLE_RATE, resolve_ffmpeg_cmd
 from newsica.config.paths import BASE_DIR, TMP_DIR
@@ -177,96 +183,44 @@ class AudioPlayout:
         return audio_path
 
     def _display_title_for_music_file(self, music_file):
-        if not music_file:
-            return ""
-
-        track_path = Path(music_file)
-        ai_sidecar_title = self._read_ai_sidecar_title(track_path)
-        if ai_sidecar_title:
-            return ai_sidecar_title
-
-        artist, title = self._read_music_tags(track_path)
-
-        if artist and title:
-            return f"{artist} - {title}"
-
-        if title:
-            return title
-
-        if track_path.parent.resolve() == self.music_library.ai_music_dir.resolve():
-            return "Newsica AI Track"
-
-        fallback_title = track_path.stem.replace("_", " ").strip()
-        return " ".join(fallback_title.split())
+        return display_title_for_music_file(
+            music_file,
+            self.music_library.ai_music_dir,
+            read_ai_sidecar_title_fn=self._read_ai_sidecar_title,
+            read_music_tags_fn=self._read_music_tags,
+        )
 
     @staticmethod
-    @lru_cache(maxsize=256)
     def _probe_music_tags(track_path_str):
-        try:
-            result = subprocess.run(
-                [
-                    "ffprobe",
-                    "-v", "error",
-                    "-show_entries", "format_tags=title,artist",
-                    "-of", "json",
-                    track_path_str,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=3,
-            )
-        except Exception:
-            return "", ""
-
-        if result.returncode != 0 or not result.stdout:
-            return "", ""
-
-        try:
-            payload = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            return "", ""
-
-        tags = payload.get("format", {}).get("tags", {})
-        artist = " ".join(str(tags.get("artist", "")).split())
-        title = " ".join(str(tags.get("title", "")).split())
-        return artist, title
+        return probe_music_tags(track_path_str)
 
     def _read_music_tags(self, track_path):
-        if track_path.parent.resolve() == self.music_library.ai_music_dir.resolve():
-            return "", ""
-        return self._probe_music_tags(str(track_path))
+        return read_music_tags(
+            track_path=track_path,
+            ai_music_dir=self.music_library.ai_music_dir,
+            probe_tags=lambda track_path_str: self._probe_music_tags(track_path_str),
+        )
 
     def _read_ai_sidecar_title(self, track_path):
-        try:
-            if track_path.parent.resolve() != self.music_library.ai_music_dir.resolve():
-                return ""
-        except Exception:
-            return ""
-
-        sidecar_path = track_path.with_suffix(".meta")
-        if sidecar_path.exists():
-            try:
-                payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
-                title = " ".join(str(payload.get("title", "")).split())
-                if title:
-                    return title
-            except Exception:
-                pass
-
-        return self.get_track_title(str(track_path))
+        return read_ai_sidecar_title(
+            track_path=track_path,
+            ai_music_dir=self.music_library.ai_music_dir,
+            track_title_resolver=self.get_track_title,
+        )
 
     def build_music_metadata(self, music_file, current_state=None):
-        state = dict(current_state or {})
-        state["current_music_title"] = self._display_title_for_music_file(music_file)
-        return state
+        return build_music_metadata_payload(
+            music_file=music_file,
+            current_state=current_state,
+            title_resolver=self._display_title_for_music_file,
+        )
 
     def build_post_telegram_restore_metadata(self, previous_state, bg_music=None):
-        restored = dict(previous_state or {})
-        if bg_music:
-            restored = self.build_music_metadata(bg_music, current_state=restored)
-        restored["requested_by"] = ""
-        restored["requested_title"] = ""
-        return restored
+        return build_post_telegram_restore_metadata_payload(
+            previous_state=previous_state,
+            bg_music=bg_music,
+            metadata_builder=lambda music_file, state: self.build_music_metadata(music_file, current_state=state),
+        )
 
     def is_interrupted(self):
         return self.interrupt_event.is_set() or self.is_breaking_news_active()
