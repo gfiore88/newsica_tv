@@ -11,6 +11,7 @@ export default function ShortsLibrary() {
     { value: 'meteo', label: 'Meteo' },
     { value: 'tech', label: 'Tech' },
     { value: 'wellness', label: 'Wellness' },
+    { value: 'motori', label: 'Auto & Motori' },
     { value: 'funfact', label: 'Curiosità / Fun Fact' },
   ]
   const [shorts, setShorts] = useState([])
@@ -31,6 +32,7 @@ export default function ShortsLibrary() {
     meteo: { label: 'Meteo', className: 'bg-sky-500/90 text-slate-950 border-sky-200/30' },
     tech: { label: 'Tech', className: 'bg-cyan-400/90 text-slate-950 border-cyan-200/30' },
     wellness: { label: 'Wellness', className: 'bg-teal-400/90 text-slate-950 border-teal-200/30' },
+    motori: { label: 'Motori', className: 'bg-orange-500/90 text-slate-950 border-orange-200/30' },
     funfact: { label: 'Fun Fact', className: 'bg-amber-400/95 text-slate-950 border-amber-100/40' },
   }
 
@@ -134,6 +136,7 @@ export default function ShortsLibrary() {
           meteo: 'Short meteo generato con successo.',
           tech: 'Short tech generato con successo.',
           wellness: 'Short wellness generato con successo.',
+          motori: 'Short auto & motori generato con successo.',
           funfact: 'Short curiosità generato con successo.',
         }
         await showAlert(

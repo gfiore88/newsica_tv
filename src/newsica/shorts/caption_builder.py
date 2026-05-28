@@ -60,6 +60,7 @@ def generate_social_copy(news_item: dict, script: str) -> tuple[str, list[str]]:
         "wellness": ["#Salute", "#Benessere", "#Lifestyle"],
         "funfact": ["#FunFact", "#Curiosita", "#Viralita"],
         "meteo": ["#Meteo", "#Previsioni", "#Italia"],
+        "motori": ["#AutoEMotori", "#Motori", "#Supercar"],
     }
 
     script_for_caption = re.sub(r"\s*#\w+", "", script_text).strip()

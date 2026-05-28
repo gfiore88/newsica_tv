@@ -147,6 +147,22 @@
       "intro_template": "In diretta, il nostro {title}.",
       "accent": "0xfff7ed",
       "format": "single_part"
+    },
+    {
+      "id": "motori",
+      "display_name": "Giorgio",
+      "rubric_type": "motori",
+      "voice": "im_nicola",
+      "speed": 1.0,
+      "prompt": "editorial/prompts/motori.md",
+      "sources": [
+        "ansa_motori"
+      ],
+      "jingle": "assets/jingles/newsicatv_jingle.mp3",
+      "jingle_label": "jingle NewsicaTV",
+      "intro_template": "È ora di {title}, la rubrica auto e motori di NewsicaTV.",
+      "accent": "0xf97316",
+      "format": "multipart_radio_show"
     }
   ]
 }

@@ -8,6 +8,9 @@ from newsica.sources.registry import (
     SPORT_ROTATION_LIMIT,
     SPORT_SOURCES,
     WELLNESS_SOURCES,
+    MOTORI_PREFERRED_SOURCES,
+    MOTORI_ROTATION_LIMIT,
+    MOTORI_SOURCES,
     max_items_for_source,
 )
 from newsica.sources.rotation import select_rotating_items
@@ -24,6 +27,7 @@ def collect_news_items():
     news_pool = []
     sport_pool = []
     wellness_pool = []
+    motori_pool = []
 
     for category, url in RSS_FEEDS.items():
         print(f"Recupero {category}...")
@@ -34,6 +38,8 @@ def collect_news_items():
             wellness_pool.extend(news)
         elif category in SPORT_SOURCES:
             sport_pool.extend(news)
+        elif category in MOTORI_SOURCES:
+            motori_pool.extend(news)
         elif category in NEWS_SOURCES:
             news_pool.extend(news)
         else:
@@ -52,6 +58,13 @@ def collect_news_items():
         limit=SPORT_ROTATION_LIMIT,
         recent_file=RECENT_NEWS_FILE,
         preferred_sources=SPORT_PREFERRED_SOURCES,
+    ))
+    all_news.extend(select_rotating_items(
+        motori_pool,
+        "motori",
+        limit=MOTORI_ROTATION_LIMIT,
+        recent_file=RECENT_NEWS_FILE,
+        preferred_sources=MOTORI_PREFERRED_SOURCES,
     ))
 
     if wellness_pool:

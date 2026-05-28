@@ -13,19 +13,21 @@ from newsica.storage.repositories.shorts_plan_repository import (
 )
 
 ALWAYS_MODES = ("news", "funfact", "tech")
-CONDITIONAL_MODES = ("meteo", "sport", "wellness")
+CONDITIONAL_MODES = ("meteo", "sport", "wellness", "motori")
 
 MODE_SOURCE_MAP = {
     "sport": {"ansa_sport", "agi_sport"},
     "meteo": {"meteo"},
     "tech": {"ansa_tecnologia", "agi_innovazione"},
     "wellness": {"ansa_salute_benessere", "ansa_lifestyle"},
+    "motori": {"ansa_motori"},
 }
 
 MODE_THRESHOLDS = {
     "meteo": 55,
     "sport": 45,
     "wellness": 45,
+    "motori": 45,
 }
 
 DEFAULT_HOT_WINDOWS = {
@@ -174,6 +176,7 @@ class DailyShortsPlanner:
             "meteo": self._rank_candidates("meteo", all_news),
             "sport": self._rank_candidates("sport", all_news),
             "wellness": self._rank_candidates("wellness", all_news),
+            "motori": self._rank_candidates("motori", all_news),
         }
 
         planned_modes = []
@@ -390,7 +393,7 @@ class DailyShortsPlanner:
             return [
                 item
                 for item in all_news
-                if item.get("source") not in {"ansa_sport", "agi_sport", "meteo"}
+                if item.get("source") not in {"ansa_sport", "agi_sport", "meteo", "ansa_motori"}
             ]
         if mode == "funfact":
             allowed = {

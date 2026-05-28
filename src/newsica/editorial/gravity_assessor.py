@@ -26,7 +26,7 @@ def calculate_heuristic_score(title, summary="", category="news"):
     
     # Punteggio di base per categoria
     score = 15
-    if category == "sport" or category == "wellness":
+    if category == "sport" or category == "wellness" or category == "motori":
         score = 2
     elif category == "meteo":
         score = 10

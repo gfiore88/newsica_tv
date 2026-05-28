@@ -28,6 +28,7 @@ SCHEDULE_TYPE_LABELS = {
     "news": "News",
     "meteo": "Meteo",
     "wellness": "Benessere",
+    "motori": "Auto & Motori",
     "music_only": "Musica",
 }
 
@@ -42,6 +43,7 @@ SOURCE_TICKER_LABELS = {
     "ansa_sport": "SPORT",
     "ansa_salute_benessere": "SALUTE",
     "ansa_lifestyle": "LIFESTYLE",
+    "ansa_motori": "MOTORI",
     "sky_tg24": "NEWS",
     "agi_cronaca": "CRONACA",
     "agi_politica": "POLITICA",

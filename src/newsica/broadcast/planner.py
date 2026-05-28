@@ -89,6 +89,7 @@ class PlayoutPlanner:
                         "sport": "Rubrica Sportiva",
                         "meteo": "Meteo Update",
                         "wellness": "Rubrica Wellness",
+                        "motori": "Rubrica Auto & Motori",
                         "podcast": "Podcast Speciale",
                         "flash_60s": "Flash News",
                     }

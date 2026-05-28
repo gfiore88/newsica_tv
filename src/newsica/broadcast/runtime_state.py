@@ -13,6 +13,7 @@ ACCENT_FILES = {
     "sport": os.path.join(TMP_DIR, "accent_sport.txt"),
     "meteo": os.path.join(TMP_DIR, "accent_meteo.txt"),
     "wellness": os.path.join(TMP_DIR, "accent_wellness.txt"),
+    "motori": os.path.join(TMP_DIR, "accent_motori.txt"),
     "music_only": os.path.join(TMP_DIR, "accent_music.txt"),
     "breaking_news": os.path.join(TMP_DIR, "accent_breaking.txt"),
 }

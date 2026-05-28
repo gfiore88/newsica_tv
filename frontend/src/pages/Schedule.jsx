@@ -30,6 +30,7 @@ export default function Schedule() {
     'news': { label: '📰 News', bg: 'bg-emerald-950/50 text-emerald-300 border-emerald-800/50' },
     'sport': { label: '⚽ Sport', bg: 'bg-amber-950/50 text-amber-300 border-amber-800/50' },
     'wellness': { label: '🧘 Benessere', bg: 'bg-rose-950/50 text-rose-300 border-rose-800/50' },
+    'motori': { label: '🚗 Motori', bg: 'bg-orange-950/50 text-orange-300 border-orange-800/50' },
     'meteo': { label: '☀️ Meteo', bg: 'bg-sky-950/50 text-sky-300 border-sky-800/50' }
   }
 

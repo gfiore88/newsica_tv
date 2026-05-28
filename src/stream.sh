@@ -86,6 +86,7 @@ ACCENT_NEWS_FILE="tmp/accent_news.txt"
 ACCENT_SPORT_FILE="tmp/accent_sport.txt"
 ACCENT_METEO_FILE="tmp/accent_meteo.txt"
 ACCENT_WELLNESS_FILE="tmp/accent_wellness.txt"
+ACCENT_MOTORI_FILE="tmp/accent_motori.txt"
 ACCENT_MUSIC_FILE="tmp/accent_music.txt"
 ACCENT_BREAKING_FILE="tmp/accent_breaking.txt"
 CLOCK_FILE="tmp/clock.txt"
@@ -113,7 +114,7 @@ fi
 if [ ! -f "$DATE_FILE" ]; then
   echo "--/--/----" > "$DATE_FILE"
 fi
-for accent_file in "$ACCENT_NEWS_FILE" "$ACCENT_SPORT_FILE" "$ACCENT_METEO_FILE" "$ACCENT_WELLNESS_FILE" "$ACCENT_MUSIC_FILE" "$ACCENT_BREAKING_FILE"; do
+for accent_file in "$ACCENT_NEWS_FILE" "$ACCENT_SPORT_FILE" "$ACCENT_METEO_FILE" "$ACCENT_WELLNESS_FILE" "$ACCENT_MOTORI_FILE" "$ACCENT_MUSIC_FILE" "$ACCENT_BREAKING_FILE"; do
   if [ ! -f "$accent_file" ]; then
     : > "$accent_file"
   fi

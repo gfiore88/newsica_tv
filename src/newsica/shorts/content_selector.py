@@ -27,6 +27,8 @@ class ShortContentSelector:
             return "tech"
         if "meteo" in source:
             return "meteo"
+        if "motori" in source:
+            return "motori"
         return "news"
 
     def _load_all_news(self) -> list[dict]:
@@ -56,6 +58,7 @@ class ShortContentSelector:
             "meteo": {"meteo"},
             "tech": {"ansa_tecnologia", "agi_innovazione"},
             "wellness": {"ansa_salute_benessere", "ansa_lifestyle"},
+            "motori": {"ansa_motori"},
         }
 
         if mode == "news":
@@ -117,7 +120,7 @@ class ShortContentSelector:
     def get_news_item_for_mode(self, mode: str) -> dict:
         if mode == "funfact":
             return self._build_funfact_news_item()
-        if mode in {"breaking", "sport", "meteo", "tech", "wellness", "news"}:
+        if mode in {"breaking", "sport", "meteo", "tech", "wellness", "motori", "news"}:
             return self._build_mode_news_item(mode)
         return self._build_mode_news_item("news")
 

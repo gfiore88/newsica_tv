@@ -6,6 +6,7 @@ SHORT_MODES = (
     "tech",
     "wellness",
     "funfact",
+    "motori",
 )
 
 SHORT_SOCIAL_PLATFORMS = (

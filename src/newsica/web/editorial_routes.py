@@ -18,6 +18,7 @@ MANUAL_EVENT_ORDER = (
     "sport",
     "meteo",
     "wellness",
+    "motori",
     "podcast",
     "breaking_news",
 )
@@ -61,6 +62,14 @@ MANUAL_EVENT_META = {
         "default_title": "Benessere in Movimento",
         "title_placeholder": "Titolo della rubrica wellness",
         "brief_placeholder": "Tema opzionale: postura, sonno, stretching, alimentazione...",
+        "requires_brief": False,
+    },
+    "motori": {
+        "label": "Auto & Motori",
+        "description": "Rubrica auto e motori con Giorgio.",
+        "default_title": "Pista e Strada",
+        "title_placeholder": "Titolo della rubrica auto & motori",
+        "brief_placeholder": "Tema opzionale: F1, supercar, mobilità sostenibile, novità...",
         "requires_brief": False,
     },
     "podcast": {

@@ -83,6 +83,13 @@ class ContentStrategistAgent:
                     "concentrati su movimenti semplici da scrivania, postura, pause attive "
                     "e respirazione, senza prescrizioni mediche.\n\n"
                 )
+            if character_id == "motori":
+                news_text += (
+                    "Per una rubrica auto e motori, concentrati sulle novità del settore automotive, "
+                    "tecnologie di mobilità sostenibile, curiosità sul motorsport (F1, MotoGP) o "
+                    "modelli di supercar, evitando toni eccessivamente tecnici o noiosi e senza "
+                    "inventare dati non verificati.\n\n"
+                )
             if character_id == "news":
                 if is_general_news_title(title):
                     news_text += (

@@ -230,6 +230,7 @@ FORMAT DISPONIBILI (Usa solo questi in "type"):
 - "sport": Notiziario sportivo
 - "meteo": Aggiornamento meteo
 - "wellness": Rubrica su salute/benessere
+- "motori": Rubrica su auto e motori
 - "podcast": Dialogo a due voci su un tema specifico
 - "flash_60s": Bollettino rapidissimo di 60 secondi (usalo come pillola a orari sparsi per dare imprevedibilità)
 - "music_only": Solo musica in background (utile di notte o in pausa pranzo o in diretta continuata)
@@ -242,11 +243,11 @@ RUBRICHE TEMATICHE E COPERTURE MUSICALI:
 LINEE GUIDA EDITORIALI PER IMPREVEDIBILITÀ:
 - Varia i titoli. Invece di "Pranzo News", inventa "Oggi alle 13", "Newsica Live", "Ultim'ora Flash".
 - Non mettere mai due "podcast" di fila.
-- Spargi 3-4 slot "flash_60s" in momenti inaspettati (es. "11:00", "16:00", "23:00").
+- Spargi 3-4 slot "flash_60s" in moments inaspettati (es. "11:00", "16:00", "23:00").
 - Garantisci almeno un "meteo" al mattino e uno la sera.
 - Rendi ogni giorno diverso dal precedente, alternando rubriche tematiche e stili musicali.
 - Gli slot di tipo "news" sono edizioni generaliste, non rubriche monotematiche: i loro titoli devono suonare come un notiziario generale e non come focus verticali. Quindi NO titoli come "Focus Ambiente", "Affari e Mercati" o "Interviste Esclusive" per type "news".
-- Se vuoi un titolo fortemente tematico, usalo solo quando il formato supporta davvero quel focus (ad esempio "wellness", "podcast" o altri format dedicati), non per le edizioni news normali.
+- Se vuoi un titolo fortemente tematico, usalo solo quando il formato supporta davvero quel focus (ad esempio "wellness", "motori", "podcast" o altri format dedicati), non per le edizioni news normali.
 
 5. DEVI INCLUDERE OBBLIGATORIAMENTE i seguenti slot prefissati (Colonne Portanti e Appuntamenti Settimanali).
 Copiali esattamente e aggiungi il resto del palinsesto creativo attorno ad essi:

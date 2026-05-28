@@ -57,7 +57,7 @@ class ShortsAgent:
     def _get_news_item_for_mode(self, mode: str) -> dict:
         if mode == "funfact":
             return self._build_funfact_news_item()
-        if mode in {"breaking", "sport", "meteo", "tech", "wellness", "news"}:
+        if mode in {"breaking", "sport", "meteo", "tech", "wellness", "motori", "news"}:
             return self._build_mode_news_item(mode)
         return self._build_mode_news_item("news")
 
