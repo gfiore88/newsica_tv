@@ -1,7 +1,6 @@
-import React from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Calendar as CalendarIcon } from 'lucide-react'
-import { useDialog } from '../context/DialogContext'
+import { useDialog } from '../context/useDialog'
 
 export default function Schedule() {
   const { state } = useOutletContext()

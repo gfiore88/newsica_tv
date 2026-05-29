@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FileAudio, Music, MessageSquare, Play, Check, X, Cpu, RefreshCw, Server } from 'lucide-react'
-import { useDialog } from '../context/DialogContext'
+import { useDialog } from '../context/useDialog'
 
 export default function Tools() {
   const [manualFormats, setManualFormats] = useState([])

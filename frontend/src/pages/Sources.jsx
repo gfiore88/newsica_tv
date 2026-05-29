@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ExternalLink,
   Loader2,
@@ -12,7 +12,7 @@ import {
   ChevronUp,
   AlertCircle,
 } from 'lucide-react'
-import { useDialog } from '../context/DialogContext'
+import { useDialog } from '../context/useDialog'
 
 const CATEGORY_COLORS = {
   news:      { bg: 'bg-blue-500/15',   text: 'text-blue-300',   border: 'border-blue-500/30' },
@@ -42,16 +42,30 @@ function PreviewPanel({ feedId, url, onClose }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    setLoading(true)
-    setError(null)
-    fetch(`/api/sources/${encodeURIComponent(feedId)}/preview`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.error) setError(d.error)
-        else setData(d)
-      })
-      .catch(() => setError('Errore di rete'))
-      .finally(() => setLoading(false))
+    let active = true
+
+    Promise.resolve().then(() => {
+      setLoading(true)
+      setError(null)
+      return fetch(`/api/sources/${encodeURIComponent(feedId)}/preview`)
+        .then(r => r.json())
+        .then(d => {
+          if (!active) return
+          if (d.error) setError(d.error)
+          else setData(d)
+        })
+        .catch((err) => {
+          console.error('Errore anteprima fonte:', err)
+          if (active) setError('Errore di rete')
+        })
+        .finally(() => {
+          if (active) setLoading(false)
+        })
+    })
+
+    return () => {
+      active = false
+    }
   }, [feedId, url])
 
   return (
@@ -184,11 +198,12 @@ export default function Sources() {
         const data = await res.json()
         setSources(data.sources || [])
       }
-    } catch (e) {}
-    finally { setLoading(false) }
+    } catch (e) {
+      console.error('Errore caricamento fonti:', e)
+    } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { fetchSources() }, [fetchSources])
+  useEffect(() => { Promise.resolve().then(fetchSources) }, [fetchSources])
 
   const handleDelete = async (feedId) => {
     if (!await showConfirm(
@@ -201,7 +216,10 @@ export default function Sources() {
       if (!res.ok) { await showAlert(d.error || 'Errore.', 'Errore'); return }
       setSources(prev => prev.filter(s => s.id !== feedId))
       if (previewOpenId === feedId) setPreviewOpenId(null)
-    } catch (e) { await showAlert('Errore di rete.', 'Errore') }
+    } catch (e) {
+      console.error('Errore eliminazione fonte:', e)
+      await showAlert('Errore di rete.', 'Errore')
+    }
   }
 
   const handlePreview = (feedId) => {
@@ -228,8 +246,10 @@ export default function Sources() {
       setAddForm({ id: '', url: '', category: 'news' })
       setAddOpen(false)
       await showAlert(`Fonte "${addForm.id}" aggiunta con successo.`, 'Fonte Aggiunta')
-    } catch (e) { setAddError('Errore di rete.') }
-    finally { setAddLoading(false) }
+    } catch (e) {
+      console.error('Errore aggiunta fonte:', e)
+      setAddError('Errore di rete.')
+    } finally { setAddLoading(false) }
   }
 
   const filtered = sources.filter(s => {

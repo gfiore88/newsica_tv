@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { Radio, Calendar, Wrench, Database, Activity, RefreshCw, MonitorPlay, Video, Rss } from 'lucide-react'
-import { useDialog } from '../context/DialogContext'
+import { useDialog } from '../context/useDialog'
 
 export default function AdminLayout() {
   const [state, setState] = useState({ status: 'OFFLINE' })
@@ -17,7 +17,9 @@ export default function AdminLayout() {
           const data = await res.json()
           setState(data)
         }
-      } catch (err) {}
+      } catch (err) {
+        console.error('Errore stato sistema:', err)
+      }
     }
     fetchState()
     const interval = setInterval(fetchState, 5000)
@@ -35,7 +37,9 @@ export default function AdminLayout() {
             is_running: Boolean(data.is_running),
           })
         }
-      } catch (err) {}
+      } catch (err) {
+        console.error('Errore stato chat:', err)
+      }
     }
     fetchChatStatus()
     const interval = setInterval(fetchChatStatus, 15000)
@@ -52,6 +56,7 @@ export default function AdminLayout() {
         })
         await showAlert("Comando di riavvio inviato con successo. Attendi qualche secondo.", "Riavvio in Corso")
       } catch (e) {
+        console.error('Errore riavvio servizi:', e)
         await showAlert("Errore durante l'invio del comando.", "Errore")
       }
     }

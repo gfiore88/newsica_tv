@@ -1,9 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { AlertCircle, HelpCircle, X } from 'lucide-react';
-
-const DialogContext = createContext();
-
-export const useDialog = () => useContext(DialogContext);
+import { DialogContext } from './dialog-context';
 
 export function DialogProvider({ children }) {
   const [dialog, setDialog] = useState(null);

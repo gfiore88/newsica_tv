@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Video, Calendar, Download, Play, RefreshCw, Copy, Trash2, Share2, CheckCircle2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
-import { useDialog } from '../context/DialogContext'
+import { useDialog } from '../context/useDialog'
 
 export default function ShortsLibrary() {
   const shortModes = [
@@ -50,7 +50,7 @@ export default function ShortsLibrary() {
         dateStyle: 'short',
         timeStyle: 'short',
       }).format(new Date(value))
-    } catch (e) {
+    } catch {
       return value
     }
   }
@@ -104,8 +104,10 @@ export default function ShortsLibrary() {
   }
 
   useEffect(() => {
-    fetchShorts()
-    fetchPlanStatus()
+    Promise.resolve().then(() => {
+      fetchShorts()
+      fetchPlanStatus()
+    })
   }, [])
 
   useEffect(() => {
@@ -161,6 +163,7 @@ export default function ShortsLibrary() {
         await showAlert(`Errore: ${data.message || 'Generazione fallita'}`, 'Errore Generazione')
       }
     } catch (e) {
+      console.error('Errore generazione short:', e)
       await showAlert('Errore di connessione al server.', 'Errore di Rete')
     } finally {
       setShortsLoading(false)
@@ -230,6 +233,7 @@ export default function ShortsLibrary() {
         'Eliminazione Completata'
       )
     } catch (e) {
+      console.error('Errore eliminazione shorts:', e)
       await showAlert('Errore di connessione al server.', 'Errore di Rete')
     } finally {
       setDeleteLoading(false)
@@ -294,6 +298,7 @@ export default function ShortsLibrary() {
         )
       }
     } catch (e) {
+      console.error('Errore pubblicazione short:', e)
       await showAlert('Errore di rete durante la pubblicazione.', 'Errore di Rete')
     } finally {
       setPublishing((prev) => (
@@ -320,6 +325,7 @@ export default function ShortsLibrary() {
         await showAlert(data.message || 'Impossibile rigenerare il piano shorts.', 'Errore Piano')
       }
     } catch (e) {
+      console.error('Errore rigenerazione piano shorts:', e)
       await showAlert('Errore di rete durante la rigenerazione del piano.', 'Errore di Rete')
     } finally {
       setPlanLoading(false)
@@ -342,6 +348,7 @@ export default function ShortsLibrary() {
         await showAlert(data.message || 'Errore durante il processamento item.', 'Errore Piano')
       }
     } catch (e) {
+      console.error('Errore processamento piano shorts:', e)
       await showAlert('Errore di rete durante il processamento item.', 'Errore di Rete')
     } finally {
       setPlanLoading(false)

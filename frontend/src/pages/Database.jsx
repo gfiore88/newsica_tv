@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Database as DbIcon, RefreshCw } from 'lucide-react'
 
 export default function Database() {
@@ -31,15 +31,10 @@ export default function Database() {
   }
 
   useEffect(() => {
-    fetchData()
+    Promise.resolve().then(fetchData)
     const int = setInterval(fetchData, 10000)
     return () => clearInterval(int)
   }, [])
-
-  const formatTime = (iso) => {
-    if (!iso) return '--:--'
-    return new Date(iso).toLocaleTimeString()
-  }
 
   const formatDateTime = (iso) => {
     if (!iso) return '--'

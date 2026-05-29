@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { useDialog } from '../context/DialogContext'
-import { AlertTriangle, SkipForward, RefreshCw, Bell, MonitorPlay, Volume2, ShieldAlert } from 'lucide-react'
+import { useDialog } from '../context/useDialog'
+import { AlertTriangle, SkipForward, RefreshCw, Bell, ShieldAlert } from 'lucide-react'
 
 export default function LiveMonitor() {
   const { state } = useOutletContext()
@@ -27,7 +27,9 @@ export default function LiveMonitor() {
   const triggerChime = async () => {
     try {
       await fetch('/api/chime', { method: 'POST' })
-    } catch (err) {}
+    } catch (err) {
+      console.error('Errore segnale orario:', err)
+    }
   }
 
   return (
@@ -41,16 +43,16 @@ export default function LiveMonitor() {
            <h2 className="text-sm uppercase tracking-widest text-slate-300 font-bold mb-4">Controlli di Regia Rapidi</h2>
            
            <div className="grid grid-cols-2 gap-3 mb-3">
-             <button onClick={() => sendCommandSafe('FORCE_NEXT', 'Saltare il blocco attuale?')} className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 border border-slate-700 transition">
+             <button disabled={loadingAction === 'FORCE_NEXT'} onClick={() => sendCommandSafe('FORCE_NEXT', 'Saltare il blocco attuale?')} className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 border border-slate-700 transition disabled:opacity-50">
                <SkipForward size={18} /> Salta Blocco
              </button>
-             <button onClick={() => sendCommandSafe('REGEN_SCHEDULE', 'Rigenerare palinsesto?')} className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 border border-slate-700 transition">
+             <button disabled={loadingAction === 'REGEN_SCHEDULE'} onClick={() => sendCommandSafe('REGEN_SCHEDULE', 'Rigenerare palinsesto?')} className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 border border-slate-700 transition disabled:opacity-50">
                <RefreshCw size={18} /> Rigenera Palinsesto
              </button>
            </div>
            
            <div className="grid grid-cols-2 gap-3 mb-3">
-             <button onClick={() => sendCommandSafe('TRIGGER_BREAKING_NEWS', 'ATTENZIONE: Interrompere per Breaking News?')} className="bg-red-600/90 hover:bg-red-500 text-white font-black py-4 px-4 rounded-lg flex items-center justify-center gap-2 border border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] transition">
+             <button disabled={loadingAction === 'TRIGGER_BREAKING_NEWS'} onClick={() => sendCommandSafe('TRIGGER_BREAKING_NEWS', 'ATTENZIONE: Interrompere per Breaking News?')} className="bg-red-600/90 hover:bg-red-500 text-white font-black py-4 px-4 rounded-lg flex items-center justify-center gap-2 border border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] transition disabled:opacity-50">
                <AlertTriangle size={20} /> BREAKING NEWS
              </button>
              <button onClick={triggerChime} className="bg-amber-600/90 hover:bg-amber-500 text-white font-black py-4 px-4 rounded-lg flex items-center justify-center gap-2 border border-amber-500 shadow-[0_0_15px_rgba(251,191,36,0.3)] transition">
@@ -59,10 +61,10 @@ export default function LiveMonitor() {
            </div>
 
            <div className="grid grid-cols-2 gap-3">
-             <button onClick={() => sendCommandSafe('TRIGGER_SPECIAL_BROADCAST_TEST', 'Simulare edizione straordinaria?')} className="bg-rose-800 hover:bg-rose-700 text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-2 border border-rose-600 transition">
+             <button disabled={loadingAction === 'TRIGGER_SPECIAL_BROADCAST_TEST'} onClick={() => sendCommandSafe('TRIGGER_SPECIAL_BROADCAST_TEST', 'Simulare edizione straordinaria?')} className="bg-rose-800 hover:bg-rose-700 text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-2 border border-rose-600 transition disabled:opacity-50">
                <ShieldAlert size={14} /> ED. STRAORDINARIA TEST
              </button>
-             <button onClick={() => sendCommandSafe('REVOKE_SPECIAL_BROADCAST', 'Ripristinare palinsesto normale?')} className="bg-emerald-800 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-2 border border-emerald-600 transition">
+             <button disabled={loadingAction === 'REVOKE_SPECIAL_BROADCAST'} onClick={() => sendCommandSafe('REVOKE_SPECIAL_BROADCAST', 'Ripristinare palinsesto normale?')} className="bg-emerald-800 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-2 border border-emerald-600 transition disabled:opacity-50">
                Ripristina Palinsesto
              </button>
            </div>
