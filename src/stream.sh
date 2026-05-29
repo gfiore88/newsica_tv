@@ -7,6 +7,7 @@ mkdir -p runtime tmp
 
 LOCK_DIR="runtime/stream.lock"
 LOCK_OWNER_BASHPID=""
+
 acquire_stream_lock() {
   if mkdir "$LOCK_DIR" 2>/dev/null; then
     echo "$$" > "$LOCK_DIR/pid"
@@ -26,6 +27,7 @@ acquire_stream_lock() {
 
   echo "⚠️ Lock stream stale trovato. Lo rimuovo e riprovo..."
   rm -rf "$LOCK_DIR"
+
   if mkdir "$LOCK_DIR" 2>/dev/null; then
     echo "$$" > "$LOCK_DIR/pid"
     LOCK_OWNER_BASHPID="$BASHPID"
@@ -65,12 +67,15 @@ wait_for_pipe() {
 
 acquire_stream_lock
 
-# Carica variabili d'ambiente
+# Carica variabili d'ambiente in modo robusto.
+# Evita problemi con valori contenenti spazi, caratteri speciali o commenti.
 if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
+  set -a
+  source .env
+  set +a
 fi
 
-if [ -z "$YOUTUBE_STREAM_KEY" ] || [ "$YOUTUBE_STREAM_KEY" == "inserisci_qui_la_tua_stream_key_di_youtube" ]; then
+if [ -z "$YOUTUBE_STREAM_KEY" ] || [ "$YOUTUBE_STREAM_KEY" = "inserisci_qui_la_tua_stream_key_di_youtube" ]; then
   echo "❌ ERRORE: Inserisci la tua YOUTUBE_STREAM_KEY nel file .env"
   exit 1
 fi
@@ -91,29 +96,38 @@ ACCENT_MUSIC_FILE="tmp/accent_music.txt"
 ACCENT_BREAKING_FILE="tmp/accent_breaking.txt"
 CLOCK_FILE="tmp/clock.txt"
 DATE_FILE="tmp/date.txt"
+
 STREAM_TEST_CARD="${STREAM_TEST_CARD:-0}"
 STREAM_FPS="${STREAM_FPS:-25}"
 OVERLAY_FPS="${OVERLAY_FPS:-25}"
 STREAM_WIDTH="${STREAM_WIDTH:-1280}"
 STREAM_HEIGHT="${STREAM_HEIGHT:-720}"
 STREAM_BITRATE="${STREAM_BITRATE:-4500k}"
+NEWSICA_PRECOMPOSED_OVERLAY="${NEWSICA_PRECOMPOSED_OVERLAY:-1}"
 
-# Estrae la parte numerica del bitrate per raddoppiarla dinamicamente per il bufsize
 BITRATE_NUM=$(echo "$STREAM_BITRATE" | tr -cd '0-9')
+if [ -z "$BITRATE_NUM" ]; then
+  echo "❌ ERRORE: STREAM_BITRATE non valido: $STREAM_BITRATE"
+  exit 1
+fi
 STREAM_BUFSIZE="$((BITRATE_NUM * 2))k"
 
 if [ ! -f "$PROGRAM_FILE" ]; then
   echo "NEWSICA TV" > "$PROGRAM_FILE"
 fi
+
 if [ ! -f "$NEXT_PROGRAM_FILE" ]; then
   echo "A seguire: --" > "$NEXT_PROGRAM_FILE"
 fi
+
 if [ ! -f "$CLOCK_FILE" ]; then
   echo "--:--" > "$CLOCK_FILE"
 fi
+
 if [ ! -f "$DATE_FILE" ]; then
   echo "--/--/----" > "$DATE_FILE"
 fi
+
 for accent_file in "$ACCENT_NEWS_FILE" "$ACCENT_SPORT_FILE" "$ACCENT_METEO_FILE" "$ACCENT_WELLNESS_FILE" "$ACCENT_MOTORI_FILE" "$ACCENT_MUSIC_FILE" "$ACCENT_BREAKING_FILE"; do
   if [ ! -f "$accent_file" ]; then
     : > "$accent_file"
@@ -137,6 +151,12 @@ if [ "$STREAM_VIDEO_ENCODER" = "auto" ]; then
   fi
 fi
 
+# Fallback di sicurezza: su Linux h264_videotoolbox non esiste.
+if [ "$STREAM_VIDEO_ENCODER" = "h264_videotoolbox" ] && ! "$FFMPEG_CMD" -hide_banner -encoders 2>/dev/null | grep -q "h264_videotoolbox"; then
+  echo "⚠️ h264_videotoolbox non disponibile su questo host. Uso libx264."
+  STREAM_VIDEO_ENCODER="libx264"
+fi
+
 if ! "$FFMPEG_CMD" -hide_banner -filters 2>/dev/null | grep -q " drawtext "; then
   echo "❌ ERRORE: FFmpeg non include il filtro drawtext. Installa/usa ffmpeg-full per ticker e overlay testuali."
   exit 1
@@ -146,18 +166,15 @@ if [ "$STREAM_TEST_CARD" = "1" ]; then
   VIDEO_INPUT_ARGS=(-re -f lavfi -i "testsrc2=size=${STREAM_WIDTH}x${STREAM_HEIGHT}:rate=${STREAM_FPS}")
   FILTER='[0:v]setsar=1,format=yuv420p[bg]; [bg]drawbox=x=0:y=0:w=iw:h=90:color=black@0.75:t=fill[top]; [top]drawtext=text='"'"'NEWSICA TV TEST - SEGNALE VIDEO ATTIVO'"'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=42:x=30:y=25[outv]'
 else
-  # Carichiamo lo splashscreen a 1 FPS per mantenere la retrocompatibilità degli indici degli input di FFmpeg
+  # Manteniamo lo splashscreen come input 0 per retrocompatibilità degli indici.
   VIDEO_INPUT_ARGS=(-framerate 1 -loop 1 -i "$LOGO_FILE")
 
-  NEWSICA_PRECOMPOSED_OVERLAY="${NEWSICA_PRECOMPOSED_OVERLAY:-1}"
   if [ "$NEWSICA_PRECOMPOSED_OVERLAY" = "1" ] || [ "$NEWSICA_PRECOMPOSED_OVERLAY" = "true" ]; then
-    # L'Overlay Agent in Python pre-compone già lo splashscreen di sfondo con la grafica.
-    # Pertanto ignoriamo l'input 0 ([0:v]) e prendiamo direttamente l'overlay pre-composto ([1:v])
-    # convertendolo in YUV420P e allineandolo al framerate dello stream. Questo azzera l'uso CPU dei filtri FFmpeg!
+    # Overlay Agent precompone già sfondo + grafica.
+    # FFmpeg prende direttamente l'overlay come video finale.
     FILTER="[1:v]format=yuv420p,fps=${STREAM_FPS}[outv]"
   else
-    # Se il precomposing è disabilitato, usiamo il filtro legacy che effettua l'overlay in tempo reale in FFmpeg.
-    # Questo è più pesante sulla CPU ma supporta l'overlay trasparente puro gestito da FFmpeg.
+    # Legacy: compositing in FFmpeg.
     FILTER="[0:v]scale=${STREAM_WIDTH}:${STREAM_HEIGHT}:force_original_aspect_ratio=decrease,pad=${STREAM_WIDTH}:${STREAM_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=${STREAM_FPS}[bg]; [bg][1:v]overlay=0:0:format=auto[outv]"
   fi
 fi
@@ -195,17 +212,22 @@ fi
 
 FFMPEG_PID=""
 WATCHDOG_PID=""
+FFMPEG_EXIT_CODE=0
+
 cleanup() {
   if [ -n "$WATCHDOG_PID" ] && kill -0 "$WATCHDOG_PID" 2>/dev/null; then
     kill "$WATCHDOG_PID" 2>/dev/null || true
     wait "$WATCHDOG_PID" 2>/dev/null || true
   fi
+
   if [ -n "$FFMPEG_PID" ] && kill -0 "$FFMPEG_PID" 2>/dev/null; then
     kill "$FFMPEG_PID" 2>/dev/null || true
     wait "$FFMPEG_PID" 2>/dev/null || true
   fi
+
   release_stream_lock
 }
+
 trap 'cleanup; exit 0' INT TERM
 trap 'cleanup' EXIT
 
@@ -230,43 +252,57 @@ watch_ffmpeg_progress() {
     fi
 
     if [ "$same_count" -ge 9 ]; then
-      echo "⚠️ FFmpeg non avanza da 90 secondi (out_time_ms=$current_time). Forzo riavvio..."
+      echo "⚠️ FFmpeg non avanza da 90 secondi (out_time_ms=$current_time). Forzo terminazione di stream.sh per restart completo della pipeline..."
       kill "$ffmpeg_pid" 2>/dev/null || true
       return
     fi
   done
 }
 
-while true; do
-  wait_for_pipe "$AUDIO_FILE" "audio"
-  wait_for_pipe "$OVERLAY_PIPE" "overlay"
+wait_for_pipe "$AUDIO_FILE" "audio"
+wait_for_pipe "$OVERLAY_PIPE" "overlay"
 
-  echo "🚀 Avvio istanza FFmpeg..."
-  echo "🎥 Encoder video selezionato: $STREAM_VIDEO_ENCODER @ ${STREAM_WIDTH}x${STREAM_HEIGHT} stream=${STREAM_FPS}fps overlay=${OVERLAY_FPS}fps"
-  : > "$PROGRESS_FILE"
-  $FFMPEG_CMD \
-    -hide_banner -stats_period 5 \
-    -progress "$PROGRESS_FILE" \
-    -thread_queue_size 64 "${VIDEO_INPUT_ARGS[@]}" \
-    -thread_queue_size 16 -f rawvideo -pix_fmt rgba -s "${STREAM_WIDTH}x${STREAM_HEIGHT}" -r "$OVERLAY_FPS" -i "$OVERLAY_PIPE" \
-    -thread_queue_size 256 -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
-    -filter_complex "$FILTER" \
-    -map "[outv]" -map 2:a \
-    "${VIDEO_CODEC_ARGS[@]}" \
-    -c:a aac -b:a 128k -ar 48000 -ac 2 \
-    -f flv "$YOUTUBE_STREAM_URL/$YOUTUBE_STREAM_KEY" &
+echo "🚀 Avvio istanza FFmpeg..."
+echo "🎥 Encoder video selezionato: $STREAM_VIDEO_ENCODER @ ${STREAM_WIDTH}x${STREAM_HEIGHT} stream=${STREAM_FPS}fps overlay=${OVERLAY_FPS}fps"
+echo "🎚️ Bitrate video: $STREAM_BITRATE / bufsize: $STREAM_BUFSIZE"
+echo "🧩 Overlay precomposto: $NEWSICA_PRECOMPOSED_OVERLAY"
 
-  FFMPEG_PID=$!
-  watch_ffmpeg_progress "$FFMPEG_PID" &
-  WATCHDOG_PID=$!
-  wait "$FFMPEG_PID"
-  if [ -n "$WATCHDOG_PID" ] && kill -0 "$WATCHDOG_PID" 2>/dev/null; then
-    kill "$WATCHDOG_PID" 2>/dev/null || true
-    wait "$WATCHDOG_PID" 2>/dev/null || true
-  fi
-  FFMPEG_PID=""
-  WATCHDOG_PID=""
+: > "$PROGRESS_FILE"
 
-  echo "⚠️ FFmpeg si è disconnesso o ha crashato. Riavvio in 5 secondi..."
-  sleep 5
-done
+"$FFMPEG_CMD" \
+  -hide_banner -stats_period 5 \
+  -progress "$PROGRESS_FILE" \
+  -thread_queue_size 64 "${VIDEO_INPUT_ARGS[@]}" \
+  -thread_queue_size 16 -f rawvideo -pix_fmt rgba -s "${STREAM_WIDTH}x${STREAM_HEIGHT}" -r "$OVERLAY_FPS" -i "$OVERLAY_PIPE" \
+  -thread_queue_size 256 -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
+  -filter_complex "$FILTER" \
+  -map "[outv]" -map 2:a \
+  "${VIDEO_CODEC_ARGS[@]}" \
+  -c:a aac -b:a 128k -ar 48000 -ac 2 \
+  -f flv "$YOUTUBE_STREAM_URL/$YOUTUBE_STREAM_KEY" &
+
+FFMPEG_PID=$!
+
+watch_ffmpeg_progress "$FFMPEG_PID" &
+WATCHDOG_PID=$!
+
+set +e
+wait "$FFMPEG_PID"
+FFMPEG_EXIT_CODE=$?
+set -e
+
+if [ -n "$WATCHDOG_PID" ] && kill -0 "$WATCHDOG_PID" 2>/dev/null; then
+  kill "$WATCHDOG_PID" 2>/dev/null || true
+  wait "$WATCHDOG_PID" 2>/dev/null || true
+fi
+
+WATCHDOG_PID=""
+FFMPEG_PID=""
+
+rm -f "$PROGRESS_FILE"
+
+echo "⚠️ FFmpeg terminato con exit code $FFMPEG_EXIT_CODE."
+echo "🧯 Esco da stream.sh per evitare un restart parziale sporco sulle FIFO."
+echo "🔁 Il watchdog/manager dovrà riavviare l'intera pipeline NewsicaTV."
+
+exit 1
