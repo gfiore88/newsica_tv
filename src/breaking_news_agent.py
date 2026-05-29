@@ -6,10 +6,9 @@ import subprocess
 
 import requests
 import re
-from kokoro_onnx import Kokoro
-import soundfile as sf
 from newsica.domain.characters import get_character
 from newsica.editorial.gravity_assessor import assess_news_gravity
+from newsica.generation.tts_jobs import remote_generation_enabled
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_DIR = os.path.join(BASE_DIR, "runtime")
@@ -131,11 +130,38 @@ def generate_breaking_news(force=True):
     testo = re.sub(r"\*+", "", testo)
     testo = re.sub(r"\s+", " ", testo)
     testo = testo.replace("...", ". ")
+
+    if remote_generation_enabled():
+        from newsica.storage.repositories.generation_jobs_repository import enqueue_job
+
+        job, created = enqueue_job(
+            "breaking_news",
+            priority=250,
+            title="Breaking News",
+            dedupe_key=f"breaking_news:{notizia.get('title') if notizia else 'manual'}:{int(time.time() // 300)}",
+            payload={
+                "text": testo,
+                "severity_score": severity_score,
+                "reason": reason,
+                "character": character.id,
+                "speed": character.speed,
+                "jingle_path": character.jingle_path or BREAKING_JINGLE_FILE,
+                "source": "manual" if force else "daemon",
+            },
+        )
+        print(f"📡 Breaking News remota accodata: job={job.get('id')} created={created}")
+        if notizia:
+            with open(LAST_BREAKING_FILE, "w") as f:
+                f.write(notizia.get("title", ""))
+        return True
     
     # 4. Sintesi Vocale del Copione
     print("🎙️ Sintesi vocale tramite Kokoro AI...")
     voice_audio = os.path.join(TMP_DIR, "voice_breaking.wav")
     try:
+        from kokoro_onnx import Kokoro
+        import soundfile as sf
+
         # Carichiamo i file ONNX e bin dalla cartella principale del progetto
         onnx_path = os.path.join(BASE_DIR, "kokoro-v1.0.onnx")
         voices_path = os.path.join(BASE_DIR, "voices-v1.0.bin")

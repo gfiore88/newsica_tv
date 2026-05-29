@@ -25,7 +25,7 @@ KOKORO_VOICES = os.path.join(BASE_DIR, "voices-v1.0.bin")
 # Voce istituzionale — stessa dell'anchor news
 CHIME_VOICE = "if_sara"
 CHIME_SPEED = 0.95
-CHIME_GENERATION_LEAD_SECONDS = 8
+CHIME_GENERATION_LEAD_SECONDS = 35
 CHIME_MINUTE_MIN = 7
 CHIME_MINUTE_MAX = 53
 
@@ -147,7 +147,11 @@ def build_exact_chime_text(now=None) -> str:
 
 
 def generate_chime_audio(text: str, output_file=CHIME_AUDIO_FILE) -> bool:
-    """Genera il file WAV del rintocco con Kokoro TTS. Ritorna True se ok."""
+    """Genera il file WAV del rintocco con Kokoro TTS. Ritorna True se ok.
+
+    Nota: questa funzione viene chiamata dal generation worker sul Mac,
+    NON direttamente sul VPS.
+    """
     try:
         from kokoro_onnx import Kokoro
         import soundfile as sf
@@ -199,6 +203,42 @@ def next_random_chime_time(now=None) -> datetime.datetime:
     return hour_start.replace(minute=minute, second=0, microsecond=0)
 
 
+def _enqueue_chime_job(text, source="automatic"):
+    """Crea un generation job per il segnale orario."""
+    sys.path.insert(0, os.path.join(BASE_DIR, "src"))
+    from newsica.storage.repositories.generation_jobs_repository import enqueue_job
+
+    job, created = enqueue_job(
+        "hourly_chime",
+        priority=150,
+        title="Segnale Orario Automatico",
+        dedupe_key=f"hourly_chime:{source}:{datetime.datetime.now().strftime('%Y%m%d%H')}",
+        payload={"text": text, "source": source, "auto_play": True},
+    )
+    return job, created
+
+
+def _wait_for_job_ready(job_id, timeout_seconds=90):
+    """Attende che il job sia completato (ready) o fallito."""
+    from newsica.storage.repositories.generation_jobs_repository import get_job
+
+    start = time.time()
+    while time.time() - start < timeout_seconds:
+        job = get_job(job_id)
+        if not job:
+            return None
+        status = job.get("status", "")
+        if status == "ready":
+            return job
+        if status in ("failed", "expired"):
+            print(f"❌ Job chime {job_id} terminato con stato: {status}")
+            return None
+        time.sleep(3)
+
+    print(f"⏰ Timeout attesa job chime {job_id} dopo {timeout_seconds}s.")
+    return None
+
+
 def run():
     print("🔔 Hourly Chime Agent avviato.")
     os.makedirs(TMP_DIR, exist_ok=True)
@@ -216,16 +256,25 @@ def run():
 
         text = build_exact_chime_text(target_time)
 
-        ok = generate_chime_audio(text)
-        if not ok:
+        # Accoda il job al generation worker (Mac) invece di generare TTS localmente
+        try:
+            job, created = _enqueue_chime_job(text)
+            if created:
+                print(f"📡 Job chime creato: {job.get('id')} — in attesa del Mac...")
+            else:
+                print(f"📡 Job chime già esistente: {job.get('id')}")
+        except Exception as e:
+            print(f"❌ Errore creazione job chime: {e}")
             time.sleep(60)
             continue
 
-        remaining = (target_time - datetime.datetime.now()).total_seconds()
-        if remaining > 0:
-            time.sleep(remaining)
-
-        send_chime_command(target_time)
+        # Attende il completamento. L'auto-play nel system_routes
+        # scriverà HOURLY_CHIME_READY quando il job sarà ready.
+        completed_job = _wait_for_job_ready(job.get("id"))
+        if completed_job:
+            print(f"✅ Segnale orario pronto e inviato al director.")
+        else:
+            print(f"⚠️ Segnale orario non completato in tempo. Saltato.")
 
         # Evita retrigger nello stesso minuto dopo restart/ritardi locali.
         time.sleep(75)

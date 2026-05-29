@@ -103,6 +103,29 @@ def _prepare_telegram_voice_for_air(input_file, output_file):
         return False
 
 def _generate_request_announcement(author, title, output_file):
+    clean_title = title.replace('"', '').replace("'", "").strip()
+    clean_author = author.replace('"', '').replace("'", "").strip()
+    text = f"Newsica ti ascolta! Questo brano, {clean_title}, è stato richiesto da {clean_author}."
+
+    try:
+        from newsica.generation.tts_jobs import enqueue_audio_job_and_wait, remote_generation_enabled
+
+        if remote_generation_enabled():
+            ok, _job = enqueue_audio_job_and_wait(
+                "tts_audio",
+                text=text,
+                target_audio_path=output_file,
+                priority=90,
+                title="Annuncio richiesta chat",
+                dedupe_key=f"tts_audio:request:{clean_author}:{clean_title}",
+                payload={"character": "breaking_news", "voice": "if_sara", "speed": 0.95},
+                timeout_seconds=int(os.getenv("NEWSICA_REMOTE_ANNOUNCEMENT_TIMEOUT_SECONDS", "45")),
+            )
+            return ok
+    except Exception as e:
+        print(f"⚠️ Annuncio richiesta remoto non disponibile: {e}")
+        return False
+
     try:
         from kokoro_onnx import Kokoro
         import soundfile as sf
@@ -110,11 +133,6 @@ def _generate_request_announcement(author, title, output_file):
         onnx_path = BASE_DIR / "kokoro-v1.0.onnx"
         voices_path = BASE_DIR / "voices-v1.0.bin"
         
-        # Pulisce i caratteri speciali per la sintesi vocale
-        clean_title = title.replace('"', '').replace("'", "").strip()
-        clean_author = author.replace('"', '').replace("'", "").strip()
-        
-        text = f"Newsica ti ascolta! Questo brano, {clean_title}, è stato richiesto da {clean_author}."
         print(f"🎙️ Generazione annuncio richiesta chat TTS: \"{text}\"")
         
         kokoro = Kokoro(str(onnx_path), str(voices_path))
@@ -130,6 +148,28 @@ def _generate_request_announcement(author, title, output_file):
 
 
 def _generate_telegram_announcement(author, output_file):
+    clean_author = author.replace('"', '').replace("'", "").strip()
+    text = f"E ora diamo voce a voi! Ecco un messaggio vocale inviato da {clean_author} su Telegram."
+
+    try:
+        from newsica.generation.tts_jobs import enqueue_audio_job_and_wait, remote_generation_enabled
+
+        if remote_generation_enabled():
+            ok, _job = enqueue_audio_job_and_wait(
+                "tts_audio",
+                text=text,
+                target_audio_path=output_file,
+                priority=90,
+                title="Annuncio vocale Telegram",
+                dedupe_key=f"tts_audio:telegram:{clean_author}",
+                payload={"character": "breaking_news", "voice": "if_sara", "speed": 0.95},
+                timeout_seconds=int(os.getenv("NEWSICA_REMOTE_ANNOUNCEMENT_TIMEOUT_SECONDS", "45")),
+            )
+            return ok
+    except Exception as e:
+        print(f"⚠️ Annuncio Telegram remoto non disponibile: {e}")
+        return False
+
     try:
         from kokoro_onnx import Kokoro
         import soundfile as sf
@@ -137,9 +177,6 @@ def _generate_telegram_announcement(author, output_file):
         onnx_path = BASE_DIR / "kokoro-v1.0.onnx"
         voices_path = BASE_DIR / "voices-v1.0.bin"
         
-        clean_author = author.replace('"', '').replace("'", "").strip()
-        
-        text = f"E ora diamo voce a voi! Ecco un messaggio vocale inviato da {clean_author} su Telegram."
         print(f"🎙️ Generazione annuncio vocale Telegram TTS: \"{text}\"")
         
         kokoro = Kokoro(str(onnx_path), str(voices_path))

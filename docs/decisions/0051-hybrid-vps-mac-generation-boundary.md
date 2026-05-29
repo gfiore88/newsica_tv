@@ -82,7 +82,7 @@ Con due adapter:
 - `LocalGenerationClient`: esegue il codice attuale nella stessa macchina;
 - `RemoteGenerationClient`: crea job per il worker Mac e aspetta il completamento tramite stato/job queue.
 
-`preparation_agent.py` e i servizi di schedulazione devono parlare con `GenerationClient`, non direttamente con `AIIntegratorAgent`, `tts_generator.py` o `ai_music_worker.py`.
+`preparation_agent.py`, i servizi di schedulazione e gli endpoint dashboard devono parlare con `GenerationClient` o con helper di enqueue job, non direttamente con `AIIntegratorAgent`, `tts_generator.py`, Kokoro o `ai_music_worker.py` quando `NEWSICA_GENERATION_MODE=remote`.
 
 La logica editoriale condivisa deve restare una sola:
 - costruzione contenuti e prompt;
@@ -103,7 +103,7 @@ Sono ammessi adapter diversi solo per:
 La modalita' remota usera' una coda persistente gestita dal VPS. Il modello minimo dei job deve includere:
 
 - `id`
-- `job_type`: `slot_audio`, `ai_music`, `short`, `breaking_audio`
+- `job_type`: `slot_audio`, `ai_music`, `hourly_chime`, `short_tts`, `tts_audio`, `breaking_news`
 - `status`: `pending`, `claimed`, `running`, `uploading`, `ready`, `failed`, `expired`
 - `priority`
 - `slot_time`
@@ -118,6 +118,14 @@ La modalita' remota usera' una coda persistente gestita dal VPS. Il modello mini
 - timestamp di creazione, claim, heartbeat e completamento.
 
 Il worker Mac deve usare claim atomico: un job puo' essere preso da un solo worker. I job `claimed` o `running` senza heartbeat oltre una soglia devono tornare recuperabili o fallire in modo esplicito.
+
+I job satellite devono seguire lo stesso confine:
+- `hourly_chime`: segnale orario manuale o automatico, con TTS e jingle generati dal Mac e auto-play sul VPS quando l'artifact diventa `ready`;
+- `short_tts`: solo traccia TTS per Shorts; il rendering video puo' restare sul VPS se non richiede modelli pesanti;
+- `tts_audio`: annunci brevi di playout, richieste chat e messaggi vocali Telegram;
+- `breaking_news`: TTS e jingle/allarme breaking news, con scrittura del comando di messa in onda solo dopo upload validato.
+
+Gli endpoint manuali della dashboard che generano contenuti editoriali (`manual-event`, `podcast`, `news`) devono accodare `slot_audio` remoto e usare `auto_play` nel payload, cosi' Ollama/TTS restano sul Mac e il VPS esegue solo validazione artifact e comando di regia.
 
 ## Pacchetto Asset
 

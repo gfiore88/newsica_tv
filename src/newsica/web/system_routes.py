@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import signal
 import subprocess
 import time
@@ -276,6 +277,22 @@ def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python)
             artifact_manifest = dict(manifest)
             artifact_manifest["audio_path"] = str(target_audio)
             artifact_manifest["audio_file"] = target_audio.name
+        elif job.get("job_type") in {"hourly_chime", "short_tts", "tts_audio", "breaking_news"}:
+            audio_filename = manifest.get("audio_file") or f"{job.get('job_type')}.wav"
+            source_audio = incoming_dir / audio_filename
+            if not source_audio.exists():
+                return jsonify({"status": "INVALID", "message": f"audio mancante: {audio_filename}"}), 400
+            payload = job.get("payload") or {}
+            if job.get("job_type") == "hourly_chime":
+                target_audio = Path(tmp_dir) / "hourly_chime.wav"
+            elif job.get("job_type") == "breaking_news":
+                target_audio = Path(tmp_dir) / "breaking_news.wav"
+            else:
+                target_audio = Path(payload.get("target_audio_path") or Path(tmp_dir) / audio_filename)
+            target_audio.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_audio, target_audio)
+            artifact_manifest = dict(manifest)
+            artifact_manifest["audio_path"] = str(target_audio)
         else:
             return jsonify({"status": "INVALID", "message": f"job_type non supportato: {job.get('job_type')}"}), 400
 
@@ -290,14 +307,61 @@ def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python)
         worker_id = str(data.get("worker_id") or "").strip()
         if not worker_id:
             return jsonify({"status": "INVALID", "message": "worker_id richiesto"}), 400
-        return jsonify({
-            "status": "OK",
-            "job": generation_jobs_repository.mark_ready(
-                job_id,
-                worker_id,
-                artifact_manifest=data.get("artifact_manifest"),
-            ),
-        })
+
+        art_manifest = data.get("artifact_manifest") or {}
+        updated_job = generation_jobs_repository.mark_ready(
+            job_id, worker_id, artifact_manifest=art_manifest,
+        )
+
+        if updated_job and updated_job.get("job_type") == "slot_audio":
+            payload = updated_job.get("payload") or {}
+            if payload.get("auto_play", False):
+                ready_dir = Path(art_manifest.get("ready_dir") or "")
+                primary_name = Path(str(art_manifest.get("primary_audio") or "audio.wav")).name
+                audio_path = ready_dir / primary_name
+                command = payload.get("auto_play_command") or "PLAY_EVENT_IMMEDIATE"
+                title = str(payload.get("auto_play_title") or updated_job.get("title") or "NewsicaTV").replace("|", "-")
+                character = str(payload.get("auto_play_character") or updated_job.get("character") or "news").replace("|", "-")
+                if command == "PLAY_PODCAST_IMMEDIATE":
+                    control_cmd = f"PLAY_PODCAST_IMMEDIATE|{audio_path}|{title}"
+                elif command == "PLAY_NEWS_IMMEDIATE":
+                    control_cmd = f"PLAY_NEWS_IMMEDIATE|{audio_path}|{title}"
+                else:
+                    control_cmd = f"PLAY_EVENT_IMMEDIATE|{audio_path}|{title}|{character}"
+                try:
+                    (Path(base_dir) / "runtime" / "control.txt").write_text(control_cmd, encoding="utf-8")
+                    print(f"📡 Slot audio auto-play: {command} scritto nel control file.")
+                except Exception as e:
+                    print(f"⚠️ Errore auto-play slot audio: {e}")
+        # Auto-play: se il job è hourly_chime con auto_play, manda in onda
+        elif updated_job and updated_job.get("job_type") == "hourly_chime":
+            payload = (updated_job.get("payload") or {})
+            if payload.get("auto_play", False):
+                audio_path = art_manifest.get("audio_path") or str(Path(tmp_dir) / "hourly_chime.wav")
+                control_file = Path(base_dir) / "runtime" / "control.txt"
+                suffix = "|force" if payload.get("source") == "manual" else ""
+                try:
+                    control_file.write_text(
+                        f"HOURLY_CHIME_READY|{audio_path}{suffix}",
+                        encoding="utf-8",
+                    )
+                    print(f"📡 Chime auto-play: HOURLY_CHIME_READY scritto nel control file.")
+                except Exception as e:
+                    print(f"⚠️ Errore auto-play chime: {e}")
+        elif updated_job and updated_job.get("job_type") == "breaking_news":
+            payload = updated_job.get("payload") or {}
+            audio_path = art_manifest.get("audio_path") or str(Path(tmp_dir) / "breaking_news.wav")
+            control_file = Path(base_dir) / "runtime" / "control.txt"
+            try:
+                control_file.write_text(
+                    f"BREAKING_NEWS_READY|{audio_path}|{payload.get('severity_score', 0)}|{payload.get('reason', '')}",
+                    encoding="utf-8",
+                )
+                print("📡 Breaking News auto-play: BREAKING_NEWS_READY scritto nel control file.")
+            except Exception as e:
+                print(f"⚠️ Errore auto-play breaking news: {e}")
+
+        return jsonify({"status": "OK", "job": updated_job})
 
     @app.route('/api/generation/jobs/<job_id>/failed', methods=['POST'])
     def mark_generation_job_failed(job_id):
@@ -566,4 +630,3 @@ def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python)
             return jsonify({"status": "OK", "job": updated_job, "audio_path": str(target_audio)})
         except Exception as e:
             return jsonify({"status": "ERROR", "message": str(e)}), 500
-

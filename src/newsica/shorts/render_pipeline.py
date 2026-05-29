@@ -2,6 +2,7 @@ import datetime
 import io
 import os
 import re
+import hashlib
 import subprocess
 import unicodedata
 
@@ -12,6 +13,7 @@ from kokoro_onnx import Kokoro
 from PIL import Image, ImageDraw, ImageFont
 
 from newsica.audio.tts_text import prepare_text_for_tts
+from newsica.generation.tts_jobs import enqueue_audio_job_and_wait, remote_generation_enabled
 
 # ── Singleton MMS_FA: caricato una volta sola per tutto il ciclo di vita del processo ──
 # La prima chiamata a _get_mms_fa_components() scarica/carica il modello (~5-10s).
@@ -62,7 +64,6 @@ class ShortRenderPipeline:
         tts_text = emoji.replace_emoji(tts_text, replace="")
         clean_text = prepare_text_for_tts(tts_text)
 
-        kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
         import random
 
         # Mappatura dei temi per diversificare le voci
@@ -72,11 +73,6 @@ class ShortRenderPipeline:
             theme_or_mode = random.choice(["chiara", "maya", "leo", "giorgio", "colonnello"])
         elif theme_or_mode == "tech":
             theme_or_mode = "chiara"
-
-        # Risolvi lo stile vocale con get_voice_style_for_character
-        from newsica.utils.voice_helper import get_voice_style_for_character
-        selected_voice = get_voice_style_for_character(kokoro, theme_or_mode)
-        print(f"🗣️ Voce TTS risolta per '{theme_or_mode}'")
 
         # Velocità dinamiche su misura per ogni conduttore negli Shorts
         speeds = {
@@ -94,6 +90,34 @@ class ShortRenderPipeline:
             "meteo": 1.0,
         }
         selected_speed = speeds.get(theme_or_mode, 1.1)
+
+        if remote_generation_enabled():
+            ok, job = enqueue_audio_job_and_wait(
+                "short_tts",
+                text=clean_text,
+                target_audio_path=self.tmp_audio,
+                priority=120,
+                title=f"Short TTS {theme_or_mode}",
+                dedupe_key=f"short_tts:{hashlib.sha1(clean_text.encode('utf-8')).hexdigest()[:16]}:{theme_or_mode}",
+                payload={"character": theme_or_mode, "speed": selected_speed},
+                timeout_seconds=int(os.getenv("NEWSICA_SHORT_TTS_TIMEOUT_SECONDS", "180")),
+            )
+            if not ok:
+                job_id = job.get("id") if job else "unknown"
+                raise RuntimeError(f"Short TTS remoto non completato in tempo: {job_id}")
+            duration = float((job.get("artifact_manifest") or {}).get("duration") or 0.0)
+            if duration <= 0:
+                import soundfile as sf_local
+
+                audio_data, sample_rate = sf_local.read(self.tmp_audio)
+                duration = len(audio_data) / sample_rate
+            return duration, clean_text
+
+        kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
+        from newsica.utils.voice_helper import get_voice_style_for_character
+
+        selected_voice = get_voice_style_for_character(kokoro, theme_or_mode)
+        print(f"🗣️ Voce TTS risolta per '{theme_or_mode}'")
 
         samples, sample_rate = kokoro.create(clean_text, voice=selected_voice, speed=selected_speed, lang="it")
         sf.write(self.tmp_audio, samples, sample_rate)

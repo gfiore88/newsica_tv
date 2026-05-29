@@ -233,6 +233,45 @@ def _combine_manual_event_audio(generated_files, output_path):
     return output_path
 
 
+def _enqueue_remote_manual_event(character_id, title, brief, *, tmp_dir):
+    from newsica.generation.tts_jobs import remote_generation_enabled
+    from newsica.storage.repositories.generation_jobs_repository import enqueue_job
+
+    if not remote_generation_enabled():
+        return None
+
+    content_data = _manual_prompt_payload(character_id, title, brief)
+    slot_time = f"manual-{time.time_ns()}"
+    content_data["slot_time"] = slot_time
+
+    if character_id == "podcast":
+        command = "PLAY_PODCAST_IMMEDIATE"
+    elif character_id == "news":
+        command = "PLAY_NEWS_IMMEDIATE"
+    else:
+        command = "PLAY_EVENT_IMMEDIATE"
+
+    job, created = enqueue_job(
+        "slot_audio",
+        priority=180,
+        slot_time=slot_time,
+        character=character_id,
+        title=title,
+        theme=brief or None,
+        source="dashboard_manual_event",
+        dedupe_key=f"manual_event:{character_id}:{slot_time}",
+        payload={
+            "content_data": content_data,
+            "target_work_dir": str(tmp_dir),
+            "auto_play": True,
+            "auto_play_command": command,
+            "auto_play_title": title,
+            "auto_play_character": character_id,
+        },
+    )
+    return job, created
+
+
 def _generate_manual_event(character_id, title, brief, *, tmp_dir, control_file):
     total_start = time.perf_counter()
     format_map = {item["id"]: item for item in _build_manual_event_formats()}
@@ -249,6 +288,25 @@ def _generate_manual_event(character_id, title, brief, *, tmp_dir, control_file)
         title = f"TG Newsica: {_truncate_label(brief, max_chars=30)}"
     elif brief and title == format_meta["default_title"]:
         title = f"{format_meta['label']}: {_truncate_label(brief, max_chars=30)}"
+
+    try:
+        remote_job = _enqueue_remote_manual_event(character_id, title, brief, tmp_dir=tmp_dir)
+        if remote_job:
+            job, created = remote_job
+            return {
+                "status": "QUEUED",
+                "title": title,
+                "character_id": character_id,
+                "job_id": job.get("id"),
+                "created": created,
+                "message": "Generazione accodata sul Mac. Andrà in onda automaticamente quando pronta.",
+            }, 202
+    except Exception as e:
+        return {
+            "status": "ERROR",
+            "message": f"Creazione job remoto fallita: {e}",
+            "elapsed_seconds": round(time.perf_counter() - total_start, 1),
+        }, 500
 
     try:
         content_data = _manual_prompt_payload(character_id, title, brief)
@@ -330,64 +388,40 @@ def register_editorial_routes(
 ):
     @app.route('/api/chime', methods=['POST'])
     def trigger_chime():
-        """Genera il segnale orario manuale: jingle + voce con ora reale."""
+        """Accoda un generation job per il segnale orario manuale.
+
+        Il Mac raccoglie il job, genera TTS + jingle, e rimanda l'audio.
+        Quando il job è completato, il VPS scrive automaticamente
+        HOURLY_CHIME_READY nel control file del director.
+        """
         import sys
-
-        if not os.path.exists(hour_chime_jingle_file):
-            return jsonify(
-                {
-                    "status": "ERROR",
-                    "message": f"Jingle ora esatta non trovato: {hour_chime_jingle_file}",
-                }
-            ), 500
-
         sys.path.insert(0, os.path.join(base_dir, "src"))
         try:
-            from hourly_chime_agent import build_exact_chime_text, generate_chime_audio
+            from hourly_chime_agent import build_exact_chime_text
         except Exception as e:
             return jsonify({"status": "ERROR", "message": f"Import agente fallito: {e}"}), 500
 
         text = build_exact_chime_text()
-        if not generate_chime_audio(text, hour_chime_voice_file):
-            return jsonify({"status": "ERROR", "message": "Generazione TTS fallita."}), 500
 
+        from newsica.storage.repositories.generation_jobs_repository import enqueue_job
         try:
-            subprocess.run(
-                [
-                    ffmpeg_cmd,
-                    "-y",
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-i",
-                    hour_chime_jingle_file,
-                    "-i",
-                    hour_chime_voice_file,
-                    "-filter_complex",
-                    "[0:a]aresample=24000,aformat=channel_layouts=mono[j];"
-                    "[1:a]aresample=24000,aformat=channel_layouts=mono[v];"
-                    "[j][v]concat=n=2:v=0:a=1[a]",
-                    "-map",
-                    "[a]",
-                    "-ar",
-                    "24000",
-                    "-ac",
-                    "1",
-                    hour_chime_output_file,
-                ],
-                check=True,
+            job, created = enqueue_job(
+                "hourly_chime",
+                priority=200,
+                title="Segnale Orario Manuale",
+                dedupe_key="hourly_chime:manual",
+                payload={"text": text, "source": "manual", "auto_play": True},
             )
         except Exception as e:
-            return jsonify({"status": "ERROR", "message": f"Preparazione jingle ora esatta fallita: {e}"}), 500
+            return jsonify({"status": "ERROR", "message": f"Creazione job fallita: {e}"}), 500
 
-        cmd = f"HOURLY_CHIME_READY|{hour_chime_output_file}|force"
-        try:
-            with open(control_file, "w", encoding="utf-8") as f:
-                f.write(cmd)
-        except Exception as e:
-            return jsonify({"status": "ERROR", "message": f"Scrittura controllo fallita: {e}"}), 500
-
-        return jsonify({"status": "OK", "text": text})
+        return jsonify({
+            "status": "OK",
+            "text": text,
+            "job_id": job.get("id"),
+            "created": created,
+            "message": "Segnale orario in generazione sul Mac. Andrà in onda automaticamente.",
+        })
 
     @app.route('/api/manual-event-formats')
     def get_manual_event_formats():
@@ -412,6 +446,18 @@ def register_editorial_routes(
         topic = data.get("topic", "").strip()
         if not topic:
             return jsonify({"status": "ERROR", "message": "Nessuna tematica fornita."}), 400
+
+        from newsica.generation.tts_jobs import remote_generation_enabled
+
+        if remote_generation_enabled():
+            payload, status_code = _generate_manual_event(
+                character_id="podcast",
+                title=f"Newsica Podcast: {_truncate_label(topic, max_chars=30)}",
+                brief=topic,
+                tmp_dir=tmp_dir,
+                control_file=control_file,
+            )
+            return jsonify(payload), status_code
 
         prompt_path = os.path.join(base_dir, "src", "newsica", "editorial", "prompts", "podcast.md")
         system_prompt = ""
@@ -537,6 +583,17 @@ def register_editorial_routes(
         total_start = time.perf_counter()
         data = request.json or {}
         topic = data.get("topic", "").strip()
+        from newsica.generation.tts_jobs import remote_generation_enabled
+
+        if remote_generation_enabled():
+            payload, status_code = _generate_manual_event(
+                character_id="news",
+                title=f"TG Newsica: {_truncate_label(topic, max_chars=30)}" if topic else "TG Newsica - Edizione Straordinaria",
+                brief=topic,
+                tmp_dir=tmp_dir,
+                control_file=control_file,
+            )
+            return jsonify(payload), status_code
 
         prompt_path = os.path.join(base_dir, "src", "newsica", "editorial", "prompts", "news.md")
         system_prompt = ""

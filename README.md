@@ -109,8 +109,11 @@ Il trasporto HTTP remoto include anche upload multipart degli artifact verso il 
 
 - `slot_audio`: upload in `runtime/assets/incoming/{job_id}`, validazione manifest, pubblicazione atomica in `runtime/assets/ready/{slot_id}`;
 - `ai_music`: upload in staging e pubblicazione in `runtime/assets/ai_music`.
+- `hourly_chime`, `short_tts`, `tts_audio`, `breaking_news`: upload audio validato e copia nel path runtime richiesto dal payload o dal tipo job.
 
 Il VPS non considera un artifact pronto finche' manifest e file non sono stati validati.
+
+In modalita' `remote`, anche i flussi satellite devono passare dalla coda: chime manuale/automatico, Shorts TTS, breaking news, annunci richieste chat/Telegram e generazioni manuali dashboard (`manual-event`, `podcast`, `news`). Il VPS non deve istanziare Kokoro o lanciare `tts_generator.py` per questi flussi; accoda il job, riceve l'artifact dal Mac e scrive il comando di regia solo quando l'upload e' valido.
 
 La Dashboard espone anche:
 
