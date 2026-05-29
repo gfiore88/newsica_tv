@@ -31,6 +31,7 @@ rsync -az --delete \
   --exclude '.github/' \
   --exclude '.env' \
   --exclude '.DS_Store' \
+  --exclude '.external/' \
   --exclude '__pycache__/' \
   --exclude '.pytest_cache/' \
   --exclude '.cache/' \
@@ -44,6 +45,8 @@ rsync -az --delete \
   --exclude 'tmp/' \
   --exclude 'output/' \
   --exclude 'assets/' \
+  --exclude 'scratch_*.py' \
+  --exclude 'tmp_*.html' \
   --exclude 'kokoro-v1.0.onnx' \
   --exclude 'voices-v1.0.bin' \
   "$ROOT_DIR/" "$remote:$VPS_APP_DIR/"
@@ -64,6 +67,11 @@ python3 -m venv venv
 venv/bin/python -m pip install --upgrade pip
 venv/bin/pip install -r requirements.txt
 if [ -f frontend/package-lock.json ]; then
+  node_major=\$(node -p \"Number(process.versions.node.split('.')[0])\")
+  if [ \"\$node_major\" -lt 20 ]; then
+    echo 'Node.js 20+ is required for the frontend build. Install Node 22 LTS on the VPS.' >&2
+    exit 22
+  fi
   cd frontend
   npm ci
   npm run build

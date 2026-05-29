@@ -118,6 +118,8 @@ NEWSICA_VPS_ENV_B64=<optional base64 of the private VPS .env>
 
 Il deploy usa `scripts/deploy_vps.sh` via `rsync` ed esclude sempre `.env`, `runtime/`, `tmp/`, `assets/`, virtualenv, `node_modules`, cache e modelli pesanti. In questo modo codice e dipendenze vengono aggiornati senza cancellare DB, asset pronti, log o credenziali del server.
 
+Prerequisito VPS per la build frontend: Node.js 20+; sul server di produzione e' consigliato Node.js 22 LTS.
+
 Modalita' workflow:
 - `none`: copia codice, installa dipendenze, builda frontend, fa check sintattici e mostra status senza avviare/riavviare;
 - `start`: come sopra, poi `./manage.sh start`;
