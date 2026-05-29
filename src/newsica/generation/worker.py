@@ -319,12 +319,17 @@ def _process_short_tts(job: dict) -> dict:
         voice=payload.get("voice"),
         speed=speed,
     )
+    import numpy as np
+    voice_str = resolved_voice
+    if isinstance(voice_str, np.ndarray):
+        voice_str = f"blended_{payload.get('character') or 'chiara'}"
+
     return {
         "kind": "short_tts",
         "audio_file": str(audio_file),
         "duration": duration,
         "text": text,
-        "voice": resolved_voice,
+        "voice": voice_str,
         "speed": speed,
     }
 
@@ -343,12 +348,17 @@ def _process_tts_audio(job: dict) -> dict:
         voice=payload.get("voice"),
         speed=float(payload.get("speed", 0.95)),
     )
+    import numpy as np
+    voice_str = resolved_voice
+    if isinstance(voice_str, np.ndarray):
+        voice_str = f"blended_{payload.get('character') or 'breaking_news'}"
+
     return {
         "kind": "tts_audio",
         "audio_file": str(audio_file),
         "duration": duration,
         "text": text,
-        "voice": resolved_voice,
+        "voice": voice_str,
     }
 
 
