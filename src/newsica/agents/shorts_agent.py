@@ -81,10 +81,27 @@ class ShortsAgent:
             system_prompt = "Sei un copywriter per YouTube Shorts, specializzato in contenuti giovanili e virali. Scrivi un copione ultra-breve (MASSIMO 40 parole) basato sulla notizia fornita in coda."
             
         prompt = f"""{system_prompt}
-
+ 
 Notizia: {news_item.get('title')}
 {news_item.get('description')}
 """
+        from newsica.generation.tts_jobs import remote_generation_enabled, remote_llm_generate
+
+        if remote_generation_enabled():
+            try:
+                print("🧠 Generazione script Short tramite Mac Worker AI...")
+                script = remote_llm_generate(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    options={"temperature": 0.8, "num_predict": 300},
+                    timeout_seconds=60
+                )
+                return script if script else "Oggi su Newsica TV un aggiornamento imperdibile! Restate connessi."
+            except Exception as e:
+                logger.error(f"Errore LLM remoto: {e}")
+                return "Ultim'ora pazzesca! " + news_item.get('title', '') + ". Che ne pensate? Scrivetelo nei commenti!"
+
+        # COMPORTAMENTO LOCALE LEGACY
         payload = {
             "model": MODEL_NAME,
             "prompt": prompt,

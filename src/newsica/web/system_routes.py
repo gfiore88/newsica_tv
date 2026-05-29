@@ -293,6 +293,8 @@ def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python)
             shutil.copy2(source_audio, target_audio)
             artifact_manifest = dict(manifest)
             artifact_manifest["audio_path"] = str(target_audio)
+        elif job.get("job_type") == "llm_generate":
+            artifact_manifest = dict(manifest)
         else:
             return jsonify({"status": "INVALID", "message": f"job_type non supportato: {job.get('job_type')}"}), 400
 

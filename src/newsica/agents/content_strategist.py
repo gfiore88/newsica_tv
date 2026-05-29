@@ -225,22 +225,34 @@ class ContentStrategistAgent:
                 "temperature": 0.85,
             }
         }
+ 
+        from newsica.generation.tts_jobs import remote_generation_enabled, remote_llm_generate
 
         try:
-            print(f"🧠 [ContentStrategist] Richiedo analisi trend e brainstorming a Ollama ({model_name})...")
-            r = requests.post(ollama_url, json=payload, timeout=45)
-            r.raise_for_status()
-            text = r.json().get("response", "").strip()
-            if text.startswith("```"):
-                text = re.sub(r"^```(?:json)?\n", "", text)
-                text = re.sub(r"\n```$", "", text)
-            data = json.loads(text.strip())
-            if "title" in data and "query" in data:
-                print(f"✨ [ContentStrategist] Tema identificato dall'LLM: '{data['title']}' (query di approfondimento: '{data['query']}')")
-                return data
+            print(f"🧠 [ContentStrategist] Richiedo analisi trend e brainstorming...")
+            if remote_generation_enabled():
+                text = remote_llm_generate(
+                    prompt=user_prompt,
+                    system_prompt=system_prompt,
+                    options={"temperature": 0.85},
+                    timeout_seconds=60
+                )
+            else:
+                r = requests.post(ollama_url, json=payload, timeout=45)
+                r.raise_for_status()
+                text = r.json().get("response", "").strip()
+
+            if text:
+                if text.startswith("```"):
+                    text = re.sub(r"^```(?:json)?\n", "", text)
+                    text = re.sub(r"\n```$", "", text)
+                data = json.loads(text.strip())
+                if "title" in data and "query" in data:
+                    print(f"✨ [ContentStrategist] Tema identificato dall'LLM: '{data['title']}' (query di approfondimento: '{data['query']}')")
+                    return data
         except Exception as e:
             print(f"⚠️ [ContentStrategist] Errore brainstorming Ollama: {e}")
-
+ 
         fallback_topics = SHORTS_FUNFACT_FALLBACK_TOPICS if format_type == "shorts_funfact" else PODCAST_FALLBACK_TOPICS
         return random.choice(fallback_topics)
 

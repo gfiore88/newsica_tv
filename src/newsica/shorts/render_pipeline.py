@@ -338,19 +338,32 @@ class ShortRenderPipeline:
             import urllib.parse
 
             prompt = f'Given the news title: "{title}". Extract a SINGLE generic English keyword that visually represents the subject (e.g. if the news is about an Italian hospital, write "hospital". If it is about police, write "police car"). Reply ONLY with the English keyword, no punctuation.'
-            payload = {"model": self.model_name, "prompt": prompt, "stream": False, "options": {"temperature": 0.1}}
-            resp = requests.post(self.ollama_url, json=payload, timeout=10)
-            if resp.status_code == 200:
-                keyword = resp.json().get("response", "").strip()
-                if keyword:
-                    print(f"🔎 Keyword Pexels estratta: {keyword}")
-                    q = urllib.parse.quote(keyword)
-                    url = f"https://api.pexels.com/v1/search?query={q}&per_page=1&orientation=landscape"
-                    pex_resp = requests.get(url, headers={"Authorization": pexels_key}, timeout=10)
-                    if pex_resp.status_code == 200:
-                        data = pex_resp.json()
-                        if data.get("photos"):
-                            return data["photos"][0]["src"].get("landscape") or data["photos"][0]["src"].get("large")
+            
+            from newsica.generation.tts_jobs import remote_generation_enabled, remote_llm_generate
+
+            if remote_generation_enabled():
+                keyword = remote_llm_generate(
+                    prompt=prompt,
+                    options={"temperature": 0.1},
+                    timeout_seconds=20
+                )
+            else:
+                payload = {"model": self.model_name, "prompt": prompt, "stream": False, "options": {"temperature": 0.1}}
+                resp = requests.post(self.ollama_url, json=payload, timeout=10)
+                if resp.status_code == 200:
+                    keyword = resp.json().get("response", "").strip()
+                else:
+                    keyword = ""
+
+            if keyword:
+                print(f"🔎 Keyword Pexels estratta: {keyword}")
+                q = urllib.parse.quote(keyword)
+                url = f"https://api.pexels.com/v1/search?query={q}&per_page=1&orientation=landscape"
+                pex_resp = requests.get(url, headers={"Authorization": pexels_key}, timeout=10)
+                if pex_resp.status_code == 200:
+                    data = pex_resp.json()
+                    if data.get("photos"):
+                        return data["photos"][0]["src"].get("landscape") or data["photos"][0]["src"].get("large")
         except Exception:
             return None
         return None
@@ -360,20 +373,33 @@ class ShortRenderPipeline:
             import urllib.parse
 
             prompt = f'Data la notizia: "{title}". Estrai una SINGOLA entità Wikipedia (una città, un personaggio pubblico, o un oggetto generico come "Ospedale" o "Polizia"). Rispondi SOLO con il nome dell entità, niente punteggiatura.'
-            payload = {"model": self.model_name, "prompt": prompt, "stream": False, "options": {"temperature": 0.1}}
-            resp = requests.post(self.ollama_url, json=payload, timeout=10)
-            if resp.status_code == 200:
-                entity = resp.json().get("response", "").strip()
-                if entity:
-                    print(f"🔎 Entità Wikipedia estratta: {entity}")
-                    q = urllib.parse.quote(entity)
-                    url = f"https://it.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&generator=search&gsrsearch={q}&pithumbsize=1200"
-                    wiki_resp = requests.get(url, headers={"User-Agent": "NewsicaTV/1.0"}, timeout=10)
-                    if wiki_resp.status_code == 200:
-                        pages = wiki_resp.json().get("query", {}).get("pages", {})
-                        for _, page in pages.items():
-                            if "thumbnail" in page:
-                                return page["thumbnail"]["source"]
+            
+            from newsica.generation.tts_jobs import remote_generation_enabled, remote_llm_generate
+
+            if remote_generation_enabled():
+                entity = remote_llm_generate(
+                    prompt=prompt,
+                    options={"temperature": 0.1},
+                    timeout_seconds=20
+                )
+            else:
+                payload = {"model": self.model_name, "prompt": prompt, "stream": False, "options": {"temperature": 0.1}}
+                resp = requests.post(self.ollama_url, json=payload, timeout=10)
+                if resp.status_code == 200:
+                    entity = resp.json().get("response", "").strip()
+                else:
+                    entity = ""
+
+            if entity:
+                print(f"🔎 Entità Wikipedia estratta: {entity}")
+                q = urllib.parse.quote(entity)
+                url = f"https://it.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&generator=search&gsrsearch={q}&pithumbsize=1200"
+                wiki_resp = requests.get(url, headers={"User-Agent": "NewsicaTV/1.0"}, timeout=10)
+                if wiki_resp.status_code == 200:
+                    pages = wiki_resp.json().get("query", {}).get("pages", {})
+                    for _, page in pages.items():
+                        if "thumbnail" in page:
+                            return page["thumbnail"]["source"]
         except Exception:
             return None
         return None
@@ -448,17 +474,28 @@ class ShortRenderPipeline:
         bg = Image.open(self.tmp_bg).convert("RGBA")
         width, height = bg.size
 
-        try:
-            if os.path.exists("/System/Library/Fonts/Supplemental/Arial Bold.ttf"):
-                font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 75)
-            elif os.path.exists("/System/Library/Fonts/Helvetica.ttc"):
-                font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 75)
-            elif os.path.exists("/Library/Fonts/Arial.ttf"):
-                font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 75)
-            else:
-                font = ImageFont.load_default()
-        except Exception:
+        font = None
+        candidates = [
+            # macOS
+            ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 75),
+            ("/System/Library/Fonts/Helvetica.ttc", 75),
+            ("/Library/Fonts/Arial.ttf", 75),
+            # Linux (Ubuntu / Debian VPS)
+            ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 75),
+            ("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 75),
+            # Fallbacks standard Linux
+            ("/usr/share/fonts/truetype/freefont/FreeSansBold.ttf", 75),
+        ]
+        for path, font_size in candidates:
+            try:
+                font = ImageFont.truetype(path, size=font_size, index=1 if "Helvetica.ttc" in path else 0)
+                break
+            except OSError:
+                continue
+
+        if not font:
             font = ImageFont.load_default()
+
 
         frames_txt_path = os.path.join(self.tmp_dir, "frames.txt")
         with open(frames_txt_path, "w", encoding="utf-8") as f:

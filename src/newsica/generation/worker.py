@@ -156,6 +156,8 @@ def process_job(job: dict, worker_id: str, backend=None) -> dict:
             result = _process_tts_audio(job)
         elif job["job_type"] == "breaking_news":
             result = _process_breaking_news(job)
+        elif job["job_type"] == "llm_generate":
+            result = _process_llm_generate(job)
         else:
             raise RuntimeError(f"Unsupported generation job type: {job['job_type']}")
 
@@ -468,6 +470,37 @@ def _portable_artifact_manifest(artifact_manifest: dict) -> dict:
     elif manifest.get("kind") in ("ai_music", "hourly_chime", "short_tts", "tts_audio", "breaking_news") and manifest.get("audio_file"):
         manifest["audio_file"] = Path(manifest["audio_file"]).name
     return manifest
+
+
+def _process_llm_generate(job: dict) -> dict:
+    payload = job.get("payload") or {}
+    prompt = payload.get("prompt")
+    system_prompt = payload.get("system")
+    options = payload.get("options") or {}
+
+    import requests
+
+    ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+    model_name = os.getenv("OLLAMA_MODEL", "gemma3:12b")
+
+    ollama_payload = {
+        "model": model_name,
+        "prompt": prompt,
+        "stream": False,
+        "options": options,
+    }
+    if system_prompt:
+        ollama_payload["system"] = system_prompt
+
+    logger.info("Generating LLM script local to Mac worker...")
+    resp = requests.post(ollama_url, json=ollama_payload, timeout=90)
+    resp.raise_for_status()
+    response_text = resp.json().get("response", "").strip()
+
+    return {
+        "kind": "llm_generate",
+        "text": response_text
+    }
 
 
 def main() -> None:
