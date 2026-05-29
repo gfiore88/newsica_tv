@@ -174,7 +174,7 @@ if [ "$STREAM_VIDEO_ENCODER" = "h264_videotoolbox" ]; then
 else
   VIDEO_CODEC_ARGS=(
     -c:v libx264
-    -preset veryfast
+    -preset ultrafast
     -b:v "$STREAM_BITRATE"
     -minrate "$STREAM_BITRATE"
     -maxrate "$STREAM_BITRATE"
