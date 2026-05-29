@@ -75,7 +75,7 @@ La codebase oggi assume che runtime live, DB, filesystem asset e modelli AI sian
 - [x] **Contratto unico di generazione:** introdurre un `GenerationClient` condiviso per evitare due flussi paralleli da riallineare manualmente.
 - [x] **Adapter locale:** incapsulare il comportamento attuale in `LocalGenerationClient` senza cambiare output o stati.
 - [x] **Adapter remoto:** creare una coda job lato VPS e un worker co-located di sviluppo che esegue LLM/TTS/ACE-Step/rendering e restituisce asset validabili.
-- [ ] **Configurazione pubblicabile:** leggere ogni valore dinamico da environment/config privata (`NEWSICA_REMOTE_GENERATION_URL`, token, worker id, host SSH, utenti, porte, path remoti, polling, heartbeat). Nessun VPS, credenziale, stream key, username o path personale deve essere hardcoded.
+- [x] **Configurazione pubblicabile:** leggere ogni valore dinamico da environment/config privata (`NEWSICA_REMOTE_GENERATION_URL`, token, worker id, host SSH, utenti, porte, path remoti, polling, heartbeat). Nessun VPS, credenziale, stream key, username o path personale deve essere hardcoded.
 - [x] **Asset staging atomico:** caricare output remoti in `runtime/assets/incoming/{job_id}` e pubblicarli in `ready` solo dopo validazione manifest/file.
 - [x] **Dashboard e osservabilita':** esporre stato job, worker heartbeat, errori, deadline e fallback senza confondere job remoti con asset pronti.
 - [x] **Trasporto Mac-VPS:** implementare API HTTP per claim, heartbeat, uploading, ready e failed mantenendo il DB come fonte di verita' lato VPS.

@@ -67,20 +67,28 @@ La modalità `remote` è riservata all'implementazione ADR 0051 e richiederà va
 Variabili operative previste:
 ```bash
 NEWSICA_GENERATION_MODE=local
-NEWSICA_REMOTE_GENERATION_QUEUE=sqlite
-NEWSICA_REMOTE_WORKER_TRANSPORT=sqlite
+NEWSICA_REMOTE_GENERATION_QUEUE=http
+NEWSICA_REMOTE_WORKER_TRANSPORT=http
 NEWSICA_REMOTE_GENERATION_URL=https://vps.example.invalid
 NEWSICA_REMOTE_GENERATION_TOKEN=...
 NEWSICA_REMOTE_WORKER_ID=mac-worker-1
 NEWSICA_REMOTE_POLL_SECONDS=10
 NEWSICA_REMOTE_IDLE_POLL_SECONDS=30
 NEWSICA_REMOTE_STALE_SECONDS=300
+NEWSICA_REMOTE_HTTP_TIMEOUT_SECONDS=30
 NEWSICA_REMOTE_MAX_UPLOAD_MB=512
 NEWSICA_REMOTE_INCOMING_RETENTION_SECONDS=86400
-NEWSICA_RUNTIME_ASSETS_DIR=/opt/newsica/runtime/assets
+NEWSICA_RUNTIME_ASSETS_DIR=runtime/assets
+NEWSICA_VPS_HOST=vps.example.invalid
+NEWSICA_VPS_SSH_USER=root
+NEWSICA_VPS_SSH_PORT=22
+NEWSICA_VPS_SSH_KEY_PATH=~/.ssh/newsica_vps
+NEWSICA_VPS_REMOTE_APP_DIR=/opt/newsica_tv
 ```
 
 In modalita' `remote`, `./manage.sh start` avvia anche `src/generation_worker.py`. Il worker supporta `NEWSICA_REMOTE_WORKER_TRANSPORT=sqlite` per sviluppo co-located e `NEWSICA_REMOTE_WORKER_TRANSPORT=http` per polling verso le API del VPS. Il token remoto deve essere configurato in env e inviato come Bearer token; non esistono credenziali di default nel codice.
+
+Le credenziali del provider VPS non devono mai entrare nel codice o in `.env.example`. La password `root` iniziale va usata solo per il bootstrap: installare una chiave SSH, aggiornare il sistema, creare la configurazione privata sul VPS, poi ruotare la password e disabilitare il login SSH via password appena possibile. Il repository pubblico deve contenere solo placeholder e default locali non sensibili.
 
 Il trasporto HTTP remoto include anche upload multipart degli artifact verso il VPS:
 - `slot_audio`: upload in `runtime/assets/incoming/{job_id}`, validazione manifest, pubblicazione atomica in `runtime/assets/ready/{slot_id}`;
