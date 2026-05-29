@@ -21,7 +21,7 @@ WIDTH = int(os.getenv("STREAM_WIDTH", "1280"))
 HEIGHT = int(os.getenv("STREAM_HEIGHT", "720"))
 STREAM_FPS = int(os.getenv("STREAM_FPS", "25"))
 OVERLAY_FPS = int(os.getenv("OVERLAY_FPS", "25"))
-FRAME_INTERVAL = 1.0 / (OVERLAY_FPS + 5)
+FRAME_INTERVAL = 1.0 / OVERLAY_FPS
 TICKER_FILE = os.path.join(TMP_DIR, "ticker.txt")
 
 
