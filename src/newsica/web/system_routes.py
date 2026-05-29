@@ -553,6 +553,9 @@ def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python)
             temp_path = incoming_dir / filename
             uploaded_file.save(temp_path)
 
+            manifest = {"audio_file": filename}
+            (incoming_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
             target_audio = publish_ai_music_artifact(incoming_dir)
             updated_job = mark_done(job_id, str(target_audio), title)
             
