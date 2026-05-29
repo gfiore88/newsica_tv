@@ -99,6 +99,36 @@ def init_schema():
         failed_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS generation_jobs (
+        id TEXT PRIMARY KEY,
+        job_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        priority INTEGER NOT NULL DEFAULT 0,
+        slot_time TEXT,
+        character TEXT,
+        title TEXT,
+        theme TEXT,
+        source TEXT,
+        dedupe_key TEXT,
+        payload_json TEXT,
+        artifact_manifest_json TEXT,
+        error TEXT,
+        deadline_at TEXT,
+        worker_id TEXT,
+        created_at TEXT NOT NULL,
+        claimed_at TEXT,
+        heartbeat_at TEXT,
+        completed_at TEXT,
+        failed_at TEXT,
+        expired_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_generation_jobs_status_priority
+        ON generation_jobs(status, priority DESC, deadline_at ASC, created_at ASC);
+
+    CREATE INDEX IF NOT EXISTS idx_generation_jobs_dedupe_active
+        ON generation_jobs(job_type, dedupe_key, status);
+
     CREATE TABLE IF NOT EXISTS chat_music_requests (
         id TEXT PRIMARY KEY,
         video_id TEXT NOT NULL,

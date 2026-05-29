@@ -68,6 +68,22 @@ Manca un filtro di validazione editoriale prima della messa in onda dei copioni 
 
 ## 🖥️ 4. Infrastruttura e Gestione Processi
 
+### 🌐 Modalita' Ibrida VPS+Mac (ADR 0051)
+La codebase oggi assume che runtime live, DB, filesystem asset e modelli AI siano sulla stessa macchina. Per sostenere uno stream H24 su VPS senza saturare la macchina di regia, serve introdurre un confine formale tra orchestrazione live e generazione AI pesante.
+
+- [x] **Feature flag operativo:** aggiungere `NEWSICA_GENERATION_MODE=local|remote`, mantenendo `local` come default e baseline di regressione.
+- [x] **Contratto unico di generazione:** introdurre un `GenerationClient` condiviso per evitare due flussi paralleli da riallineare manualmente.
+- [x] **Adapter locale:** incapsulare il comportamento attuale in `LocalGenerationClient` senza cambiare output o stati.
+- [x] **Adapter remoto:** creare una coda job lato VPS e un worker co-located di sviluppo che esegue LLM/TTS/ACE-Step/rendering e restituisce asset validabili.
+- [ ] **Configurazione pubblicabile:** leggere ogni valore dinamico da environment/config privata (`NEWSICA_REMOTE_GENERATION_URL`, token, worker id, host SSH, utenti, porte, path remoti, polling, heartbeat). Nessun VPS, credenziale, stream key, username o path personale deve essere hardcoded.
+- [x] **Asset staging atomico:** caricare output remoti in `runtime/assets/incoming/{job_id}` e pubblicarli in `ready` solo dopo validazione manifest/file.
+- [x] **Dashboard e osservabilita':** esporre stato job, worker heartbeat, errori, deadline e fallback senza confondere job remoti con asset pronti.
+- [x] **Trasporto Mac-VPS:** implementare API HTTP per claim, heartbeat, uploading, ready e failed mantenendo il DB come fonte di verita' lato VPS.
+- [x] **Upload Mac-VPS:** implementare trasferimento file reale via HTTP multipart, con validazione manifest e pubblicazione atomica lato VPS.
+- [x] **Hardening produzione minimo:** aggiungere limite upload configurabile, summary API, cleanup staging `incoming` e retention configurabile.
+- [ ] **Hardening produzione avanzato:** decidere reverse proxy/TLS, autenticazione operativa ruotabile, metriche worker persistenti e strategia rsync/SFTP opzionale per artifact grandi.
+- [ ] **Test regressivi:** coprire modalita' locale invariata, worker fake remoto, claim concorrente, job stale, upload incompleto, manifest mismatch e fallback per deadline scaduta.
+
 ### 🐕 Conflitto tra Daemon System-Level (launchd) e Script di Gestione (manage.sh)
 - [x] **Debito Risolto (2026-05-20):** La presenza di file plist ereditati/sperimentali in `.agents/launchd/` caricati nel database `launchd` di macOS generava istanze duplicate della Regia e dello Streamer ogni 10 secondi (con `Parent PID: 1`). Queste istanze entravano in collisione con quelle ufficiali lanciate da `./manage.sh` tramite `watchdog.sh`, riempiendo `director.log` di errori di singleton.
 - [ ] **Linee Guida Future:** 

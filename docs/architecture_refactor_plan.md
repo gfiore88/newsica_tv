@@ -144,6 +144,26 @@ Rischio medio: da fare quando le fasi precedenti sono stabili.
 
 Rischio basso-medio: tocca molti agenti periferici ma stabilizza enormemente i conflitti I/O.
 
+### Fase 6 - Confine di generazione locale/remota
+
+Obiettivo: permettere sia il funzionamento full local sia un deployment ibrido VPS+Mac senza creare due pipeline da mantenere in parallelo.
+
+- [x] Introdurre `NEWSICA_GENERATION_MODE=local|remote`, con default `local`.
+- [x] Estrarre un contratto applicativo unico per la generazione contenuti (`GenerationClient` o equivalente).
+- [x] Far dipendere `preparation_agent.py` dal contratto, non direttamente dai dettagli di `AIIntegratorAgent`, TTS o worker musica AI.
+- [x] Implementare `LocalGenerationClient` come adapter del comportamento attuale.
+- [x] Progettare `RemoteGenerationClient` come adapter verso una coda job gestita dal VPS.
+- [ ] Leggere URL, token, worker id, host SSH, path remoti, polling e heartbeat solo da environment/config privata; niente valori personali o credenziali hardcoded nel codice.
+- [x] Aggiungere repository `generation_jobs` con claim atomico, heartbeat, recovery stale e stati `pending/claimed/running/uploading/ready/failed/expired`.
+- [x] Aggiungere worker co-located di sviluppo (`src/generation_worker.py`) avviabile in modalita' `remote`.
+- [x] Validare sempre gli asset remoti in staging prima del move atomico in `runtime/assets/ready`.
+- [x] Implementare trasporto HTTP Mac-VPS per claim, heartbeat e complete/fail sopra lo stesso contratto job.
+- [x] Implementare upload asset Mac-VPS via HTTP multipart e pubblicazione atomica lato VPS.
+- [ ] Valutare trasporto alternativo rsync/SFTP per artifact molto grandi o reti instabili.
+- [ ] Mantenere la regia indipendente dal Mac: il Director legge solo asset `ready` e usa fallback se un job non rispetta la deadline.
+
+Rischio medio: non deve cambiare la continuita' live. La prima implementazione deve essere documentale/strutturale e protetta da feature flag, poi testata su `ai_music` prima dei blocchi parlati.
+
 ## Quando usare agenti specializzati
 
 Ha senso coinvolgerli dopo la Fase 1, quando il lavoro e' divisibile in ownership precise:

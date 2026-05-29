@@ -3,10 +3,21 @@ import os
 import signal
 import subprocess
 import time
+from pathlib import Path
 
 from flask import jsonify, request, send_file
+from werkzeug.utils import secure_filename
 
+from newsica.generation.artifacts import (
+    cleanup_incoming_artifacts,
+    publish_ai_music_artifact,
+    publish_slot_audio_artifact,
+    runtime_assets_dir,
+    validate_slot_audio_artifact,
+)
 from newsica.storage.repositories.ai_music_jobs_repository import enqueue_job
+from newsica.storage.repositories.generation_jobs_repository import list_jobs as list_generation_jobs
+from newsica.storage.repositories import generation_jobs_repository
 
 
 def _find_pids(patterns):
@@ -81,7 +92,30 @@ def _restart_service(name, services, *, base_dir, tmp_dir):
     return pids
 
 
+def _generation_api_authorized():
+    expected = os.getenv("NEWSICA_REMOTE_GENERATION_TOKEN", "").strip()
+    if not expected:
+        return False, ("NEWSICA_REMOTE_GENERATION_TOKEN non configurato", 503)
+    auth_header = request.headers.get("Authorization", "")
+    bearer = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else ""
+    token = request.headers.get("X-Newsica-Generation-Token", "").strip() or bearer
+    if token != expected:
+        return False, ("token generazione remoto non valido", 401)
+    return True, None
+
+
+def _require_generation_api_token():
+    ok, error = _generation_api_authorized()
+    if ok:
+        return None
+    message, status_code = error
+    return jsonify({"status": "ERROR", "message": message}), status_code
+
+
 def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python):
+    max_upload_mb = int(os.getenv("NEWSICA_REMOTE_MAX_UPLOAD_MB", "512"))
+    app.config["MAX_CONTENT_LENGTH"] = max_upload_mb * 1024 * 1024
+
     @app.route('/api/music_gen', methods=['POST'])
     def trigger_music_gen():
         """Accoda una generazione musicale AI e assicura il worker persistente."""
@@ -101,6 +135,187 @@ def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python)
             return jsonify({"status": "OK", "message": f"Worker già impegnato sul job {job['id']}."})
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route('/api/generation/jobs', methods=['GET'])
+    def get_generation_jobs():
+        try:
+            status = request.args.get("status") or None
+            limit = int(request.args.get("limit", "50"))
+            limit = max(1, min(limit, 200))
+            return jsonify({
+                "status": "OK",
+                "jobs": list_generation_jobs(status=status, limit=limit),
+            })
+        except Exception as e:
+            return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+    @app.route('/api/generation/summary', methods=['GET'])
+    def get_generation_summary():
+        try:
+            return jsonify({
+                "status": "OK",
+                "summary": generation_jobs_repository.get_summary(),
+                "max_upload_mb": int(app.config.get("MAX_CONTENT_LENGTH", 0) / 1024 / 1024),
+            })
+        except Exception as e:
+            return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+    @app.route('/api/generation/incoming/cleanup', methods=['POST'])
+    def cleanup_generation_incoming():
+        auth_error = _require_generation_api_token()
+        if auth_error:
+            return auth_error
+        older_than_seconds = int(
+            (request.json or {}).get(
+                "older_than_seconds",
+                os.getenv("NEWSICA_REMOTE_INCOMING_RETENTION_SECONDS", "86400"),
+            )
+        )
+        removed = cleanup_incoming_artifacts(older_than_seconds=older_than_seconds)
+        return jsonify({"status": "OK", "removed": removed})
+
+    @app.route('/api/generation/jobs/claim', methods=['POST'])
+    def claim_generation_job():
+        auth_error = _require_generation_api_token()
+        if auth_error:
+            return auth_error
+        data = request.json or {}
+        worker_id = str(data.get("worker_id") or "").strip()
+        if not worker_id:
+            return jsonify({"status": "INVALID", "message": "worker_id richiesto"}), 400
+        job_types = data.get("job_types")
+        if job_types is not None and not isinstance(job_types, list):
+            return jsonify({"status": "INVALID", "message": "job_types deve essere una lista"}), 400
+        job = generation_jobs_repository.claim_next_job(worker_id, job_types=job_types)
+        return jsonify({"status": "OK", "job": job})
+
+    @app.route('/api/generation/jobs/<job_id>/running', methods=['POST'])
+    def mark_generation_job_running(job_id):
+        auth_error = _require_generation_api_token()
+        if auth_error:
+            return auth_error
+        worker_id = str((request.json or {}).get("worker_id") or "").strip()
+        if not worker_id:
+            return jsonify({"status": "INVALID", "message": "worker_id richiesto"}), 400
+        return jsonify({"status": "OK", "job": generation_jobs_repository.mark_running(job_id, worker_id)})
+
+    @app.route('/api/generation/jobs/<job_id>/heartbeat', methods=['POST'])
+    def heartbeat_generation_job(job_id):
+        auth_error = _require_generation_api_token()
+        if auth_error:
+            return auth_error
+        worker_id = str((request.json or {}).get("worker_id") or "").strip()
+        if not worker_id:
+            return jsonify({"status": "INVALID", "message": "worker_id richiesto"}), 400
+        return jsonify({"status": "OK", "job": generation_jobs_repository.heartbeat(job_id, worker_id)})
+
+    @app.route('/api/generation/jobs/<job_id>/uploading', methods=['POST'])
+    def mark_generation_job_uploading(job_id):
+        auth_error = _require_generation_api_token()
+        if auth_error:
+            return auth_error
+        data = request.json or {}
+        worker_id = str(data.get("worker_id") or "").strip()
+        if not worker_id:
+            return jsonify({"status": "INVALID", "message": "worker_id richiesto"}), 400
+        return jsonify({
+            "status": "OK",
+            "job": generation_jobs_repository.mark_uploading(
+                job_id,
+                worker_id,
+                artifact_manifest=data.get("artifact_manifest"),
+            ),
+        })
+
+    @app.route('/api/generation/jobs/<job_id>/artifact', methods=['POST'])
+    def upload_generation_job_artifact(job_id):
+        auth_error = _require_generation_api_token()
+        if auth_error:
+            return auth_error
+        worker_id = str(request.form.get("worker_id") or "").strip()
+        if not worker_id:
+            return jsonify({"status": "INVALID", "message": "worker_id richiesto"}), 400
+        job = generation_jobs_repository.get_job(job_id)
+        if not job:
+            return jsonify({"status": "ERROR", "message": "job non trovato"}), 404
+        if job.get("worker_id") != worker_id:
+            return jsonify({"status": "ERROR", "message": "worker non proprietario del job"}), 409
+
+        try:
+            manifest = json.loads(request.form.get("manifest_json") or "{}")
+        except Exception as e:
+            return jsonify({"status": "INVALID", "message": f"manifest_json non valido: {e}"}), 400
+
+        incoming_dir = runtime_assets_dir() / "incoming" / job_id
+        incoming_dir.mkdir(parents=True, exist_ok=True)
+        (incoming_dir / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        for uploaded_file in request.files.getlist("files"):
+            filename = secure_filename(uploaded_file.filename or "")
+            if not filename:
+                continue
+            uploaded_file.save(incoming_dir / filename)
+
+        if job.get("job_type") == "slot_audio":
+            expected = {
+                "slot_time": job.get("slot_time"),
+                "character": job.get("character"),
+                "title": job.get("title"),
+            }
+            validated_manifest = validate_slot_audio_artifact(incoming_dir, expected)
+            ready_dir = publish_slot_audio_artifact(
+                incoming_dir,
+                job.get("slot_time") or validated_manifest.get("slot_time"),
+            )
+            artifact_manifest = dict(validated_manifest)
+            artifact_manifest["ready_dir"] = str(ready_dir)
+        elif job.get("job_type") == "ai_music":
+            target_audio = publish_ai_music_artifact(incoming_dir)
+            artifact_manifest = dict(manifest)
+            artifact_manifest["audio_path"] = str(target_audio)
+            artifact_manifest["audio_file"] = target_audio.name
+        else:
+            return jsonify({"status": "INVALID", "message": f"job_type non supportato: {job.get('job_type')}"}), 400
+
+        return jsonify({"status": "OK", "artifact_manifest": artifact_manifest})
+
+    @app.route('/api/generation/jobs/<job_id>/ready', methods=['POST'])
+    def mark_generation_job_ready(job_id):
+        auth_error = _require_generation_api_token()
+        if auth_error:
+            return auth_error
+        data = request.json or {}
+        worker_id = str(data.get("worker_id") or "").strip()
+        if not worker_id:
+            return jsonify({"status": "INVALID", "message": "worker_id richiesto"}), 400
+        return jsonify({
+            "status": "OK",
+            "job": generation_jobs_repository.mark_ready(
+                job_id,
+                worker_id,
+                artifact_manifest=data.get("artifact_manifest"),
+            ),
+        })
+
+    @app.route('/api/generation/jobs/<job_id>/failed', methods=['POST'])
+    def mark_generation_job_failed(job_id):
+        auth_error = _require_generation_api_token()
+        if auth_error:
+            return auth_error
+        data = request.json or {}
+        worker_id = str(data.get("worker_id") or "").strip()
+        if not worker_id:
+            return jsonify({"status": "INVALID", "message": "worker_id richiesto"}), 400
+        return jsonify({
+            "status": "OK",
+            "job": generation_jobs_repository.mark_failed(
+                job_id,
+                worker_id,
+                data.get("error") or "errore remoto non specificato",
+            ),
+        })
 
     @app.route('/api/service/restart', methods=['POST'])
     def restart_service_route():

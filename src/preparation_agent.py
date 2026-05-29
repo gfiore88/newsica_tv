@@ -11,9 +11,8 @@ sys.path.append(str(BASE_DIR))
 
 # Agents
 from newsica.agents.content_strategist import ContentStrategistAgent
-from newsica.agents.ai_integrator import AIIntegratorAgent
 from newsica.agents.system_admin import SystemAdminAgent, ASSETS_DIR
-from newsica.audio.ai_music_runtime import schedule_rotation_fill_job
+from newsica.generation import GenerationDeferred, get_generation_client
 from newsica.audio.music_library import DEFAULT_THEMED_MIN_TRACKS, MusicLibrary
 from newsica.storage.repositories.ai_music_jobs_repository import count_active_jobs
 from newsica.shorts.plan_executor import process_one_planned_short_item
@@ -77,10 +76,11 @@ def is_complex_block(character):
     return True
 
 
-def ensure_theme_music_ready(theme):
+def ensure_theme_music_ready(theme, generation_client=None):
     normalized_theme = " ".join(str(theme or "").strip().lower().split())
     if not normalized_theme:
         return
+    generation_client = generation_client or get_generation_client()
 
     library = MusicLibrary()
     ready_count = library.count_ai_tracks_for_theme(normalized_theme)
@@ -91,7 +91,7 @@ def ensure_theme_music_ready(theme):
         return
 
     for _ in range(missing):
-        job, created = schedule_rotation_fill_job("preparation_agent", theme=normalized_theme)
+        job, created = generation_client.schedule_ai_music("preparation_agent", theme=normalized_theme)
         if created:
             print(
                 f"🎸 [PreparationAgent] Accodato job musica tematica per theme='{normalized_theme}' "
@@ -106,6 +106,7 @@ def run_loop():
     
     strategist = ContentStrategistAgent()
     sysadmin = SystemAdminAgent()
+    generation_client = get_generation_client()
     shorts_generation_lead_minutes = int(os.getenv("SHORTS_GENERATION_LEAD_MINUTES", "90"))
 
     # Al boot: puliamo le cartelle "preparing" orfane, MA preserviamo quelle
@@ -172,7 +173,7 @@ def run_loop():
                     and current_state.get("current_block") == "music_only"
                     and current_state.get("theme")
                 ):
-                    ensure_theme_music_ready(current_state.get("theme"))
+                    ensure_theme_music_ready(current_state.get("theme"), generation_client=generation_client)
             except Exception as e:
                 print(f"⚠️ [PreparationAgent] Errore controllo tema corrente live: {e}")
 
@@ -195,7 +196,7 @@ def run_loop():
                 if is_complex_block(character):
                     theme = block_info.get("theme")
                     if character == "music_only" and theme:
-                        ensure_theme_music_ready(theme)
+                        ensure_theme_music_ready(theme, generation_client=generation_client)
 
                     # Richiediamo lo spazio di lavoro al SysAdmin
                     preparing_dir, status = sysadmin.prepare_slot(slot_time, character=character, title=title)
@@ -208,10 +209,11 @@ def run_loop():
                         # Fase 1: Strategia e Contenuto
                         content_data = strategist.prepare_content(character, title, theme=theme)
                         
-                        # Fase 2: Integrazione AI (LLM -> TTS -> Audio) - Usiamo la cartella di preparazione isolata
-                        slot_integrator = AIIntegratorAgent(work_dir=preparing_dir)
-                        script_text = slot_integrator.generate_script(content_data)
-                        audio_files = slot_integrator.generate_audio(script_text, content_data)
+                        # Fase 2: generazione tramite contratto unico local/remote.
+                        content_data["slot_time"] = slot_time
+                        content_data["theme"] = theme
+                        generation_result = generation_client.generate_slot_audio(content_data, preparing_dir)
+                        audio_files = generation_result.audio_files
                         
                         if not audio_files:
                             raise RuntimeError("Nessun file audio prodotto dall'Integrator.")
@@ -229,6 +231,11 @@ def run_loop():
                             },
                         )
                         
+                    except GenerationDeferred as e:
+                        print(
+                            f"📡 [PreparationAgent] Generazione remota accodata per slot {slot_time}: "
+                            f"job={e.job.get('id')}"
+                        )
                     except Exception as e:
                         sysadmin.fail_slot(slot_time, preparing_dir, error=str(e))
 

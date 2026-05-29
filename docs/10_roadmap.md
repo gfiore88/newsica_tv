@@ -69,6 +69,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 ## MVP 4 — Automazione Editoriale e Strumenti di Regia
 **Obiettivo:** Aumentare il ritmo e l'affidabilità con controlli locali e archiviazione.
 - [x] **Pre-Produzione Multi-Agente (ADR 0027)**: Introdotto Content Buffer, PreparationAgent e classi Agente (Strategist, Integrator, SysAdmin) per disaccoppiare generazione e messa in onda.
+- [ ] **Modalita' Ibrida VPS+Mac (ADR 0051)**: mantenere la regia, DB, dashboard e stream sul VPS, spostando i workload AI pesanti su un Mac worker comandato a job tramite `NEWSICA_GENERATION_MODE=local|remote`. La pipeline deve restare unica tramite adapter `GenerationClient`, evitando drift tra full local e deployment ibrido.
 - [x] **Riepilogo in 60 Secondi**: Bollettino orario rotante (es. "Mondo in 60 secondi", "Sport Flash") per dare la sensazione di un canale live costante. (Implementato in `flash_60s.md`)
 - [x] **Ingestion Musica Esterna a Licenza Verificata**: Studiare e integrare una API gratuita per scaricare brani in `assets/music/`, con filtro licenze, download consentito e manifest per ogni file. (Implementato via Jamendo CC-BY in `chart_importer.py`)
 - [x] **Readiness Musica Tematica (ADR 0047)**: Gli slot `music_only` con `theme` ora pre-accodano brani AI coerenti e degradano a titolo generico se il catalogo tematico minimo non e' pronto.

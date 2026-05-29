@@ -6,6 +6,8 @@ Il progetto segue due vincoli fondamentali:
 1. **Zero Costi**: Nessun utilizzo di API a pagamento o servizi Cloud (es. OpenAI, ElevenLabs).
 2. **Local-First**: Tutti i processi (scraping, LLM per rielaborazione testi, TTS, mix audio e regia video) devono girare localmente sulla macchina host.
 
+Il codice deve restare pubblicabile e riusabile: credenziali, stream key, URL VPS, token, host SSH, username, path assoluti di produzione e qualunque valore personale devono stare in `.env` o in configurazioni private escluse dal repository. Non vanno hardcodati nel codice.
+
 ## ✅ Disciplina Test
 
 Per NewsicaTV i test non sono opzionali.
@@ -51,6 +53,44 @@ Il sistema include un Bot Telegram interattivo per creare engagement reale con i
 Per riempire in modo creativo ed esente da copyright i momenti di silenzio o di attesa tra i programmi, il sistema integra un worker locale per la musica generativa AI (`newsica-ai-music-worker`). Questo genera tracce procedurali direttamente in locale senza costi e senza alcun rischio di strike Content ID su YouTube.
 
 La rotazione musicale live mantiene anche una memoria persistente degli ultimi brani mandati in onda in `runtime/music_rotation_history.json`, cosi' la regia evita ripetizioni troppo ravvicinate anche dopo restart tecnici. La finestra recente e' regolabile via `MUSIC_ROTATION_RECENT_WINDOW` (default `8`).
+
+### 🧠 Generazione Contenuti Local/Remote (`NEWSICA_GENERATION_MODE`)
+La pipeline di pre-produzione passa da un contratto unico di generazione, così il comportamento full local resta il default e un futuro deployment ibrido VPS+Mac potrà usare adapter remoti senza duplicare la logica editoriale.
+
+Configurazione attuale:
+```bash
+NEWSICA_GENERATION_MODE=local
+```
+
+La modalità `remote` è riservata all'implementazione ADR 0051 e richiederà variabili private come `NEWSICA_REMOTE_GENERATION_URL`, `NEWSICA_REMOTE_GENERATION_TOKEN`, worker id, polling, heartbeat e parametri di trasporto. Questi valori devono restare fuori dal codice e dal repository pubblico.
+
+Variabili operative previste:
+```bash
+NEWSICA_GENERATION_MODE=local
+NEWSICA_REMOTE_GENERATION_QUEUE=sqlite
+NEWSICA_REMOTE_WORKER_TRANSPORT=sqlite
+NEWSICA_REMOTE_GENERATION_URL=https://vps.example.invalid
+NEWSICA_REMOTE_GENERATION_TOKEN=...
+NEWSICA_REMOTE_WORKER_ID=mac-worker-1
+NEWSICA_REMOTE_POLL_SECONDS=10
+NEWSICA_REMOTE_IDLE_POLL_SECONDS=30
+NEWSICA_REMOTE_STALE_SECONDS=300
+NEWSICA_REMOTE_MAX_UPLOAD_MB=512
+NEWSICA_REMOTE_INCOMING_RETENTION_SECONDS=86400
+NEWSICA_RUNTIME_ASSETS_DIR=/opt/newsica/runtime/assets
+```
+
+In modalita' `remote`, `./manage.sh start` avvia anche `src/generation_worker.py`. Il worker supporta `NEWSICA_REMOTE_WORKER_TRANSPORT=sqlite` per sviluppo co-located e `NEWSICA_REMOTE_WORKER_TRANSPORT=http` per polling verso le API del VPS. Il token remoto deve essere configurato in env e inviato come Bearer token; non esistono credenziali di default nel codice.
+
+Il trasporto HTTP remoto include anche upload multipart degli artifact verso il VPS:
+- `slot_audio`: upload in `runtime/assets/incoming/{job_id}`, validazione manifest, pubblicazione atomica in `runtime/assets/ready/{slot_id}`;
+- `ai_music`: upload in staging e pubblicazione in `runtime/assets/ai_music`.
+
+Il VPS non considera un artifact pronto finche' manifest e file non sono stati validati.
+
+La Dashboard espone anche:
+- `GET /api/generation/summary` per conteggi, worker attivi e ultimi job;
+- `POST /api/generation/incoming/cleanup` per pulire staging vecchi, protetto dallo stesso token remoto.
 
 ### 🎛️ Director Runtime & Playout Events
 La regia live usa ora un solo protocollo interno: il `DirectorAgent` restituisce esclusivamente `PlayoutEvent` tipizzati, che `src/director.py` esegue sequenzialmente tramite un runtime unico.

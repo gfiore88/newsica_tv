@@ -7,6 +7,11 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="$BASE_DIR/runtime"
 TMP_DIR="$BASE_DIR/tmp"
 VENV_PYTHON="$BASE_DIR/venv/bin/python3"
+if [ -f "$BASE_DIR/.env" ]; then
+  set -a
+  . "$BASE_DIR/.env"
+  set +a
+fi
 
 # Colori per output premium
 RED='\033[0;31m'
@@ -88,6 +93,9 @@ function do_status() {
   check_status "Chime Agent" "src/hourly_chime_agent.py"
   check_status "Preparation Agent" "src/preparation_agent.py"
   check_status "AI Music Worker" "src/newsica/audio/ai_music_worker.py"
+  if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ]; then
+    check_status "Generation Worker" "src/generation_worker.py"
+  fi
   check_status "Breaking News Daemon" "src/breaking_news_agent.py --daemon"
   check_status "Telegram Agent" "src/telegram_agent.py"
   check_status "Watchdog" "src/watchdog.sh"
@@ -123,7 +131,7 @@ function do_stop() {
   fi
 
   # Invia SIGTERM ordinato a Regia, Dashboard e Stream
-  local targets=("src/director.py" "src/preparation_agent.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py")
+  local targets=("src/director.py" "src/preparation_agent.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py" "src/generation_worker.py")
   if [ "$exclude_telegram" = false ]; then
     targets+=("src/telegram_agent.py")
   fi
@@ -154,7 +162,7 @@ function do_stop() {
   done
 
   # Chiude eventuali sessioni screen create da manage.sh start.
-  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker" "newsica-ticker" "newsica-overlay" "newsica-chime" "newsica-bn-daemon" "newsica-caffeinate")
+  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker" "newsica-generation-worker" "newsica-preparation" "newsica-ticker" "newsica-overlay" "newsica-chime" "newsica-bn-daemon" "newsica-caffeinate")
   if [ "$exclude_telegram" = false ]; then
     screens+=("newsica-telegram")
   fi
@@ -236,6 +244,17 @@ function do_start() {
     sleep 2
   else
     echo "  [i] AI Music Worker già attivo."
+  fi
+
+  # 5.2 Avvia il worker generico di generazione solo in modalita' remota.
+  if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ]; then
+    if [ -z "$(get_pid "src/generation_worker.py")" ]; then
+      echo "  -> Avvio Generation Worker remoto..."
+      screen -dmS newsica-generation-worker bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/generation_worker.py' > '$TMP_DIR/generation_worker.log' 2>&1"
+      sleep 1
+    else
+      echo "  [i] Generation Worker già attivo."
+    fi
   fi
 
   # 5.5 Avvia gli agenti di supporto allo stream

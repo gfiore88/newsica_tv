@@ -74,6 +74,12 @@ SERVICES = {
         "command": [ACE_STEP_PYTHON, "-u", os.path.join(BASE_DIR, "src", "newsica", "audio", "ai_music_worker.py")],
         "log": os.path.join(TMP_DIR, "ai_music_worker.log"),
     },
+    "generation_worker": {
+        "label": "Generation Worker",
+        "patterns": [r"src/generation_worker\.py"],
+        "command": [PYTHON_EXEC, "-u", os.path.join(BASE_DIR, "src", "generation_worker.py")],
+        "log": os.path.join(TMP_DIR, "generation_worker.log"),
+    },
     "telegram_agent": {
         "label": "Telegram Bot",
         "patterns": [r"src/telegram_agent\.py"],

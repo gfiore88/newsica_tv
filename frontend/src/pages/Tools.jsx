@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { FileAudio, Music, MessageSquare, Play, Check, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { FileAudio, Music, MessageSquare, Play, Check, X, Cpu, RefreshCw, Server } from 'lucide-react'
 import { useDialog } from '../context/DialogContext'
 
 export default function Tools() {
@@ -11,6 +11,12 @@ export default function Tools() {
   const [musicMode, setMusicMode] = useState({ mode: 'mixed', counts: {} })
   const [telegramVoices, setTelegramVoices] = useState([])
   const [aiJobs, setAiJobs] = useState([])
+  const [generationSummary, setGenerationSummary] = useState({
+    counts: {},
+    active_workers: [],
+    latest_jobs: [],
+  })
+  const [generationMaxUploadMb, setGenerationMaxUploadMb] = useState(0)
   const { showAlert } = useDialog()
 
   useEffect(() => {
@@ -18,17 +24,22 @@ export default function Tools() {
     fetchManualFormats()
     fetchTelegramVoices()
     fetchAiJobs()
+    fetchGenerationSummary()
     const telegramInterval = setInterval(fetchTelegramVoices, 10000)
     const jobsInterval = setInterval(fetchAiJobs, 10000)
+    const generationInterval = setInterval(fetchGenerationSummary, 10000)
     return () => {
       clearInterval(telegramInterval)
       clearInterval(jobsInterval)
+      clearInterval(generationInterval)
     }
+    // Initial dashboard polling only; fetch functions are declarations and do not capture mutable request state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const selectedFormat = manualFormats.find((item) => item.id === selectedFormatId) || null
 
-  const fetchManualFormats = async () => {
+  async function fetchManualFormats() {
     try {
       const res = await fetch('/api/manual-event-formats')
       if (!res.ok) return
@@ -38,14 +49,18 @@ export default function Tools() {
       if (formats.length > 0 && !formats.some((item) => item.id === selectedFormatId)) {
         setSelectedFormatId(formats[0].id)
       }
-    } catch (e) {}
+    } catch (error) {
+      console.error(error)
+    }
   }
 
-  const fetchMusicMode = async () => {
+  async function fetchMusicMode() {
     try {
       const res = await fetch('/api/music_mode')
       if (res.ok) setMusicMode(await res.json())
-    } catch (e) {}
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   const changeMusicMode = async (mode) => {
@@ -56,7 +71,9 @@ export default function Tools() {
         body: JSON.stringify({ mode })
       })
       if (res.ok) setMusicMode(await res.json())
-    } catch (e) {}
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   const triggerMusicGen = async () => {
@@ -98,38 +115,58 @@ export default function Tools() {
       } else {
         await showAlert(data.message || 'Errore nella generazione del format.', 'Errore Server')
       }
-    } catch (e) {
+    } catch (error) {
+      console.error(error)
       await showAlert('Errore nell\'invio della richiesta.', 'Errore Rete')
     } finally {
       setManualLoading(false)
     }
   }
 
-  const fetchTelegramVoices = async () => {
+  async function fetchTelegramVoices() {
     try {
       const res = await fetch('/api/telegram-voices')
       if (res.ok) {
         const data = await res.json()
         setTelegramVoices(data.voices || [])
       }
-    } catch (e) {}
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   const handleTgVoice = async (id, action) => {
     try {
       await fetch(`/api/telegram-voices/${action}/${id}`, { method: 'POST' })
       fetchTelegramVoices()
-    } catch (e) {}
+    } catch (error) {
+      console.error(error)
+    }
   }
 
-  const fetchAiJobs = async () => {
+  async function fetchAiJobs() {
     try {
       const res = await fetch('/api/ai_music_jobs')
       if (res.ok) {
         const data = await res.json()
         setAiJobs(data.jobs || [])
       }
-    } catch (e) {}
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  async function fetchGenerationSummary() {
+    try {
+      const res = await fetch('/api/generation/summary')
+      if (res.ok) {
+        const data = await res.json()
+        setGenerationSummary(data.summary || { counts: {}, active_workers: [], latest_jobs: [] })
+        setGenerationMaxUploadMb(data.max_upload_mb || 0)
+      }
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   const formatAiJobLabel = (job) => {
@@ -140,6 +177,19 @@ export default function Tools() {
       return `${title} (${shortId})`
     }
     return shortId
+  }
+
+  const generationCounts = generationSummary.counts || {}
+  const generationWorkers = generationSummary.active_workers || []
+  const generationJobs = generationSummary.latest_jobs || []
+  const generationTotal = Object.values(generationCounts).reduce((sum, value) => sum + Number(value || 0), 0)
+  const statusClass = (status) => {
+    const normalized = (status || '').toLowerCase()
+    if (normalized === 'ready' || normalized === 'done' || normalized === 'completed') return 'bg-green-900/30 text-green-400 border-green-500/30'
+    if (normalized === 'failed' || normalized === 'expired') return 'bg-red-900/30 text-red-400 border-red-500/30'
+    if (normalized === 'running' || normalized === 'uploading') return 'bg-sky-900/30 text-sky-300 border-sky-500/30'
+    if (normalized === 'claimed') return 'bg-purple-900/30 text-purple-300 border-purple-500/30'
+    return 'bg-amber-900/30 text-amber-400 border-amber-500/30'
   }
 
   return (
@@ -321,6 +371,108 @@ export default function Tools() {
               </div>
             ))
           )}
+        </div>
+      </div>
+
+      <div className="glass rounded-xl p-6 border border-indigo-900/50 flex flex-col lg:col-span-2">
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <div>
+            <h2 className="text-sm uppercase tracking-widest text-indigo-300 font-bold flex items-center gap-2 mb-2">
+              <Cpu size={18} /> Generation Queue
+            </h2>
+            <div className="text-xs text-slate-400">
+              Job remoti/co-located per audio slot, musica AI e artifact validati.
+            </div>
+          </div>
+          <button
+            onClick={fetchGenerationSummary}
+            className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-indigo-500 transition"
+            title="Aggiorna"
+          >
+            <RefreshCw size={15} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-5">
+          {['pending', 'claimed', 'running', 'uploading', 'ready', 'failed', 'expired'].map((status) => (
+            <div key={status} className="bg-slate-900/70 border border-slate-800 rounded-lg px-3 py-3">
+              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">{status}</div>
+              <div className="text-xl font-black text-slate-100">{generationCounts[status] || 0}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[0.8fr_1.2fr] gap-4">
+          <div className="bg-slate-900/70 border border-slate-800 rounded-lg p-4 min-h-[180px]">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-2">
+                <Server size={14} /> Worker attivi
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono">Max upload {generationMaxUploadMb || '--'} MB</span>
+            </div>
+            {generationWorkers.length === 0 ? (
+              <div className="text-sm text-slate-500 py-8 text-center">
+                Nessun worker remoto attivo.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {generationWorkers.map((worker) => (
+                  <div key={worker.worker_id} className="flex items-center justify-between gap-3 rounded border border-slate-800 bg-slate-950/60 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-slate-200 truncate">{worker.worker_id}</div>
+                      <div className="text-[11px] text-slate-500 truncate">{worker.last_heartbeat_at || 'heartbeat non disponibile'}</div>
+                    </div>
+                    <span className="text-xs font-mono text-indigo-300">{worker.active_jobs || 0} job</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-slate-900/70 border border-slate-800 rounded-lg overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+                Ultimi job
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono">{generationTotal} totali</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950/70 text-slate-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-4 py-2 font-bold">Job</th>
+                    <th className="px-4 py-2 font-bold">Tipo</th>
+                    <th className="px-4 py-2 font-bold">Titolo/tema</th>
+                    <th className="px-4 py-2 font-bold">Worker</th>
+                    <th className="px-4 py-2 font-bold">Stato</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {generationJobs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                        Nessun job di generazione registrato.
+                      </td>
+                    </tr>
+                  ) : (
+                    generationJobs.map((job) => (
+                      <tr key={job.id} className="hover:bg-slate-800/40">
+                        <td className="px-4 py-3 font-mono text-slate-400">{(job.id || '').slice(0, 8)}</td>
+                        <td className="px-4 py-3 text-slate-300">{job.job_type || '--'}</td>
+                        <td className="px-4 py-3 text-slate-300 max-w-[260px] truncate">{job.title || job.theme || job.source || '--'}</td>
+                        <td className="px-4 py-3 text-slate-400 max-w-[160px] truncate">{job.worker_id || '--'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${statusClass(job.status)}`}>
+                            {job.status || 'pending'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
