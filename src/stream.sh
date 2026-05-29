@@ -146,15 +146,20 @@ if [ "$STREAM_TEST_CARD" = "1" ]; then
   VIDEO_INPUT_ARGS=(-re -f lavfi -i "testsrc2=size=${STREAM_WIDTH}x${STREAM_HEIGHT}:rate=${STREAM_FPS}")
   FILTER='[0:v]setsar=1,format=yuv420p[bg]; [bg]drawbox=x=0:y=0:w=iw:h=90:color=black@0.75:t=fill[top]; [top]drawtext=text='"'"'NEWSICA TV TEST - SEGNALE VIDEO ATTIVO'"'"':fontfile=/System/Library/Fonts/Helvetica.ttc:fontcolor=white:fontsize=42:x=30:y=25[outv]'
 else
-  # Carichiamo il logo di sfondo a 1 FPS anziché a 25 FPS per risparmiare calcoli di scale/pad pesanti.
-  # Rimuoviamo -re per evitare colli di bottiglia nel demuxer di FFmpeg, la velocità è garantita in tempo reale dalle pipe live.
+  # Carichiamo lo splashscreen a 1 FPS per mantenere la retrocompatibilità degli indici degli input di FFmpeg
   VIDEO_INPUT_ARGS=(-framerate 1 -loop 1 -i "$LOGO_FILE")
 
-  # Rimuoviamo format=rgba,fps=25 dall'overlay in ingresso: la FIFO e' gia' in RGBA,
-  # e il filtro overlay ripete l'ultimo frame automaticamente (repeatlast=1).
-  # Una grana molto leggera evita che videotoolbox collassi a bitrate troppo bassi
-  # quando la scena e' quasi statica, migliorando l'aggancio di YouTube Live.
-  FILTER="[0:v]scale=${STREAM_WIDTH}:${STREAM_HEIGHT}:force_original_aspect_ratio=decrease,pad=${STREAM_WIDTH}:${STREAM_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=${STREAM_FPS}[bg]; [bg][1:v]overlay=0:0:format=auto[outv]"
+  NEWSICA_PRECOMPOSED_OVERLAY="${NEWSICA_PRECOMPOSED_OVERLAY:-1}"
+  if [ "$NEWSICA_PRECOMPOSED_OVERLAY" = "1" ] || [ "$NEWSICA_PRECOMPOSED_OVERLAY" = "true" ]; then
+    # L'Overlay Agent in Python pre-compone già lo splashscreen di sfondo con la grafica.
+    # Pertanto ignoriamo l'input 0 ([0:v]) e prendiamo direttamente l'overlay pre-composto ([1:v])
+    # convertendolo in YUV420P e allineandolo al framerate dello stream. Questo azzera l'uso CPU dei filtri FFmpeg!
+    FILTER="[1:v]format=yuv420p,fps=${STREAM_FPS}[outv]"
+  else
+    # Se il precomposing è disabilitato, usiamo il filtro legacy che effettua l'overlay in tempo reale in FFmpeg.
+    # Questo è più pesante sulla CPU ma supporta l'overlay trasparente puro gestito da FFmpeg.
+    FILTER="[0:v]scale=${STREAM_WIDTH}:${STREAM_HEIGHT}:force_original_aspect_ratio=decrease,pad=${STREAM_WIDTH}:${STREAM_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=${STREAM_FPS}[bg]; [bg][1:v]overlay=0:0:format=auto[outv]"
+  fi
 fi
 
 if [ "$STREAM_VIDEO_ENCODER" = "h264_videotoolbox" ]; then
@@ -242,9 +247,9 @@ while true; do
   $FFMPEG_CMD \
     -hide_banner -stats_period 5 \
     -progress "$PROGRESS_FILE" \
-    -thread_queue_size 4096 "${VIDEO_INPUT_ARGS[@]}" \
-    -thread_queue_size 128 -f rawvideo -pix_fmt rgba -s "${STREAM_WIDTH}x${STREAM_HEIGHT}" -r "$OVERLAY_FPS" -i "$OVERLAY_PIPE" \
-    -thread_queue_size 4096 -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
+    -thread_queue_size 64 "${VIDEO_INPUT_ARGS[@]}" \
+    -thread_queue_size 16 -f rawvideo -pix_fmt rgba -s "${STREAM_WIDTH}x${STREAM_HEIGHT}" -r "$OVERLAY_FPS" -i "$OVERLAY_PIPE" \
+    -thread_queue_size 256 -f s16le -ar 24000 -ac 1 -i "$AUDIO_FILE" \
     -filter_complex "$FILTER" \
     -map "[outv]" -map 2:a \
     "${VIDEO_CODEC_ARGS[@]}" \

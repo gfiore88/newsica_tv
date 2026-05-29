@@ -24,6 +24,52 @@ OVERLAY_FPS = int(os.getenv("OVERLAY_FPS", "25"))
 FRAME_INTERVAL = 1.0 / OVERLAY_FPS
 TICKER_FILE = os.path.join(TMP_DIR, "ticker.txt")
 
+SPLASHSCREEN_PATH = os.path.join(BASE_DIR, "assets", "splashscreen.png")
+SPLASHSCREEN_IMG = None
+
+
+def load_splashscreen():
+    global SPLASHSCREEN_IMG
+    if SPLASHSCREEN_IMG is not None:
+        return SPLASHSCREEN_IMG
+
+    try:
+        if os.path.exists(SPLASHSCREEN_PATH):
+            img = Image.open(SPLASHSCREEN_PATH).convert("RGBA")
+            if img.size != (WIDTH, HEIGHT):
+                img_ratio = img.width / img.height
+                target_ratio = WIDTH / HEIGHT
+                
+                if img_ratio > target_ratio:
+                    new_w = WIDTH
+                    new_h = int(WIDTH / img_ratio)
+                else:
+                    new_h = HEIGHT
+                    new_w = int(HEIGHT * img_ratio)
+                    
+                try:
+                    resampling = Image.Resampling.LANCZOS
+                except AttributeError:
+                    resampling = Image.LANCZOS
+                resized_img = img.resize((new_w, new_h), resampling)
+                
+                bg = Image.new("RGBA", (WIDTH, HEIGHT), (10, 17, 40, 255))
+                x_offset = (WIDTH - new_w) // 2
+                y_offset = (HEIGHT - new_h) // 2
+                bg.alpha_composite(resized_img, dest=(x_offset, y_offset))
+                SPLASHSCREEN_IMG = bg
+            else:
+                SPLASHSCREEN_IMG = img
+        else:
+            print(f"Warning: Splashscreen file not found at {SPLASHSCREEN_PATH}. Falling back to default dark background.")
+            SPLASHSCREEN_IMG = Image.new("RGBA", (WIDTH, HEIGHT), (10, 17, 40, 255))
+    except Exception as e:
+        print(f"Warning: failed to load splashscreen: {e}. Falling back to default dark background.")
+        SPLASHSCREEN_IMG = Image.new("RGBA", (WIDTH, HEIGHT), (10, 17, 40, 255))
+        
+    return SPLASHSCREEN_IMG
+
+
 
 def env_flag(name, default=False):
     value = os.getenv(name)
@@ -39,6 +85,7 @@ SHOW_SCHEDULE_TIMELINE = env_flag("NEWSICA_SHOW_SCHEDULE_TIMELINE", default=Fals
 SHOW_TICKER = env_flag("NEWSICA_SHOW_TICKER", default=False)
 ENABLE_COLOR_TICKER = env_flag("NEWSICA_ENABLE_COLOR_TICKER", default=False)
 TICKER_ANIMATION_FPS = int(os.getenv("NEWSICA_TICKER_ANIMATION_FPS", "10"))
+NEWSICA_PRECOMPOSED_OVERLAY = env_flag("NEWSICA_PRECOMPOSED_OVERLAY", default=True)
 
 COLORS_BY_BLOCK = {
     "breaking_news": (239, 68, 68, 230),
@@ -675,8 +722,12 @@ def draw_scrolling_ticker(image, accent, ticker_text):
 
 
 def build_static_overlay_frame(accent, current_program, music_visible, current_music_title, schedule_items):
-    image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
+    # Creiamo un canvas trasparente per i pannelli dell'overlay.
+    # In questo modo, disegnando i pannelli sopra questo overlay trasparente e poi
+    # fondendoli tramite alpha_composite sullo splashscreen, preserviamo perfettamente
+    # l'effetto translucido (glassmorphism/semi-trasparenza) dei pannelli!
+    overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
 
     if SHOW_ON_AIR_PANEL:
         draw_on_air_panel(draw, ON_AIR_BOX, current_program, accent)
@@ -691,7 +742,15 @@ def build_static_overlay_frame(accent, current_program, music_visible, current_m
 
     if SHOW_TICKER:
         draw.rectangle(TICKER_BOX, fill=(15, 23, 42, 184))
-    return image
+
+    if NEWSICA_PRECOMPOSED_OVERLAY:
+        # Fonde l'overlay sui pannelli sullo splashscreen di sfondo
+        image = load_splashscreen().copy()
+        image.alpha_composite(overlay)
+        return image
+    else:
+        # Ritorna l'overlay trasparente (il background splashscreen sarà gestito da FFmpeg)
+        return overlay
 
 
 def get_static_overlay_frame(accent, current_program, music_visible, current_music_title, schedule_items):
@@ -728,7 +787,7 @@ def get_clock_panel(now):
     if not SHOW_CLOCK_PANEL:
         return None
 
-    clock_key = now.strftime("%H:%M:%S")
+    clock_key = now.strftime("%H:%M")
     if _cached_clock_key != clock_key or _cached_clock_panel is None:
         x1, y1, x2, y2 = CLOCK_BOX
         panel = Image.new("RGBA", (x2 - x1, y2 - y1), (0, 0, 0, 0))
@@ -1018,7 +1077,7 @@ def render_worker():
             frame = render_frame().tobytes("raw", "RGBA")
             with frame_lock:
                 current_frame = frame
-            time.sleep(0.05)
+            time.sleep(FRAME_INTERVAL)
         except Exception as e:
             print(f"Errore render: {e}")
             time.sleep(1)
