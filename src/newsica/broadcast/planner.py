@@ -23,17 +23,35 @@ class PlayoutPlanner:
         Analizza il palinsesto e il manifest corrente per generare una sequenza di eventi.
         """
         events = []
+        ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot.replace(":", ""))
+        
+        # Check for Pre-Roll Meteo
+        meteo_file = os.path.join(ready_dir, "meteo.wav")
+        has_meteo_preroll = os.path.exists(meteo_file)
         
         # 1. Jingle d'apertura
         # Il segmento reale viene corretto più sotto nel caso in cui il blocco
         # non abbia audio pronto e debba cadere direttamente in rotazione musicale.
         jingle_file, jingle_label = get_jingle_for_block(block_type)
-        jingle_next_seg = "music_rotation" if block_type == "music_only" else "voice_part_1"
+        jingle_next_seg = "voice_meteo" if has_meteo_preroll else ("music_rotation" if block_type == "music_only" else "voice_part_1")
         opening_jingle = PlayJingleEvent(jingle_file, jingle_label, next_segment=jingle_next_seg)
         events.append(opening_jingle)
         
+        if has_meteo_preroll:
+            # Riproduciamo il meteo come pre-roll
+            meteo_music = self.music_selector(theme)
+            events.append(PlayVoiceMixEvent(
+                voice_file=meteo_file,
+                music_file=meteo_music,
+                character="meteo",
+                title="Meteo Flash",
+                segment="Pre-Roll Meteo",
+                next_segment="stacco_meteo"
+            ))
+            # Inseriamo un breve stacco musicale usando un jingle
+            events.append(PlayJingleEvent(self.classic_jingle, "stacco_meteo", next_segment="music_rotation" if block_type == "music_only" else "voice_part_1"))
+        
         if block_type == "music_only":
-            ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot.replace(":", ""))
             voice_file = os.path.join(ready_dir, "audio.wav")
             if os.path.exists(voice_file):
                 music_file = self.music_selector(theme)
@@ -51,7 +69,6 @@ class PlayoutPlanner:
             return events
 
         # 2. Leggi il manifest per il contenuto testuale dal DB
-        ready_dir = os.path.join(RUNTIME_DIR, "assets", "ready", scheduled_slot.replace(":", ""))
         voice_file = os.path.join(ready_dir, "audio.wav")
         
         manifest = {}

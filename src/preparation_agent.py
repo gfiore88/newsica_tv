@@ -212,6 +212,7 @@ def run_loop():
                         # Fase 2: generazione tramite contratto unico local/remote.
                         content_data["slot_time"] = slot_time
                         content_data["theme"] = theme
+                        content_data["with_meteo_intro"] = block_info.get("with_meteo_intro", False)
                         generation_result = generation_client.generate_slot_audio(content_data, preparing_dir)
                         audio_files = generation_result.audio_files
                         

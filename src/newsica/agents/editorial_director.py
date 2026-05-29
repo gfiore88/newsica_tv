@@ -28,10 +28,10 @@ class EditorialDirectorAgent:
         # Palinsesto di emergenza in caso di crash dell'LLM.
         self.fallback_schedule = {
             "00:00": {"title": "Newsica Night", "type": "music_only"},
-            "06:00": {"title": "Morning News", "type": "news"},
+            "06:00": {"title": "Morning News", "type": "news", "with_meteo_intro": True},
             "08:00": {"title": "Sport Flash", "type": "sport"},
             "09:00": {"title": "Mondo in 60 Secondi", "type": "flash_60s"},
-            "10:00": {"title": "Meteo Update", "type": "meteo"},
+            "10:00": {"title": "Mattina Live", "type": "news"},
             "12:00": {"title": "Pranzo News", "type": "news"},
             "14:00": {"title": "Pomeriggio Sport", "type": "sport"},
             "15:00": {"title": "Newsica Podcast", "type": "podcast"},
@@ -40,7 +40,7 @@ class EditorialDirectorAgent:
             "18:30": {"title": "Newsica Podcast", "type": "podcast"},
             "20:00": {"title": "Newsica Sera", "type": "news"},
             "21:00": {"title": "Newsica Podcast", "type": "podcast"},
-            "22:00": {"title": "Meteo Notte", "type": "meteo"},
+            "22:00": {"title": "Notte Live", "type": "news", "with_meteo_intro": True},
         }
 
         # Fallback ACE-Step più solido del vecchio prompt a tag.
@@ -203,6 +203,10 @@ low quality, distorted vocals, out of tune vocals, bad timing, messy mix, muddy 
             if title:
                 entry["title"] = title
             entry["type"] = block_type
+            
+            if raw_entry.get("with_meteo_intro"):
+                entry["with_meteo_intro"] = True
+                
             sanitized[slot_time] = entry
 
         return sanitized
@@ -223,19 +227,19 @@ REGOLE TASSATIVE:
 1. L'output DEVE ESSERE ESCLUSIVAMENTE codice JSON valido, senza blocchi markdown (no ```json), senza preamboli né spiegazioni.
 2. Le chiavi del JSON devono essere orari nel formato "HH:00" e coprire l'intera giornata in ordine cronologico.
 3. Le ore di inizio devono includere sempre "00:00" e spaziare fino alle "22:00" o "23:00". Fai slot di 1 o 2 ore. Non saltare troppe ore.
-4. I valori devono essere oggetti con le chiavi: "title" (titolo accattivante del programma), "type" (categoria) ed un'opzionale "theme" (tema musicale).
+4. I valori devono essere oggetti con le chiavi: "title" (titolo accattivante del programma), "type" (categoria), un'opzionale "theme" (tema musicale), e un'opzionale flag booleana "with_meteo_intro".
 
 FORMAT DISPONIBILI (Usa solo questi in "type"):
 - "news": Notiziario generale esteso
 - "sport": Notiziario sportivo
-- "meteo": Aggiornamento meteo
 - "wellness": Rubrica su salute/benessere
 - "motori": Rubrica su auto e motori
 - "podcast": Dialogo a due voci su un tema specifico
 - "flash_60s": Bollettino rapidissimo di 60 secondi (usalo come pillola a orari sparsi per dare imprevedibilità)
 - "music_only": Solo musica in background (utile di notte o in pausa pranzo o in diretta continuata)
 
-RUBRICHE TEMATICHE E COPERTURE MUSICALI:
+RUBRICHE TEMATICHE E METEO:
+- Per aggiungere il meteo al palinsesto NON USARE un type a parte, ma aggiungi `"with_meteo_intro": true` come opzione su un blocco "news", "podcast" o "music_only".
 - Per gli show di tipo "music_only", o anche in blocchi musicali specifici, puoi organizzare delle "rubriche" tematiche inserendo una chiave opzionale "theme" nell'oggetto del programma.
 - Valori possibili per "theme": "rock", "dance/disco", "latin/reggaeton/dembow", "synthwave", "lofi chill", "pop ballad".
 - Sii creativo! Ad esempio, puoi dedicare uno slot pomeridiano o serale di musica a un tema specifico (es. "theme": "rock" con titolo "Rock & Roll Arena", "theme": "dance/disco" con titolo "Newsica Club Fever", oppure "theme": "latin/reggaeton/dembow" con titolo "Baila Newsica").
@@ -244,7 +248,7 @@ LINEE GUIDA EDITORIALI PER IMPREVEDIBILITÀ:
 - Varia i titoli. Invece di "Pranzo News", inventa "Oggi alle 13", "Newsica Live", "Ultim'ora Flash".
 - Non mettere mai due "podcast" di fila.
 - Spargi 3-4 slot "flash_60s" in moments inaspettati (es. "11:00", "16:00", "23:00").
-- Garantisci almeno un "meteo" al mattino e uno la sera.
+- Garantisci almeno due programmi con `"with_meteo_intro": true` (es. uno al mattino e uno la sera).
 - Rendi ogni giorno diverso dal precedente, alternando rubriche tematiche e stili musicali.
 - Gli slot di tipo "news" sono edizioni generaliste, non rubriche monotematiche: i loro titoli devono suonare come un notiziario generale e non come focus verticali. Quindi NO titoli come "Focus Ambiente", "Affari e Mercati" o "Interviste Esclusive" per type "news".
 - Se vuoi un titolo fortemente tematico, usalo solo quando il formato supporta davvero quel focus (ad esempio "wellness", "motori", "podcast" o altri format dedicati), non per le edizioni news normali.
@@ -256,7 +260,7 @@ Copiali esattamente e aggiungi il resto del palinsesto creativo attorno ad essi:
 Esempio di struttura richiesta:
 {{
   "00:00": {{"title": "Night Vibes", "type": "music_only", "theme": "synthwave"}},
-  "07:00": {{"title": "Buongiorno Newsica", "type": "news"}},
+  "07:00": {{"title": "Buongiorno Newsica", "type": "news", "with_meteo_intro": true}},
   "14:00": {{"title": "Newsica Club Fever", "type": "music_only", "theme": "dance/disco"}},
   "17:00": {{"title": "Baila Newsica", "type": "music_only", "theme": "latin/reggaeton/dembow"}},
   "19:00": {{"title": "Rock & Roll Arena", "type": "music_only", "theme": "rock"}}

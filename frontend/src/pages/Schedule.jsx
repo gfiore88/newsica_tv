@@ -109,9 +109,16 @@ export default function Schedule() {
                   {item.title}
                 </div>
                 <div className="mt-auto flex items-center justify-between">
-                  <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border ${badge.bg}`}>
-                    {badge.label}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border ${badge.bg}`}>
+                      {badge.label}
+                    </span>
+                    {item.with_meteo_intro && (
+                      <span className="text-[10px] px-2 py-1 rounded-full font-bold border bg-sky-950/50 text-sky-300 border-sky-800/50">
+                        ☀️ +Meteo
+                      </span>
+                    )}
+                  </div>
                   {!isActive && (
                     <span className="text-xs text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity font-bold">
                       Forza 🚀

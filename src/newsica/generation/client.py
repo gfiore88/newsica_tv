@@ -43,11 +43,31 @@ class LocalGenerationClient:
 
     def generate_slot_audio(self, content_data: dict, work_dir: str | Path) -> GenerationResult:
         from newsica.agents.ai_integrator import AIIntegratorAgent
-
+        
         integrator = AIIntegratorAgent(work_dir=Path(work_dir))
+        audio_files = []
+        script_texts = []
+        
+        if content_data.get("with_meteo_intro"):
+            from newsica.agents.content_strategist import ContentStrategistAgent
+            strategist = ContentStrategistAgent()
+            meteo_data = strategist.prepare_content("meteo", "Meteo Flash")
+            meteo_script = integrator.generate_script(meteo_data)
+            integrator.generate_audio(meteo_script, meteo_data)
+            
+            # Rinomina l'audio del meteo per non sovrascrivere lo show principale
+            meteo_file = Path(work_dir) / "meteo.wav"
+            if (Path(work_dir) / "audio.wav").exists():
+                (Path(work_dir) / "audio.wav").rename(meteo_file)
+                audio_files.append(meteo_file)
+            script_texts.append("--- METEO ---\n" + meteo_script)
+
         script_text = integrator.generate_script(content_data)
-        audio_files = integrator.generate_audio(script_text, content_data)
-        return GenerationResult(audio_files=list(audio_files), script_text=script_text)
+        main_audio_files = integrator.generate_audio(script_text, content_data)
+        audio_files.extend(list(main_audio_files))
+        script_texts.append("--- SHOW PRINCIPALE ---\n" + script_text)
+        
+        return GenerationResult(audio_files=audio_files, script_text="\n\n".join(script_texts))
 
     def schedule_ai_music(self, source: str, *, theme: str | None = None) -> tuple[dict, bool]:
         from newsica.audio.ai_music_runtime import schedule_rotation_fill_job
