@@ -10,7 +10,7 @@ from newsica.config.paths import ASSETS_DIR, MUSIC_DIR, RUNTIME_DIR
 from newsica.audio.music_mode import MUSIC_MODE_AI_ONLY, read_music_mode
 from newsica.storage.repositories.audio_metadata_repository import get_metadata
 
-AI_MUSIC_DIR = ASSETS_DIR / "ai_music"
+AI_MUSIC_DIR = RUNTIME_DIR / "assets" / "ai_music"
 SUPPORTED_AUDIO_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg")
 ROTATION_HISTORY_FILE = RUNTIME_DIR / "music_rotation_history.json"
 ROTATION_BLOCKS_FILE = RUNTIME_DIR / "music_rotation_blocks.json"
