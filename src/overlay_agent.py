@@ -1006,22 +1006,49 @@ def render_frame():
     return image
 
 
+import threading
+
+current_frame = None
+frame_lock = threading.Lock()
+
+def render_worker():
+    global current_frame
+    while True:
+        try:
+            frame = render_frame().tobytes("raw", "RGBA")
+            with frame_lock:
+                current_frame = frame
+            time.sleep(0.05)
+        except Exception as e:
+            print(f"Errore render: {e}")
+            time.sleep(1)
+
 def write_frames():
+    global current_frame
     os.makedirs(TMP_DIR, exist_ok=True)
 
     if not os.path.exists(OVERLAY_PIPE):
         os.mkfifo(OVERLAY_PIPE)
+        
+    threading.Thread(target=render_worker, daemon=True).start()
 
     while True:
         try:
             with open(OVERLAY_PIPE, "wb", buffering=0) as pipe:
+                next_time = time.monotonic()
                 while True:
-                    start = time.monotonic()
+                    with frame_lock:
+                        frame_to_write = current_frame
+                    if frame_to_write:
+                        pipe.write(frame_to_write)
 
-                    pipe.write(render_frame().tobytes("raw", "RGBA"))
-
-                    elapsed = time.monotonic() - start
-                    time.sleep(max(0.0, FRAME_INTERVAL - elapsed))
+                    now = time.monotonic()
+                    if next_time < now - 0.5:
+                        next_time = now
+                    next_time += FRAME_INTERVAL
+                    sleep_time = next_time - time.monotonic()
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
         except BrokenPipeError:
             time.sleep(0.5)
 
