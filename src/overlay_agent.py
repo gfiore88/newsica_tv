@@ -169,14 +169,18 @@ def read_state():
 
 def font(size, bold=False):
     candidates = [
+        # macOS
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/Library/Fonts/Arial.ttf",
+        # Ubuntu / Linux VPS
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     ]
 
     for path in candidates:
         try:
-            return ImageFont.truetype(path, size=size, index=1 if bold else 0)
+            return ImageFont.truetype(path, size=size, index=1 if bold and "Helvetica.ttc" in path else 0)
         except OSError:
             continue
 

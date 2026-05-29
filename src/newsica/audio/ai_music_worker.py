@@ -55,12 +55,44 @@ def prewarm_handlers() -> bool:
         return False
 
 
-def process_job(job: dict) -> None:
+def get_backend():
+    mode = os.getenv("NEWSICA_GENERATION_MODE", "local")
+    if mode == "remote":
+        remote_url = os.getenv("NEWSICA_REMOTE_GENERATION_URL", "https://regia.newsicatv.it")
+        from newsica.audio.client import HttpAiMusicBackend
+        return HttpAiMusicBackend(remote_url)
+    else:
+        from newsica.storage.repositories import ai_music_jobs_repository
+        from newsica.storage.repositories import chat_music_requests_repository
+
+        class LocalBackend:
+            def get_next_pending_job(self):
+                return ai_music_jobs_repository.get_next_pending_job()
+            def mark_running(self, job_id):
+                ai_music_jobs_repository.mark_running(job_id)
+            def mark_failed(self, job_id, error):
+                ai_music_jobs_repository.mark_failed(job_id, error)
+            def mark_done(self, job_id, audio_path, title):
+                ai_music_jobs_repository.mark_done(job_id, audio_path, title)
+                # Local backend doesn't handle chat_ready automatically like remote endpoint does
+                job = ai_music_jobs_repository.get_job_by_id(job_id)
+                if job and job.get("request_id"):
+                    chat_music_requests_repository.mark_ready(job.get("request_id"), asset_path=audio_path, title=title)
+        
+        return LocalBackend()
+
+
+def process_job(job: dict, backend) -> None:
     job_id = job["id"]
     request_id = job.get("request_id")
-    mark_running(job_id)
+    backend.mark_running(job_id)
+
     if job.get("job_type") == "chat_request" and request_id:
-        mark_generating(request_id)
+        from newsica.storage.repositories.chat_music_requests_repository import mark_generating
+        try:
+            mark_generating(request_id)
+        except Exception:
+            pass
 
     logger.info(
         "Eseguo job %s type=%s source=%s theme=%s",
@@ -71,7 +103,13 @@ def process_job(job: dict) -> None:
     )
 
     try:
-        request_metadata = get_request(request_id) if request_id else None
+        from newsica.storage.repositories.chat_music_requests_repository import get_request
+        request_metadata = None
+        try:
+            request_metadata = get_request(request_id) if request_id else None
+        except Exception:
+            pass
+
         audio_file, title = generate_track(
             theme=job.get("theme"),
             custom_brief=job.get("custom_brief"),
@@ -80,15 +118,18 @@ def process_job(job: dict) -> None:
         if not audio_file:
             raise RuntimeError("generation returned no audio file")
 
-        mark_done(job_id, audio_path=str(audio_file), title=title)
-        if request_id:
-            mark_ready(request_id, asset_path=str(audio_file), title=title)
+        backend.mark_done(job_id, audio_path=str(audio_file), title=title)
         logger.info("Job %s completato: %s", job_id, audio_file.name)
     except Exception as e:
         message = str(e)
-        mark_failed(job_id, message)
-        if request_id:
-            mark_chat_failed(request_id, message)
+        backend.mark_failed(job_id, message)
+        
+        from newsica.storage.repositories.chat_music_requests_repository import mark_failed as mark_chat_failed
+        try:
+            if request_id:
+                mark_chat_failed(request_id, message)
+        except Exception:
+            pass
         logger.error("Job %s fallito: %s", job_id, message)
 
 
@@ -97,12 +138,15 @@ def run_worker() -> None:
     if not prewarm_ok:
         logger.warning("Continuo comunque: ritenterò implicitamente al primo job.")
 
+    backend = get_backend()
+    logger.info("Utilizzo backend: %s", backend.__class__.__name__)
+
     while True:
-        job = get_next_pending_job()
+        job = backend.get_next_pending_job()
         if not job:
             time.sleep(POLL_INTERVAL_SECONDS)
             continue
-        process_job(job)
+        process_job(job, backend)
 
 
 if __name__ == "__main__":

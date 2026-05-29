@@ -238,14 +238,18 @@ function do_start() {
   fi
 
   # 5. Avvia il worker persistente della Musica AI
-  if [ -z "$(get_pid "src/newsica/audio/ai_music_worker.py")" ]; then
-    echo "  -> Avvio AI Music Worker..."
-    local ace_step_python
-    ace_step_python="$(get_ace_step_python)"
-    screen -dmS newsica-ai-music-worker bash -lc "cd '$BASE_DIR' && exec '$ace_step_python' -u '$BASE_DIR/src/newsica/audio/ai_music_worker.py' > '$TMP_DIR/ai_music_worker.log' 2>&1"
-    sleep 2
+  if [ "${NEWSICA_GENERATION_MODE:-local}" != "remote" ] || [ "${NEWSICA_RUN_GENERATION_WORKER:-false}" = "true" ]; then
+    if [ -z "$(get_pid "src/newsica/audio/ai_music_worker.py")" ]; then
+      echo "  -> Avvio AI Music Worker..."
+      local ace_step_python
+      ace_step_python="$(get_ace_step_python)"
+      screen -dmS newsica-ai-music-worker bash -lc "cd '$BASE_DIR' && exec '$ace_step_python' -u '$BASE_DIR/src/newsica/audio/ai_music_worker.py' > '$TMP_DIR/ai_music_worker.log' 2>&1"
+      sleep 2
+    else
+      echo "  [i] AI Music Worker già attivo."
+    fi
   else
-    echo "  [i] AI Music Worker già attivo."
+    echo "  [i] AI Music Worker disabilitato in modalità solo-regia."
   fi
 
   # 5.2 Avvia il worker generico di generazione solo in modalita' remota.

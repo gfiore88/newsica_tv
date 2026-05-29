@@ -502,3 +502,65 @@ def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python)
             return jsonify({"status": "OK", "jobs": jobs})
         except Exception as e:
             return jsonify({"status": "ERROR", "message": str(e)})
+
+    @app.route('/api/ai_music_jobs/claim', methods=['POST'])
+    def claim_ai_music_job():
+        from newsica.storage.repositories.ai_music_jobs_repository import get_next_pending_job
+        try:
+            job = get_next_pending_job()
+            return jsonify({"status": "OK", "job": job})
+        except Exception as e:
+            return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+    @app.route('/api/ai_music_jobs/<job_id>/running', methods=['POST'])
+    def ai_music_job_running(job_id):
+        from newsica.storage.repositories.ai_music_jobs_repository import mark_running
+        try:
+            job = mark_running(job_id)
+            return jsonify({"status": "OK", "job": job})
+        except Exception as e:
+            return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+    @app.route('/api/ai_music_jobs/<job_id>/failed', methods=['POST'])
+    def ai_music_job_failed(job_id):
+        from newsica.storage.repositories.ai_music_jobs_repository import mark_failed
+        try:
+            data = request.json or {}
+            error = data.get("error") or "errore remoto"
+            job = mark_failed(job_id, error)
+            return jsonify({"status": "OK", "job": job})
+        except Exception as e:
+            return jsonify({"status": "ERROR", "message": str(e)}), 500
+
+    @app.route('/api/ai_music_jobs/<job_id>/artifact', methods=['POST'])
+    def ai_music_job_artifact(job_id):
+        from newsica.storage.repositories.ai_music_jobs_repository import mark_done, get_job_by_id
+        from newsica.storage.repositories.chat_music_requests_repository import mark_ready
+        try:
+            job = get_job_by_id(job_id)
+            if not job:
+                return jsonify({"status": "ERROR", "message": "job non trovato"}), 404
+
+            if "file" not in request.files:
+                return jsonify({"status": "INVALID", "message": "Nessun file audio inviato"}), 400
+
+            uploaded_file = request.files["file"]
+            title = request.form.get("title") or job.get("theme") or "Traccia Generata"
+
+            incoming_dir = runtime_assets_dir() / "incoming" / job_id
+            incoming_dir.mkdir(parents=True, exist_ok=True)
+            filename = secure_filename(uploaded_file.filename or f"{job_id}.wav")
+            temp_path = incoming_dir / filename
+            uploaded_file.save(temp_path)
+
+            target_audio = publish_ai_music_artifact(incoming_dir)
+            updated_job = mark_done(job_id, str(target_audio), title)
+            
+            request_id = job.get("request_id")
+            if request_id:
+                mark_ready(request_id, asset_path=str(target_audio), title=title)
+
+            return jsonify({"status": "OK", "job": updated_job, "audio_path": str(target_audio)})
+        except Exception as e:
+            return jsonify({"status": "ERROR", "message": str(e)}), 500
+
