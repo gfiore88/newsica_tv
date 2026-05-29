@@ -93,7 +93,7 @@ function do_status() {
   check_status "Chime Agent" "src/hourly_chime_agent.py"
   check_status "Preparation Agent" "src/preparation_agent.py"
   check_status "AI Music Worker" "src/newsica/audio/ai_music_worker.py"
-  if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ]; then
+  if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ] && [ "${NEWSICA_RUN_GENERATION_WORKER:-false}" = "true" ]; then
     check_status "Generation Worker" "src/generation_worker.py"
   fi
   check_status "Breaking News Daemon" "src/breaking_news_agent.py --daemon"
@@ -247,7 +247,7 @@ function do_start() {
   fi
 
   # 5.2 Avvia il worker generico di generazione solo in modalita' remota.
-  if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ]; then
+  if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ] && [ "${NEWSICA_RUN_GENERATION_WORKER:-false}" = "true" ]; then
     if [ -z "$(get_pid "src/generation_worker.py")" ]; then
       echo "  -> Avvio Generation Worker remoto..."
       screen -dmS newsica-generation-worker bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/generation_worker.py' > '$TMP_DIR/generation_worker.log' 2>&1"

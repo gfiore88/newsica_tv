@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m venv venv
+          venv/bin/python -m pip install --upgrade pip
+          venv/bin/pip install -r requirements.txt
+
+      - name: Python syntax check
+        run: |
+          bash -n manage.sh
+          bash -n scripts/deploy_vps.sh
+          venv/bin/python -m py_compile \
+            src/dashboard.py \
+            src/preparation_agent.py \
+            src/generation_worker.py
+
+      - name: Backend tests
+        run: |
+          PYTHONPATH=src venv/bin/python -m unittest \
+            src.newsica.tests.test_system_routes \
+            src.newsica.tests.test_generation_client \
+            src.newsica.tests.test_generation_jobs_repository \
+            src.newsica.tests.test_generation_worker \
+            src.newsica.tests.test_generation_worker_http \
+            src.newsica.tests.test_generation_artifacts \
+            src.newsica.tests.test_preparation_generation_client
+
+      - name: Frontend install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build

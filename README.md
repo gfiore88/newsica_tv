@@ -67,6 +67,7 @@ La modalità `remote` è riservata all'implementazione ADR 0051 e richiederà va
 Variabili operative previste:
 ```bash
 NEWSICA_GENERATION_MODE=local
+NEWSICA_RUN_GENERATION_WORKER=false
 NEWSICA_REMOTE_GENERATION_QUEUE=http
 NEWSICA_REMOTE_WORKER_TRANSPORT=http
 NEWSICA_REMOTE_GENERATION_URL=https://vps.example.invalid
@@ -86,7 +87,7 @@ NEWSICA_VPS_SSH_KEY_PATH=~/.ssh/newsica_vps
 NEWSICA_VPS_REMOTE_APP_DIR=/opt/newsica_tv
 ```
 
-In modalita' `remote`, `./manage.sh start` avvia anche `src/generation_worker.py`. Il worker supporta `NEWSICA_REMOTE_WORKER_TRANSPORT=sqlite` per sviluppo co-located e `NEWSICA_REMOTE_WORKER_TRANSPORT=http` per polling verso le API del VPS. Il token remoto deve essere configurato in env e inviato come Bearer token; non esistono credenziali di default nel codice.
+In modalita' `remote`, il VPS accoda job remoti ma non deve eseguire workload AI pesanti. `./manage.sh start` avvia `src/generation_worker.py` solo se `NEWSICA_RUN_GENERATION_WORKER=true`, valore da usare sul Mac worker e non sul VPS runtime. Il worker supporta `NEWSICA_REMOTE_WORKER_TRANSPORT=sqlite` per sviluppo co-located e `NEWSICA_REMOTE_WORKER_TRANSPORT=http` per polling verso le API del VPS. Il token remoto deve essere configurato in env e inviato come Bearer token; non esistono credenziali di default nel codice.
 
 Le credenziali del provider VPS non devono mai entrare nel codice o in `.env.example`. La password `root` iniziale va usata solo per il bootstrap: installare una chiave SSH, aggiornare il sistema, creare la configurazione privata sul VPS, poi ruotare la password e disabilitare il login SSH via password appena possibile. Il repository pubblico deve contenere solo placeholder e default locali non sensibili.
 
@@ -99,6 +100,36 @@ Il VPS non considera un artifact pronto finche' manifest e file non sono stati v
 La Dashboard espone anche:
 - `GET /api/generation/summary` per conteggi, worker attivi e ultimi job;
 - `POST /api/generation/incoming/cleanup` per pulire staging vecchi, protetto dallo stesso token remoto.
+
+### 🚀 Deploy VPS con GitHub Actions
+
+Il deploy produzione e' separato dalla CI. La CI gira su push/PR e verifica backend, lint e build frontend; il deploy VPS e' manuale tramite workflow `Deploy VPS`, cosi' un push non riavvia automaticamente la diretta.
+
+Secret GitHub richiesti nell'environment `production-vps`:
+
+```bash
+VPS_HOST=your-vps-ip-or-hostname
+VPS_USER=newsica
+VPS_PORT=22
+VPS_APP_DIR=/opt/newsica_tv
+VPS_SSH_PRIVATE_KEY=<private key authorized on the VPS>
+NEWSICA_VPS_ENV_B64=<optional base64 of the private VPS .env>
+```
+
+Il deploy usa `scripts/deploy_vps.sh` via `rsync` ed esclude sempre `.env`, `runtime/`, `tmp/`, `assets/`, virtualenv, `node_modules`, cache e modelli pesanti. In questo modo codice e dipendenze vengono aggiornati senza cancellare DB, asset pronti, log o credenziali del server.
+
+Modalita' workflow:
+- `none`: copia codice, installa dipendenze, builda frontend, fa check sintattici e mostra status senza avviare/riavviare;
+- `start`: come sopra, poi `./manage.sh start`;
+- `restart`: come sopra, poi `./manage.sh restart`, quindi interrompe brevemente la diretta.
+
+Per il primo deploy si puo' creare `.env` direttamente sul VPS oppure impostare `NEWSICA_VPS_ENV_B64` come secret. Esempio locale per generare il valore:
+
+```bash
+base64 -i .env | pbcopy
+```
+
+Prima di usare quel valore in produzione, adattare la `.env` VPS: `NEWSICA_GENERATION_MODE=remote`, URL pubblica del VPS, token remoto, stream key e tutte le credenziali operative devono restare private.
 
 ### 🎛️ Director Runtime & Playout Events
 La regia live usa ora un solo protocollo interno: il `DirectorAgent` restituisce esclusivamente `PlayoutEvent` tipizzati, che `src/director.py` esegue sequenzialmente tramite un runtime unico.

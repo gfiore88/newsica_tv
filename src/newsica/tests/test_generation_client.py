@@ -43,7 +43,7 @@ class TestGenerationClient(unittest.TestCase):
         mock_integrator_cls.assert_called_once()
         integrator.generate_script.assert_called_once_with({"character_id": "news"})
         integrator.generate_audio.assert_called_once_with("script", {"character_id": "news"})
-        self.assertEqual(result.script_text, "script")
+        self.assertEqual(result.script_text, "--- SHOW PRINCIPALE ---\nscript")
         self.assertEqual(result.audio_files, [audio_path])
 
     @patch("newsica.audio.ai_music_runtime.schedule_rotation_fill_job")

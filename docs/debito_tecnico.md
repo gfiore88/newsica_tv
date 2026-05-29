@@ -81,6 +81,8 @@ La codebase oggi assume che runtime live, DB, filesystem asset e modelli AI sian
 - [x] **Trasporto Mac-VPS:** implementare API HTTP per claim, heartbeat, uploading, ready e failed mantenendo il DB come fonte di verita' lato VPS.
 - [x] **Upload Mac-VPS:** implementare trasferimento file reale via HTTP multipart, con validazione manifest e pubblicazione atomica lato VPS.
 - [x] **Hardening produzione minimo:** aggiungere limite upload configurabile, summary API, cleanup staging `incoming` e retention configurabile.
+- [x] **Deploy VPS automatizzabile:** aggiungere CI GitHub Actions e workflow manuale di deploy via SSH/rsync, senza versionare `.env`, asset, runtime o modelli pesanti.
+- [x] **Separazione runtime/worker in deploy:** aggiungere `NEWSICA_RUN_GENERATION_WORKER` per evitare che il VPS remoto avvii il worker AI pesante.
 - [ ] **Hardening produzione avanzato:** decidere reverse proxy/TLS, autenticazione operativa ruotabile, metriche worker persistenti e strategia rsync/SFTP opzionale per artifact grandi.
 - [ ] **Test regressivi:** coprire modalita' locale invariata, worker fake remoto, claim concorrente, job stale, upload incompleto, manifest mismatch e fallback per deadline scaduta.
 

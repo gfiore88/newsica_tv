@@ -1,0 +1,44 @@
+name: Deploy VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      restart:
+        description: "none = deploy only, start = start if stopped, restart = full Newsica restart"
+        required: true
+        default: "none"
+        type: choice
+        options:
+          - none
+          - start
+          - restart
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: production-vps
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/newsica_vps
+          chmod 600 ~/.ssh/newsica_vps
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          VPS_SSH_KEY: ~/.ssh/newsica_vps
+          NEWSICA_VPS_ENV_B64: ${{ secrets.NEWSICA_VPS_ENV_B64 }}
+          DEPLOY_RESTART: ${{ inputs.restart }}
+        run: bash scripts/deploy_vps.sh
