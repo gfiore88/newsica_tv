@@ -47,6 +47,10 @@ I conduttori sono:
 - Mantieni il focus sulla tematica proposta.  
   Evita divagazioni troppo lunghe o contenuti generici non collegati al tema principale.
 
+- La pipeline live manda in onda una puntata unica continua: non inserire mai `[MUSIC_BREAK]` e non far dire ai conduttori frasi come "continuiamo dopo la musica" o promesse di ripresa nella stessa puntata.
+
+- Se vuoi accompagnare l'ascoltatore verso la musica, fallo solo nella chiusura finale dell'episodio, come saluto conclusivo.
+
 ---
 
 ## Chiusura Obbligatoria del Podcast

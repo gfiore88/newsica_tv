@@ -57,3 +57,4 @@
 | 54 | /python_engineer | ✅ Done | Dropdown unica per generazione shorts con temi `news`, `breaking`, `sport`, `meteo`, `tech`, `wellness`, `funfact` e modalità casuale |
 | 55 | /python_engineer | ✅ Done | Badge tematico persistito su SQLite per ogni short e mostrato come tag in alto a destra sulle card della libreria |
 | 56 | /python_engineer | ✅ Done | Selezione multipla reel con `Seleziona Tutti` e cancellazione bulk da SQLite e da `output/shorts/` |
+| 57 | /orchestrator | ✅ Done | Hardening podcast live: budget Ollama dedicato, validazione locale pre-TTS su completezza/chiusura, prompt allineato a puntata unica senza `MUSIC_BREAK` e fallback podcast più sostanzioso con ADR 0050 |

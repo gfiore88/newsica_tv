@@ -1,4 +1,4 @@
-from newsica.sources.registry import WELLNESS_PREFERRED_SOURCES
+from newsica.sources.loader import load_sources_registry
 from newsica.sources.rotation import item_key, load_json, write_json
 
 WELLNESS_KEYWORDS = (
@@ -35,7 +35,7 @@ def select_fresh_wellness(items, recent_file, limit=3):
     candidates = fresh if fresh else light_items if light_items else ranked
     selected = []
 
-    for preferred_source in WELLNESS_PREFERRED_SOURCES:
+    for preferred_source in load_sources_registry().get("wellness_preferred_sources", []):
         preferred_candidates = [item for item in candidates if item.get("source") == preferred_source]
         for item in preferred_candidates:
             if item not in selected:

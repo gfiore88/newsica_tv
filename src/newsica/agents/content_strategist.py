@@ -320,7 +320,9 @@ class ContentStrategistAgent:
             prompt += "ISTRUZIONE EDITORIALE PER I CONDUTTORI (Giulia e Marco):\n"
             prompt += "Scrivete un copione brillante, parlato in modo giovanile, spontaneo ed estremamente fluido.\n"
             prompt += "I due speaker devono controbattere, confrontarsi ed argomentare basandosi rigorosamente sui dettagli, dati e curiosità dello STUDIO EDITORIALE riportato sopra.\n"
-            prompt += "Fate nascere un dibattito reale, con opinioni complementari e toni naturali. Non leggete lo studio in modo asettico, ma discutendolo come in una vera chiacchierata in studio."
+            prompt += "Fate nascere un dibattito reale, con opinioni complementari e toni naturali. Non leggete lo studio in modo asettico, ma discutendolo come in una vera chiacchierata in studio.\n"
+            prompt += "IMPORTANTE: questa puntata va scritta come episodio unico continuo, senza [MUSIC_BREAK] e senza frasi del tipo 'ne parliamo dopo la musica'.\n"
+            prompt += "Negli ultimi turni accompagnate invece l'ascoltatore verso una chiusura naturale e un lancio finale alla musica di NewsicaTV."
 
         else:
             prompt = self._build_prompt_payload(filtered_news, title=title, character_id=character.id)

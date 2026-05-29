@@ -64,6 +64,7 @@ Per ottimizzare i tempi e i token di sviluppo, bypasseremo le simulazioni locali
 - [x] **Fallback Kokoro**: Se Chatterbox non e' disponibile, generare il podcast con Kokoro usando voci locali Giulia/Marco.
 - [x] **Aggancio Playout & Grafica**: Configurare il Director per pianificare le nuove rubriche Podcast ("Newsica Podcast", "L'Angolo del Benessere") e mostrare un overlay video personalizzato.
 - [x] **Podcast Fill Serale**: Se `Newsica Sera` completa lo speaker con almeno 20 minuti residui prima delle 22:00, il Director inserisce una puntata extra `Newsica Podcast - Dopo Sera`.
+- [x] **Validazione Copioni Podcast (ADR 0050)**: Prima del TTS, i podcast devono rispettare un contratto locale minimo su completezza, numero turni, lunghezza e chiusura editoriale; in caso contrario vengono rigenerati o degradati al fallback locale.
 
 ## MVP 4 — Automazione Editoriale e Strumenti di Regia
 **Obiettivo:** Aumentare il ritmo e l'affidabilità con controlli locali e archiviazione.

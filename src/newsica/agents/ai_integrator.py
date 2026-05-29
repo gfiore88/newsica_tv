@@ -10,10 +10,16 @@ from pathlib import Path
 from newsica.config.paths import TMP_DIR
 from newsica.audio.tts_text import prepare_text_for_tts
 from newsica.editorial.fact_checker import check_hallucinations, silent_scrub
+from newsica.editorial.podcast_contract import (
+    build_podcast_revision_prompt,
+    validate_podcast_script,
+)
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:12b")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "60"))
+PODCAST_OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_PODCAST_TIMEOUT", str(max(OLLAMA_TIMEOUT, 120))))
+PODCAST_NUM_PREDICT = int(os.getenv("OLLAMA_PODCAST_NUM_PREDICT", "1400"))
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent
 CHATTERBOX_PYTHON = os.getenv("CHATTERBOX_PYTHON", str(BASE_DIR / ".venv_tts_spike" / "bin" / "python"))
@@ -27,43 +33,72 @@ class AIIntegratorAgent:
     def generate_script(self, content_data):
         """Genera lo script usando Ollama"""
         print(f"Avvio rielaborazione editoriale tramite LLM (Ollama locale) per {content_data['character_id']}...")
-        
+
+        is_podcast = content_data["character_id"] == "podcast"
+        base_prompt = content_data["prompt"]
+        max_attempts = 4 if is_podcast else 3
+
         payload = {
             "model": MODEL_NAME,
             "system": content_data["system_prompt"],
-            "prompt": content_data["prompt"],
+            "prompt": base_prompt,
             "stream": False,
             "keep_alive": "30m",
             "options": {
                 "temperature": 0.4,
-                "num_predict": 700,
+                "num_predict": PODCAST_NUM_PREDICT if is_podcast else 700,
             },
         }
 
         script = ""
         is_safe = True
         bad_entities = []
-        
-        for attempt in range(3):
+        extra_instructions = []
+
+        for attempt in range(max_attempts):
             try:
-                response = requests.post(OLLAMA_URL, json=payload, timeout=OLLAMA_TIMEOUT)
+                payload["prompt"] = base_prompt
+                if extra_instructions:
+                    payload["prompt"] += "\n\n" + "\n\n".join(extra_instructions)
+
+                timeout = PODCAST_OLLAMA_TIMEOUT if is_podcast else OLLAMA_TIMEOUT
+                response = requests.post(OLLAMA_URL, json=payload, timeout=timeout)
                 response.raise_for_status()
                 script = response.json().get("response", "").strip()
                 if not script:
-                    print(f"⚠️ [{attempt+1}/3] Ollama ha restituito un copione vuoto.")
+                    print(f"⚠️ [{attempt+1}/{max_attempts}] Ollama ha restituito un copione vuoto.")
                     continue
-                    
+
+                if is_podcast:
+                    is_valid_podcast, validation_issues = validate_podcast_script(script)
+                    if not is_valid_podcast:
+                        print(
+                            f"⚠️ [{attempt+1}/{max_attempts}] Copione podcast non valido: "
+                            f"{'; '.join(validation_issues)}"
+                        )
+                        extra_instructions = [build_podcast_revision_prompt(validation_issues)]
+                        continue
+
                 # Fact Checking
-                is_safe, bad_entities = check_hallucinations(script, content_data["prompt"])
+                is_safe, bad_entities = check_hallucinations(script, base_prompt)
                 if not is_safe:
-                    print(f"🚨 [{attempt+1}/3] ALLUCINAZIONE RILEVATA nel copione di {content_data['character_id']}: {bad_entities}")
-                    payload["prompt"] = content_data["prompt"] + f"\n\nATTENZIONE: Nel tuo precedente tentativo hai inventato questi dati/numeri: {', '.join(bad_entities)}. Riscrivi il copione assicurandoti di usare SOLO dati presenti nel JSON fornito e senza inventare nulla."
+                    print(f"🚨 [{attempt+1}/{max_attempts}] ALLUCINAZIONE RILEVATA nel copione di {content_data['character_id']}: {bad_entities}")
+                    extra_instructions = []
+                    if is_podcast:
+                        is_valid_podcast, validation_issues = validate_podcast_script(script)
+                        if not is_valid_podcast:
+                            extra_instructions.append(build_podcast_revision_prompt(validation_issues))
+                    extra_instructions.append(
+                        "ATTENZIONE: Nel tuo precedente tentativo hai inventato questi dati/numeri: "
+                        + ", ".join(bad_entities)
+                        + ". Riscrivi il copione assicurandoti di usare SOLO dati presenti nel JSON fornito e senza inventare nulla."
+                    )
                     continue
-                    
+
                 # Se è sicuro
                 is_safe = True
                 break
-                
+
             except requests.exceptions.RequestException as e:
                 print(f"❌ Errore connessione a Ollama: {e}")
                 break
@@ -71,7 +106,17 @@ class AIIntegratorAgent:
         if not is_safe and script:
             print("🧽 [AIIntegratorAgent] Tentativi esauriti. Applico Silent Scrubbing per rimuovere le allucinazioni.")
             script = silent_scrub(script, bad_entities)
-            
+
+        if is_podcast and script:
+            is_valid_podcast, validation_issues = validate_podcast_script(script)
+            if not is_valid_podcast:
+                print(
+                    "⚠️ [AIIntegratorAgent] Copione podcast ancora non valido dopo i tentativi: "
+                    + "; ".join(validation_issues)
+                    + ". Uso fallback locale."
+                )
+                script = ""
+
         if not script:
             print("⚠️ Uso copione fallback locale.")
             script = content_data["fallback_script"]
