@@ -44,7 +44,10 @@ rsync -az --delete \
   --exclude 'runtime/' \
   --exclude 'tmp/' \
   --exclude 'output/' \
-  --exclude 'assets/' \
+  --exclude 'assets/music/' \
+  --exclude 'assets/ai_music/' \
+  --exclude 'assets/generated/' \
+  --exclude 'assets/voice_refs/' \
   --exclude 'scratch_*.py' \
   --exclude 'tmp_*.html' \
   --exclude 'kokoro-v1.0.onnx' \

@@ -138,6 +138,8 @@ if __name__ == '__main__':
     if not check_singleton("dashboard"):
         print("❌ Uscita immediata per prevenire conflitti.")
         sys.exit(1)
-        
-    print("🚀 Web Dashboard avviata su http://0.0.0.0:5050")
-    app.run(host='0.0.0.0', port=5050, debug=False)
+
+    dashboard_host = os.getenv("NEWSICA_DASHBOARD_HOST", "0.0.0.0")
+    dashboard_port = int(os.getenv("NEWSICA_DASHBOARD_PORT", "5050"))
+    print(f"🚀 Web Dashboard avviata su http://{dashboard_host}:{dashboard_port}")
+    app.run(host=dashboard_host, port=dashboard_port, debug=False)

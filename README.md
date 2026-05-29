@@ -120,6 +120,31 @@ Il deploy usa `scripts/deploy_vps.sh` via `rsync` ed esclude sempre `.env`, `run
 
 Prerequisito VPS per la build frontend: Node.js 20+; sul server di produzione e' consigliato Node.js 22 LTS.
 
+Per esporre la dashboard su dominio pubblico si usa nginx come reverse proxy verso Flask:
+
+```bash
+NEWSICA_DOMAIN=regia.newsicatv.it
+NEWSICA_ADMIN_EMAIL=admin@example.com
+NEWSICA_DASHBOARD_HOST=127.0.0.1
+NEWSICA_DASHBOARD_PORT=5050
+```
+
+Quando il record DNS `A` punta al VPS, configurare nginx:
+
+```bash
+ssh -i ~/.ssh/newsica_vps newsica@your-vps
+cd /opt/newsica_tv
+NEWSICA_DOMAIN=regia.newsicatv.it NEWSICA_ENABLE_TLS=false bash scripts/configure_vps_nginx.sh
+```
+
+Dopo la propagazione DNS, abilitare HTTPS:
+
+```bash
+NEWSICA_DOMAIN=regia.newsicatv.it NEWSICA_ADMIN_EMAIL=admin@example.com NEWSICA_ENABLE_TLS=true bash scripts/configure_vps_nginx.sh
+```
+
+In produzione la porta `5050` non deve restare pubblica: nginx espone solo `80/443` e proxy verso `127.0.0.1:5050`.
+
 Modalita' workflow:
 - `none`: copia codice, installa dipendenze, builda frontend, fa check sintattici e mostra status senza avviare/riavviare;
 - `start`: come sopra, poi `./manage.sh start`;

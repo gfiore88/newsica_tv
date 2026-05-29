@@ -189,7 +189,8 @@ def _process_slot_audio(job: dict) -> dict:
     content_data = payload.get("content_data") or {}
     target_work_dir = payload.get("target_work_dir")
 
-    if target_work_dir:
+    is_http = os.getenv("NEWSICA_REMOTE_WORKER_TRANSPORT", "sqlite").strip().lower() == "http"
+    if target_work_dir and not is_http:
         work_dir = Path(target_work_dir)
         work_dir.mkdir(parents=True, exist_ok=True)
         return _generate_slot_audio_manifest(content_data, work_dir)

@@ -47,13 +47,15 @@ function show_help() {
   echo -e "Uso: ./manage.sh [comando]"
   echo ""
   echo -e "${BOLD}Comandi disponibili:${NC}"
-  echo -e "  ${GREEN}start${NC}     Avvia tutti i servizi (Dashboard, Regia, Stream/FFmpeg)"
-  echo -e "  ${RED}stop${NC}      Ferma tutti i servizi in esecuzione, ripulisce lock e pipe"
-  echo -e "  ${YELLOW}restart${NC}   Ferma e riavvia tutto in modo pulito"
-  echo -e "  ${CYAN}status${NC}    Visualizza lo stato attuale e i PID dei vari componenti"
-  echo -e "  ${CYAN}live-health${NC} Verifica log locali, RTMP e stato pubblico YouTube"
-  echo -e "  ${BLUE}logs${NC}      Mostra le ultime righe dei log principali"
-  echo -e "  ${PURPLE}tts-spike${NC} Genera/apre il confronto TTS sperimentale"
+  echo -e "  ${GREEN}start${NC}         Avvia tutti i servizi (Dashboard, Regia, Stream/FFmpeg)"
+  echo -e "  ${RED}stop${NC}          Ferma tutti i servizi in esecuzione, ripulisce lock e pipe"
+  echo -e "  ${YELLOW}restart${NC}       Ferma e riavvia tutto in modo pulito"
+  echo -e "  ${CYAN}status${NC}        Visualizza lo stato attuale e i PID dei vari componenti"
+  echo -e "  ${GREEN}worker-start${NC}  Avvia SOLO i worker AI remoti (Mac)"
+  echo -e "  ${RED}worker-stop${NC}   Ferma SOLO i worker AI remoti"
+  echo -e "  ${CYAN}live-health${NC}   Verifica log locali, RTMP e stato pubblico YouTube"
+  echo -e "  ${BLUE}logs${NC}          Mostra le ultime righe dei log principali"
+  echo -e "  ${PURPLE}tts-spike${NC}     Genera/apre il confronto TTS sperimentale"
   echo -e "  ${PURPLE}install-ace-step${NC} Crea venv e clona il repo di ACE-Step"
   echo ""
 }
@@ -315,6 +317,81 @@ function do_start() {
   echo ""
 }
 
+function do_worker_start() {
+  echo -e "\n${GREEN}${BOLD}🚀 Avvio dei Worker AI Remoti (Mac)...${NC}"
+  
+  if [ ! -f "$VENV_PYTHON" ]; then
+    echo -e "${RED}❌ ERRORE: Ambiente virtuale non trovato in $VENV_PYTHON.${NC}"
+    exit 1
+  fi
+
+  if [ "$(uname)" = "Darwin" ]; then
+    if [ -z "$(get_pid "caffeinate")" ]; then
+      echo "  -> Avvio Caffeinate (prevenzione sleep macOS)..."
+      screen -dmS newsica-caffeinate caffeinate -dims
+      sleep 1
+    else
+      echo "  [i] Caffeinate già attivo."
+    fi
+  fi
+
+  if [ -z "$(get_pid "src/newsica/audio/ai_music_worker.py")" ]; then
+    echo "  -> Avvio AI Music Worker..."
+    local ace_step_python
+    ace_step_python="$(get_ace_step_python)"
+    screen -dmS newsica-ai-music-worker bash -lc "cd '$BASE_DIR' && exec '$ace_step_python' -u '$BASE_DIR/src/newsica/audio/ai_music_worker.py' > '$TMP_DIR/ai_music_worker.log' 2>&1"
+    sleep 2
+  else
+    echo "  [i] AI Music Worker già attivo."
+  fi
+
+  if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ] && [ "${NEWSICA_RUN_GENERATION_WORKER:-false}" = "true" ]; then
+    if [ -z "$(get_pid "src/generation_worker.py")" ]; then
+      echo "  -> Avvio Generation Worker remoto..."
+      screen -dmS newsica-generation-worker bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/generation_worker.py' > '$TMP_DIR/generation_worker.log' 2>&1"
+      sleep 1
+    else
+      echo "  [i] Generation Worker già attivo."
+    fi
+  else
+    echo "  [!] Attenzione: NEWSICA_GENERATION_MODE non è remote o NEWSICA_RUN_GENERATION_WORKER è false. Il generation_worker NON verrà avviato."
+  fi
+
+  echo -e "${GREEN}${BOLD}🎉 Avvio worker completato! ${NC}"
+  echo ""
+}
+
+function do_worker_stop() {
+  echo -e "\n${RED}${BOLD}🛑 Spegnimento dei Worker AI Remoti...${NC}"
+  
+  if [ "$(uname)" = "Darwin" ]; then
+    local caffeinate_pids=$(get_all_pids "caffeinate")
+    if [ -n "$caffeinate_pids" ]; then
+      echo "  -> Arresto caffeinate..."
+      kill $caffeinate_pids 2>/dev/null || true
+    fi
+  fi
+
+  local targets=("src/newsica/audio/ai_music_worker.py" "src/generation_worker.py")
+  for target in "${targets[@]}"; do
+    local pids=$(get_all_pids "$target")
+    if [ -n "$pids" ]; then
+      echo "  -> Arresto $target..."
+      kill $pids 2>/dev/null || true
+    fi
+  done
+  
+  local screens=("newsica-ai-music-worker" "newsica-generation-worker" "newsica-caffeinate")
+  for session_name in "${screens[@]}"; do
+    screen -S "$session_name" -X quit 2>/dev/null || true
+  done
+  
+  rm -f "$TMP_DIR"/ai_music.lock 2>/dev/null || true
+  rm -f "$TMP_DIR"/ai_music_worker.lock 2>/dev/null || true
+
+  echo -e "${GREEN}✅ Spegnimento worker completato.${NC}\n"
+}
+
 function do_logs() {
   echo -e "\n${BOLD}📝 Log Recenti Regia (director.log):${NC}"
   echo "------------------------------------------------"
@@ -520,6 +597,12 @@ case "$1" in
       find "$RUNTIME_DIR" -name "*.lock" ! -name "telegram_agent.lock" -delete 2>/dev/null || true
     fi
     do_start
+    ;;
+  worker-start)
+    do_worker_start
+    ;;
+  worker-stop)
+    do_worker_stop
     ;;
   status)
     do_status

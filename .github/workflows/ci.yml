@@ -39,6 +39,7 @@ jobs:
         run: |
           bash -n manage.sh
           bash -n scripts/deploy_vps.sh
+          bash -n scripts/configure_vps_nginx.sh
           venv/bin/python -m py_compile \
             src/dashboard.py \
             src/preparation_agent.py \
