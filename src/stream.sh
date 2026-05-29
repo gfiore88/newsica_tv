@@ -154,7 +154,7 @@ else
   # e il filtro overlay ripete l'ultimo frame automaticamente (repeatlast=1).
   # Una grana molto leggera evita che videotoolbox collassi a bitrate troppo bassi
   # quando la scena e' quasi statica, migliorando l'aggancio di YouTube Live.
-  FILTER="[0:v]scale=${STREAM_WIDTH}:${STREAM_HEIGHT}:force_original_aspect_ratio=decrease,pad=${STREAM_WIDTH}:${STREAM_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=${STREAM_FPS}[bg]; [bg][1:v]overlay=0:0:format=auto,noise=alls=3:allf=t[outv]"
+  FILTER="[0:v]scale=${STREAM_WIDTH}:${STREAM_HEIGHT}:force_original_aspect_ratio=decrease,pad=${STREAM_WIDTH}:${STREAM_HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=0x0a1128,setsar=1,format=yuv420p,fps=${STREAM_FPS}[bg]; [bg][1:v]overlay=0:0:format=auto[outv]"
 fi
 
 if [ "$STREAM_VIDEO_ENCODER" = "h264_videotoolbox" ]; then
