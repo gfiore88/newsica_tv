@@ -20,6 +20,8 @@ Sei l'Agente Coordinatore per il progetto NewsicaTV. Il tuo obiettivo è garanti
 
 > 🔄 **REGOLA DI RIAVVIO DASHBOARD**: Quando si apportano modifiche al codice della Dashboard Web (`src/dashboard.py` o relativi template/JS interni), questa DEVE ESSERE SEMPRE RIAVVIATA immediatamente dopo la modifica, altrimenti i cambiamenti non saranno visibili a schermo. Il comando di riavvio raccomandato è killare il processo e rieseguire lo startup (es: `pkill -f "src/dashboard.py" ; ./manage.sh start` oppure killando e avviando lo `screen` appropriato).
 
+> 🌐 **REGOLA DI PREFERENZA IPV4 (VPS NETWORKING)**: A causa di blocchi e instabilità di routing IPv6 presenti sulla VPS di produzione, è fondamentale forzare l'utilizzo esclusivo di **IPv4** per tutte le connessioni di rete (es. API di Telegram, API di YouTube, scraper). Qualsiasi nuovo script Python autonomo deve importare il pacchetto `newsica` per attivare la patch globale di `socket.getaddrinfo` definita in [newsica/__init__.py](file:///Users/giovannifiore/Desktop/newsica_tv/src/newsica/__init__.py), oppure applicare manualmente la stessa patch di `socket.getaddrinfo` a livello di bootstrap.
+
 ---
 
 ## Pipeline Standard di Progetto
