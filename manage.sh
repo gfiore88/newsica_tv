@@ -7,6 +7,7 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="$BASE_DIR/runtime"
 TMP_DIR="$BASE_DIR/tmp"
 VENV_PYTHON="$BASE_DIR/venv/bin/python3"
+
 if [ -f "$BASE_DIR/.env" ]; then
   set -a
   . "$BASE_DIR/.env"
@@ -20,7 +21,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
-NC='\033[0;37m' # No Color
+NC='\033[0;37m'
 BOLD='\033[1m'
 
 # Assicura la presenza delle cartelle
@@ -33,12 +34,14 @@ function get_ace_step_python() {
     "$BASE_DIR/venv/bin/python3"
     "$BASE_DIR/venv/bin/python"
   )
+
   for candidate in "${candidates[@]}"; do
     if [ -x "$candidate" ]; then
       echo "$candidate"
       return
     fi
   done
+
   command -v python3
 }
 
@@ -47,16 +50,16 @@ function show_help() {
   echo -e "Uso: ./manage.sh [comando]"
   echo ""
   echo -e "${BOLD}Comandi disponibili:${NC}"
-  echo -e "  ${GREEN}start${NC}         Avvia tutti i servizi (Dashboard, Regia, Stream/FFmpeg)"
-  echo -e "  ${RED}stop${NC}          Ferma tutti i servizi in esecuzione, ripulisce lock e pipe"
-  echo -e "  ${YELLOW}restart${NC}       Ferma e riavvia tutto in modo pulito"
-  echo -e "  ${CYAN}status${NC}        Visualizza lo stato attuale e i PID dei vari componenti"
-  echo -e "  ${GREEN}worker-start${NC}  Avvia SOLO i worker AI remoti (Mac)"
-  echo -e "  ${RED}worker-stop${NC}   Ferma SOLO i worker AI remoti"
-  echo -e "  ${CYAN}live-health${NC}   Verifica log locali, RTMP e stato pubblico YouTube"
-  echo -e "  ${BLUE}logs${NC}          Mostra le ultime righe dei log principali"
-  echo -e "  ${PURPLE}tts-spike${NC}     Genera/apre il confronto TTS sperimentale"
-  echo -e "  ${PURPLE}install-ace-step${NC} Crea venv e clona il repo di ACE-Step"
+  echo -e "  ${GREEN}start${NC}             Avvia tutti i servizi"
+  echo -e "  ${RED}stop${NC}              Ferma tutti i servizi in esecuzione, ripulisce lock e pipe"
+  echo -e "  ${YELLOW}restart${NC}           Ferma e riavvia tutto in modo pulito"
+  echo -e "  ${CYAN}status${NC}            Visualizza lo stato attuale e i PID dei vari componenti"
+  echo -e "  ${GREEN}worker-start${NC}      Avvia SOLO i worker AI remoti"
+  echo -e "  ${RED}worker-stop${NC}       Ferma SOLO i worker AI remoti"
+  echo -e "  ${CYAN}live-health${NC}       Verifica log locali, RTMP e stato pubblico YouTube"
+  echo -e "  ${BLUE}logs${NC}              Mostra le ultime righe dei log principali"
+  echo -e "  ${PURPLE}tts-spike${NC}         Genera/apre il confronto TTS sperimentale"
+  echo -e "  ${PURPLE}install-ace-step${NC}  Crea venv e clona il repo di ACE-Step"
   echo ""
 }
 
@@ -73,13 +76,14 @@ function get_all_pids() {
 function check_status() {
   local label="$1"
   local pattern="$2"
-  local pid=$(get_pid "$pattern")
-  
+  local pid
+  pid=$(get_pid "$pattern")
+
   if [ -n "$pid" ]; then
-    printf "  %-20s [ %b ]  (PID: %s)\n" "$label" "${GREEN}🟢 ATTIVO${NC}" "$pid"
+    printf "  %-22s [ %b ]  (PID: %s)\n" "$label" "${GREEN}🟢 ATTIVO${NC}" "$pid"
     return 0
   else
-    printf "  %-20s [ %b ]\n" "$label" "${RED}🔴 SPENTO${NC}"
+    printf "  %-22s [ %b ]\n" "$label" "${RED}🔴 SPENTO${NC}"
     return 1
   fi
 }
@@ -87,118 +91,162 @@ function check_status() {
 function do_status() {
   echo -e "\n${BOLD}📊 Stato dei Servizi NewsicaTV:${NC}"
   echo -e "------------------------------------------------"
+
   check_status "Dashboard (Web)" "src/dashboard.py"
+  check_status "Watchdog" "src/watchdog.sh"
   check_status "Regia (Director)" "src/director.py"
+  check_status "Stream Script" "src/stream.sh"
   check_status "Stream (FFmpeg)" "ffmpeg.*audio_pipe"
+
   check_status "Ticker Agent" "src/ticker_agent.py"
   check_status "Overlay Agent" "src/overlay_agent.py"
   check_status "Chime Agent" "src/hourly_chime_agent.py"
   check_status "Preparation Agent" "src/preparation_agent.py"
+
   check_status "AI Music Worker" "src/newsica/audio/ai_music_worker.py"
+
   if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ] && [ "${NEWSICA_RUN_GENERATION_WORKER:-false}" = "true" ]; then
     check_status "Generation Worker" "src/generation_worker.py"
   fi
+
   check_status "Breaking News Daemon" "src/breaking_news_agent.py --daemon"
   check_status "Telegram Agent" "src/telegram_agent.py"
-  check_status "Watchdog" "src/watchdog.sh"
+
   if [ "$(uname)" = "Darwin" ]; then
-    check_status "Anti-Sleep (Caffeinate)" "caffeinate"
+    check_status "Anti-Sleep" "caffeinate"
   fi
+
   echo -e "------------------------------------------------\n"
 }
 
 function do_stop() {
   local exclude_telegram=false
+
   if [ "$1" == "--exclude-telegram" ]; then
     exclude_telegram=true
     echo -e "\n${RED}${BOLD}🛑 Spegnimento parziale di NewsicaTV (bot Telegram ESCLUSO)...${NC}"
   else
     echo -e "\n${RED}${BOLD}🛑 Spegnimento di tutto l'ecosistema NewsicaTV...${NC}"
   fi
-  
-  # Termina caffeinate su macOS se presente
+
   if [ "$(uname)" = "Darwin" ]; then
-    local caffeinate_pids=$(get_all_pids "caffeinate")
+    local caffeinate_pids
+    caffeinate_pids=$(get_all_pids "caffeinate")
     if [ -n "$caffeinate_pids" ]; then
       echo "  -> Arresto caffeinate..."
       kill $caffeinate_pids 2>/dev/null || true
     fi
   fi
 
-  # Termina watchdog prima di tutto
-  local watchdog_pids=$(get_all_pids "src/watchdog.sh")
+  local watchdog_pids
+  watchdog_pids=$(get_all_pids "src/watchdog.sh")
   if [ -n "$watchdog_pids" ]; then
     echo "  -> Fermo il Watchdog..."
-    kill -9 $watchdog_pids 2>/dev/null || true
+    kill $watchdog_pids 2>/dev/null || true
   fi
 
-  # Invia SIGTERM ordinato a Regia, Dashboard e Stream
-  local targets=("src/director.py" "src/preparation_agent.py" "src/dashboard.py" "src/stream.sh" "src/ticker_agent.py" "src/overlay_agent.py" "src/hourly_chime_agent.py" "src/breaking_news_agent.py" "src/newsica/audio/ai_music_worker.py" "src/generation_worker.py")
+  local targets=(
+    "src/stream.sh"
+    "src/director.py"
+    "src/preparation_agent.py"
+    "src/dashboard.py"
+    "src/ticker_agent.py"
+    "src/overlay_agent.py"
+    "src/hourly_chime_agent.py"
+    "src/breaking_news_agent.py"
+    "src/newsica/audio/ai_music_worker.py"
+    "src/generation_worker.py"
+  )
+
   if [ "$exclude_telegram" = false ]; then
     targets+=("src/telegram_agent.py")
   fi
-  
+
   for target in "${targets[@]}"; do
-    local pids=$(get_all_pids "$target")
+    local pids
+    pids=$(get_all_pids "$target")
     if [ -n "$pids" ]; then
       echo "  -> Arresto $target..."
       kill $pids 2>/dev/null || true
     fi
   done
 
-  # Termina i processi FFmpeg attivi per Newsica
-  local ffmpeg_pids=$(get_all_pids "ffmpeg")
+  local ffmpeg_pids
+  ffmpeg_pids=$(get_all_pids "ffmpeg")
   if [ -n "$ffmpeg_pids" ]; then
     echo "  -> Chiusura processi FFmpeg..."
     kill $ffmpeg_pids 2>/dev/null || true
   fi
 
-  # Attende un attimo e forza il kill se rimangono processi attivi
   sleep 1.5
-  for target in "${targets[@]}" "ffmpeg"; do
-    local pids=$(get_all_pids "$target")
+
+  for target in "${targets[@]}" "src/watchdog.sh" "ffmpeg"; do
+    local pids
+    pids=$(get_all_pids "$target")
     if [ -n "$pids" ]; then
       echo -e "  -> ${YELLOW}Forzatura arresto (SIGKILL) per $target...${NC}"
       kill -9 $pids 2>/dev/null || true
     fi
   done
 
-  # Chiude eventuali sessioni screen create da manage.sh start.
-  local screens=("newsica-dashboard" "newsica-watchdog" "newsica-stream" "newsica-ai-music-worker" "newsica-generation-worker" "newsica-preparation" "newsica-ticker" "newsica-overlay" "newsica-chime" "newsica-bn-daemon" "newsica-caffeinate")
+  local screens=(
+    "newsica-dashboard"
+    "newsica-watchdog"
+    "newsica-ai-music-worker"
+    "newsica-generation-worker"
+    "newsica-bn-daemon"
+    "newsica-caffeinate"
+  )
+
   if [ "$exclude_telegram" = false ]; then
     screens+=("newsica-telegram")
   fi
+
   for session_name in "${screens[@]}"; do
     screen -S "$session_name" -X quit 2>/dev/null || true
   done
+
+  # Pulizia anche di eventuali vecchie sessioni residue create da versioni precedenti.
+  local legacy_screens=(
+    "newsica-stream"
+    "newsica-preparation"
+    "newsica-ticker"
+    "newsica-overlay"
+    "newsica-chime"
+  )
+
+  for session_name in "${legacy_screens[@]}"; do
+    screen -S "$session_name" -X quit 2>/dev/null || true
+  done
+
   screen -wipe >/dev/null 2>&1 || true
 
-  # Rimozione dei lockfile e della pipe
   echo -e "🧹 Rimozione lock e pipe orfane..."
+
   if [ "$exclude_telegram" = false ]; then
     rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
   else
     find "$RUNTIME_DIR" -name "*.lock" ! -name "telegram_agent.lock" -delete 2>/dev/null || true
   fi
-  rm -rf "$RUNTIME_DIR"/stream.lock 2>/dev/null || true
-  rm -f "$TMP_DIR"/ai_music.lock 2>/dev/null || true
-  rm -f "$TMP_DIR"/ai_music_worker.lock 2>/dev/null || true
-  rm -f "$TMP_DIR"/audio_pipe "$TMP_DIR"/overlay_pipe 2>/dev/null || true
+
+  rm -rf "$RUNTIME_DIR/stream.lock" 2>/dev/null || true
+
+  rm -f "$TMP_DIR/ai_music.lock" 2>/dev/null || true
+  rm -f "$TMP_DIR/ai_music_worker.lock" 2>/dev/null || true
+  rm -f "$TMP_DIR/audio_pipe" "$TMP_DIR/overlay_pipe" "$TMP_DIR/ffmpeg_progress.txt" 2>/dev/null || true
 
   echo -e "${GREEN}✅ Spegnimento completato correttamente.${NC}\n"
 }
 
 function do_start() {
   echo -e "\n${GREEN}${BOLD}🚀 Avvio dell'ecosistema NewsicaTV...${NC}"
-  
-  # 1. Verifica ambiente virtuale
+
   if [ ! -f "$VENV_PYTHON" ]; then
     echo -e "${RED}❌ ERRORE: Ambiente virtuale non trovato in $VENV_PYTHON.${NC}"
     echo -e "Esegui prima: python3 -m venv venv && venv/bin/pip install -r requirements.txt"
     exit 1
   fi
 
-  # 0. Previene lo standby di macOS (Caffeinate)
   if [ "$(uname)" = "Darwin" ]; then
     if [ -z "$(get_pid "caffeinate")" ]; then
       echo "  -> Avvio Caffeinate (prevenzione sleep macOS)..."
@@ -209,17 +257,8 @@ function do_start() {
     fi
   fi
 
-  # 2. Crea pipe audio se mancante
-  if [ ! -p "$TMP_DIR/audio_pipe" ]; then
-    echo "  -> Creazione pipe audio FIFO..."
-    mkfifo "$TMP_DIR/audio_pipe"
-  fi
-  if [ ! -p "$TMP_DIR/overlay_pipe" ]; then
-    echo "  -> Creazione pipe overlay FIFO..."
-    mkfifo "$TMP_DIR/overlay_pipe"
-  fi
+  echo "  [i] FIFO audio/overlay gestite dal Watchdog."
 
-  # 3. Avvia la Dashboard (Web Server)
   if [ -z "$(get_pid "src/dashboard.py")" ]; then
     echo "  -> Avvio Dashboard..."
     screen -dmS newsica-dashboard bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' '$BASE_DIR/src/dashboard.py' > '$TMP_DIR/dashboard.log' 2>&1"
@@ -228,7 +267,6 @@ function do_start() {
     echo "  [i] Dashboard già attiva."
   fi
 
-  # 4. Avvia il Watchdog della Regia (che avvia e monitora director.py)
   if [ -z "$(get_pid "src/watchdog.sh")" ]; then
     echo "  -> Avvio Watchdog Regia..."
     screen -dmS newsica-watchdog bash -lc "cd '$BASE_DIR' && exec bash '$BASE_DIR/src/watchdog.sh' > '$TMP_DIR/director.log' 2>&1"
@@ -237,7 +275,6 @@ function do_start() {
     echo "  [i] Watchdog Regia già attivo."
   fi
 
-  # 5. Avvia il worker persistente della Musica AI
   if [ "${NEWSICA_GENERATION_MODE:-local}" != "remote" ] || [ "${NEWSICA_RUN_GENERATION_WORKER:-false}" = "true" ]; then
     if [ -z "$(get_pid "src/newsica/audio/ai_music_worker.py")" ]; then
       echo "  -> Avvio AI Music Worker..."
@@ -252,7 +289,6 @@ function do_start() {
     echo "  [i] AI Music Worker disabilitato in modalità solo-regia."
   fi
 
-  # 5.2 Avvia il worker generico di generazione solo in modalita' remota.
   if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ] && [ "${NEWSICA_RUN_GENERATION_WORKER:-false}" = "true" ]; then
     if [ -z "$(get_pid "src/generation_worker.py")" ]; then
       echo "  -> Avvio Generation Worker remoto..."
@@ -263,32 +299,9 @@ function do_start() {
     fi
   fi
 
-  # 5.5 Avvia gli agenti di supporto allo stream
-  if [ -z "$(get_pid "src/ticker_agent.py")" ]; then
-    echo "  -> Avvio Ticker Agent..."
-    screen -dmS newsica-ticker bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/ticker_agent.py' > '$TMP_DIR/ticker_agent.log' 2>&1"
-    sleep 1
-  else
-    echo "  [i] Ticker Agent già attivo."
-  fi
+  echo "  [i] Ticker/Overlay/Chime/Preparation gestiti da director.py."
+  echo "  [i] Streamer gestito dal Watchdog Regia."
 
-  if [ -z "$(get_pid "src/overlay_agent.py")" ]; then
-    echo "  -> Avvio Overlay Agent..."
-    screen -dmS newsica-overlay bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/overlay_agent.py' > '$TMP_DIR/overlay_agent.log' 2>&1"
-    sleep 1
-  else
-    echo "  [i] Overlay Agent già attivo."
-  fi
-
-  if [ -z "$(get_pid "src/hourly_chime_agent.py")" ]; then
-    echo "  -> Avvio Hourly Chime Agent..."
-    screen -dmS newsica-chime bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/hourly_chime_agent.py' > '$TMP_DIR/hourly_chime_agent.log' 2>&1"
-    sleep 1
-  else
-    echo "  [i] Hourly Chime Agent già attivo."
-  fi
-
-  # 6. Avvia il Bot Telegram
   if [ -z "$(get_pid "src/telegram_agent.py")" ]; then
     echo "  -> Avvio Telegram Bot Agent..."
     screen -dmS newsica-telegram bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/telegram_agent.py' > '$TMP_DIR/telegram_agent.log' 2>&1"
@@ -297,22 +310,12 @@ function do_start() {
     echo "  [i] Telegram Bot Agent già attivo."
   fi
 
-  # 6.5 Avvia il Breaking News Daemon
   if [ -z "$(get_pid "src/breaking_news_agent.py --daemon")" ]; then
     echo "  -> Avvio Breaking News Daemon..."
     screen -dmS newsica-bn-daemon bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/breaking_news_agent.py' --daemon > '$TMP_DIR/breaking_news_daemon.log' 2>&1"
     sleep 1
   else
     echo "  [i] Breaking News Daemon già attivo."
-  fi
-
-  # 7. Avvia lo Streamer (FFmpeg/YouTube)
-  if [ -z "$(get_pid "ffmpeg.*audio_pipe")" ]; then
-    echo "  -> Avvio Streamer (FFmpeg)..."
-    screen -dmS newsica-stream bash -lc "cd '$BASE_DIR' && exec bash '$BASE_DIR/src/stream.sh' > '$TMP_DIR/stream.log' 2>&1"
-    sleep 1
-  else
-    echo "  [i] Streamer già attivo."
   fi
 
   echo -e "${GREEN}${BOLD}🎉 Avvio completato! ${NC}"
@@ -322,8 +325,8 @@ function do_start() {
 }
 
 function do_worker_start() {
-  echo -e "\n${GREEN}${BOLD}🚀 Avvio dei Worker AI Remoti (Mac)...${NC}"
-  
+  echo -e "\n${GREEN}${BOLD}🚀 Avvio dei Worker AI Remoti...${NC}"
+
   if [ ! -f "$VENV_PYTHON" ]; then
     echo -e "${RED}❌ ERRORE: Ambiente virtuale non trovato in $VENV_PYTHON.${NC}"
     exit 1
@@ -367,9 +370,10 @@ function do_worker_start() {
 
 function do_worker_stop() {
   echo -e "\n${RED}${BOLD}🛑 Spegnimento dei Worker AI Remoti...${NC}"
-  
+
   if [ "$(uname)" = "Darwin" ]; then
-    local caffeinate_pids=$(get_all_pids "caffeinate")
+    local caffeinate_pids
+    caffeinate_pids=$(get_all_pids "caffeinate")
     if [ -n "$caffeinate_pids" ]; then
       echo "  -> Arresto caffeinate..."
       kill $caffeinate_pids 2>/dev/null || true
@@ -377,37 +381,40 @@ function do_worker_stop() {
   fi
 
   local targets=("src/newsica/audio/ai_music_worker.py" "src/generation_worker.py")
+
   for target in "${targets[@]}"; do
-    local pids=$(get_all_pids "$target")
+    local pids
+    pids=$(get_all_pids "$target")
     if [ -n "$pids" ]; then
       echo "  -> Arresto $target..."
       kill $pids 2>/dev/null || true
     fi
   done
-  
+
   local screens=("newsica-ai-music-worker" "newsica-generation-worker" "newsica-caffeinate")
+
   for session_name in "${screens[@]}"; do
     screen -S "$session_name" -X quit 2>/dev/null || true
   done
-  
-  rm -f "$TMP_DIR"/ai_music.lock 2>/dev/null || true
-  rm -f "$TMP_DIR"/ai_music_worker.lock 2>/dev/null || true
+
+  rm -f "$TMP_DIR/ai_music.lock" 2>/dev/null || true
+  rm -f "$TMP_DIR/ai_music_worker.lock" 2>/dev/null || true
 
   echo -e "${GREEN}✅ Spegnimento worker completato.${NC}\n"
 }
 
 function do_logs() {
-  echo -e "\n${BOLD}📝 Log Recenti Regia (director.log):${NC}"
+  echo -e "\n${BOLD}📝 Log Recenti Regia/Watchdog (director.log):${NC}"
   echo "------------------------------------------------"
-  tail -n 12 "$TMP_DIR/director.log" 2>/dev/null || echo "(Nessun log trovato)"
-  
+  tail -n 20 "$TMP_DIR/director.log" 2>/dev/null || echo "(Nessun log trovato)"
+
   echo -e "\n${BOLD}📺 Log Recenti Streamer (stream.log):${NC}"
   echo "------------------------------------------------"
-  tail -n 12 "$TMP_DIR/stream.log" 2>/dev/null || echo "(Nessun log trovato)"
+  tail -n 20 "$TMP_DIR/stream.log" 2>/dev/null || echo "(Nessun log trovato)"
 
   echo -e "\n${BOLD}🎵 Log Recenti AI Music Worker:${NC}"
   echo "------------------------------------------------"
-  tail -n 12 "$TMP_DIR/ai_music_worker.log" 2>/dev/null || echo "(Nessun log trovato)"
+  tail -n 20 "$TMP_DIR/ai_music_worker.log" 2>/dev/null || echo "(Nessun log trovato)"
   echo ""
 }
 
@@ -417,11 +424,11 @@ function do_live_health() {
 
   do_status
 
-  echo -e "${BOLD}Log Regia:${NC}"
-  tail -n 25 "$TMP_DIR/director.log" 2>/dev/null || echo "(Nessun director.log trovato)"
+  echo -e "${BOLD}Log Regia/Watchdog:${NC}"
+  tail -n 40 "$TMP_DIR/director.log" 2>/dev/null || echo "(Nessun director.log trovato)"
 
   echo -e "\n${BOLD}Log Stream:${NC}"
-  tail -n 35 "$TMP_DIR/stream.log" 2>/dev/null || echo "(Nessun stream.log trovato)"
+  tail -n 60 "$TMP_DIR/stream.log" 2>/dev/null || echo "(Nessun stream.log trovato)"
 
   echo -e "\n${BOLD}Progress FFmpeg:${NC}"
   if [ -s "$TMP_DIR/ffmpeg_progress.txt" ]; then
@@ -440,23 +447,29 @@ function do_live_health() {
   else
     echo "❌ runtime/on-air-state.json mancante."
   fi
+
   [ -f "$TMP_DIR/current_program.txt" ] && echo "Current: $(cat "$TMP_DIR/current_program.txt")"
   [ -f "$TMP_DIR/next_program.txt" ] && echo "Next: $(cat "$TMP_DIR/next_program.txt")"
 
   echo -e "\n${BOLD}Runner:${NC}"
   screen -ls 2>/dev/null || true
-  if launchctl list | rg 'com\.newsica' >/dev/null 2>&1; then
-    echo "❌ Trovati processi launchctl Newsica non governati da manage.sh:"
-    launchctl list | rg 'com\.newsica'
-  else
-    echo "✅ Nessun processo launchctl Newsica rilevato."
+
+  if command -v launchctl >/dev/null 2>&1 && command -v rg >/dev/null 2>&1; then
+    if launchctl list | rg 'com\.newsica' >/dev/null 2>&1; then
+      echo "❌ Trovati processi launchctl Newsica non governati da manage.sh:"
+      launchctl list | rg 'com\.newsica'
+    else
+      echo "✅ Nessun processo launchctl Newsica rilevato."
+    fi
   fi
 
   echo -e "\n${BOLD}Connessione RTMP locale:${NC}"
+
   local ffmpeg_pid
   ffmpeg_pid=$(get_pid "ffmpeg.*audio_pipe")
+
   if [ -n "$ffmpeg_pid" ]; then
-    if lsof -Pan -p "$ffmpeg_pid" -iTCP -sTCP:ESTABLISHED 2>/dev/null | rg ':1935|:443' >/dev/null; then
+    if lsof -Pan -p "$ffmpeg_pid" -iTCP -sTCP:ESTABLISHED 2>/dev/null | grep -E ':1935|:443' >/dev/null; then
       echo "✅ FFmpeg ha una connessione RTMP/RTMPS stabilita."
     else
       echo "❌ FFmpeg è attivo ma non risulta una connessione TCP RTMP/RTMPS stabilita."
@@ -465,90 +478,12 @@ function do_live_health() {
     echo "❌ FFmpeg non risulta attivo."
   fi
 
-  echo -e "\n${BOLD}Player pubblico YouTube:${NC}"
-  if [ -f "$BASE_DIR/.env" ]; then
-    export $(grep -v '^#' "$BASE_DIR/.env" | xargs)
-  fi
-  local public_url="https://www.youtube.com/${YOUTUBE_HANDLE:-@gfiore88}/live"
-  local public_check
-  public_check=$(PUBLIC_URL="$public_url" python3 <<'PY'
-import json
-import os
-import re
-import requests
-
-public_url = os.environ["PUBLIC_URL"]
-headers = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
-}
-cookies = {"CONSENT": "YES+cb.20210328-17-p0.it+FX+999"}
-
-def clean(value):
-    return " ".join((value or "").split())
-
-def inspect(video_id):
-    watch_url = f"https://www.youtube.com/watch?v={video_id}&ucbcb=1"
-    response = requests.get(watch_url, headers=headers, cookies=cookies, timeout=10)
-    if response.status_code != 200:
-        return False, f"HTTP {response.status_code}", ""
-    match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});', response.text)
-    if not match:
-        return False, "player response non trovata", ""
-    data = json.loads(match.group(1))
-    video_details = data.get("videoDetails", {})
-    playability = data.get("playabilityStatus", {}) or {}
-    microformat = data.get("microformat", {}).get("playerMicroformatRenderer", {}) or {}
-    live_broadcast = microformat.get("liveBroadcastDetails", {}) or {}
-    title = clean(video_details.get("title"))
-    reason = clean(playability.get("reason"))
-    reason_lc = reason.lower()
-    ended_markers = ("terminat", "ended", "non è in diretta", "non e' in diretta", "not live", "offline")
-    if reason and any(marker in reason_lc for marker in ended_markers):
-        return False, reason, title
-    is_live = bool(video_details.get("isLive")) or bool(live_broadcast.get("isLiveNow")) or '"isLiveNow":true' in response.text
-    return is_live, reason, title
-
-response = requests.get(f"{public_url}?ucbcb=1", headers=headers, cookies=cookies, timeout=10)
-if response.status_code != 200:
-    print(f"ERROR|HTTP {response.status_code}")
-    raise SystemExit(0)
-
-video_ids = []
-for match in re.findall(r'"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"', response.text):
-    if match not in video_ids:
-        video_ids.append(match)
-
-reasons = []
-for video_id in video_ids[:8]:
-    is_live, reason, title = inspect(video_id)
-    if is_live:
-        print(f"LIVE|{video_id}|{title}")
-        raise SystemExit(0)
-    if reason or title:
-        reasons.append(f"{video_id}: {title or 'senza titolo'} ({reason or 'non live'})")
-
-if reasons:
-    print("OFFLINE|" + " ; ".join(reasons[:3]))
-else:
-    print("OFFLINE|nessun video live confermato")
-PY
-)
-  if [[ "$public_check" == LIVE\|* ]]; then
-    local live_video_id="${public_check#LIVE|}"
-    live_video_id="${live_video_id%%|*}"
-    echo "✅ Il canale pubblico risulta live: $public_url (video $live_video_id)"
-  else
-    local public_reason="${public_check#*|}"
-    echo "❌ Il player pubblico non risulta live: $public_url"
-    [ -n "$public_reason" ] && echo "   Dettaglio: $public_reason"
-    echo "   Se RTMP è connesso, apri YouTube Studio e verifica che la broadcast sia avviata/agganciata allo stream corretto."
-  fi
   echo ""
 }
 
 function do_tts_spike() {
   local spike_python="$BASE_DIR/.venv_tts_spike/bin/python"
+
   if [ ! -x "$spike_python" ]; then
     echo -e "${RED}❌ Ambiente spike non trovato in .venv_tts_spike.${NC}"
     echo -e "Crea l'ambiente con: uv venv --python /opt/homebrew/bin/python3.12 .venv_tts_spike"
@@ -574,12 +509,15 @@ function do_tts_spike() {
 
 function do_install_ace_step() {
   echo -e "\n${PURPLE}${BOLD}📦 Installazione ACE-Step in ambiente separato...${NC}"
+
   local venv_dir="$BASE_DIR/.venv_ace_step"
+
   if [ ! -d "$venv_dir" ]; then
     echo "Creazione virtual environment: $venv_dir"
     python3 -m venv "$venv_dir"
   fi
-  echo "E' necessario clonare ACE-Step e installarne i requisiti manualmente o tramite questo script in futuro."
+
+  echo "È necessario clonare ACE-Step e installarne i requisiti manualmente o tramite questo script in futuro."
   echo "Usa: $venv_dir/bin/pip install torch torchaudio pydub ..."
   echo -e "${GREEN}Ambiente pronto in $venv_dir.${NC}\n"
 }
@@ -595,11 +533,13 @@ case "$1" in
     do_stop "$2"
     echo -e "  -> Attesa rilascio lockfile..."
     sleep 3
+
     if [ "$2" != "--exclude-telegram" ]; then
       rm -f "$RUNTIME_DIR"/*.lock 2>/dev/null || true
     else
       find "$RUNTIME_DIR" -name "*.lock" ! -name "telegram_agent.lock" -delete 2>/dev/null || true
     fi
+
     do_start
     ;;
   worker-start)
