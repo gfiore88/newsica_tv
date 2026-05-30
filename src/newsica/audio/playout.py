@@ -111,13 +111,16 @@ def _generate_request_announcement(author, title, output_file):
         from newsica.generation.tts_jobs import enqueue_audio_job_and_wait, remote_generation_enabled
 
         if remote_generation_enabled():
+            import time as _time
+            # Dedupe key con timestamp al minuto: evita collisione con job stale di giorni precedenti
+            minute_bucket = int(_time.time() // 60)
             ok, _job = enqueue_audio_job_and_wait(
                 "tts_audio",
                 text=text,
                 target_audio_path=output_file,
-                priority=90,
+                priority=200,  # ALTA PRIORITÀ: TTS time-sensitive > AI Music (100)
                 title="Annuncio richiesta chat",
-                dedupe_key=f"tts_audio:request:{clean_author}:{clean_title}",
+                dedupe_key=f"tts_audio:request:{clean_author}:{clean_title}:{minute_bucket}",
                 payload={"character": "breaking_news", "voice": "if_sara", "speed": 0.95},
                 timeout_seconds=int(os.getenv("NEWSICA_REMOTE_ANNOUNCEMENT_TIMEOUT_SECONDS", "45")),
             )
@@ -155,13 +158,16 @@ def _generate_telegram_announcement(author, output_file):
         from newsica.generation.tts_jobs import enqueue_audio_job_and_wait, remote_generation_enabled
 
         if remote_generation_enabled():
+            import time as _time
+            # Dedupe key con timestamp al minuto: evita collisione con job stale di giorni precedenti
+            minute_bucket = int(_time.time() // 60)
             ok, _job = enqueue_audio_job_and_wait(
                 "tts_audio",
                 text=text,
                 target_audio_path=output_file,
-                priority=90,
+                priority=200,  # ALTA PRIORITÀ: TTS time-sensitive > AI Music (100)
                 title="Annuncio vocale Telegram",
-                dedupe_key=f"tts_audio:telegram:{clean_author}",
+                dedupe_key=f"tts_audio:telegram:{clean_author}:{minute_bucket}",
                 payload={"character": "breaking_news", "voice": "if_sara", "speed": 0.95},
                 timeout_seconds=int(os.getenv("NEWSICA_REMOTE_ANNOUNCEMENT_TIMEOUT_SECONDS", "45")),
             )

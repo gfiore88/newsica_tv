@@ -290,9 +290,24 @@ def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python)
             else:
                 target_audio = Path(payload.get("target_audio_path") or Path(tmp_dir) / audio_filename)
             target_audio.parent.mkdir(parents=True, exist_ok=True)
+            # Se il file esiste ed è owned da root (da un deploy precedente con sudo),
+            # la copia fallirebbe con PermissionError. Tentiamo di rimuoverlo prima.
+            if target_audio.exists() and not os.access(str(target_audio), os.W_OK):
+                try:
+                    target_audio.unlink()
+                except PermissionError:
+                    # Non possiamo rimuovere il file root: usiamo un path alternativo con timestamp
+                    import time as _t
+                    alt_name = f"{target_audio.stem}_{int(_t.time())}{target_audio.suffix}"
+                    target_audio = target_audio.parent / alt_name
             shutil.copy2(source_audio, target_audio)
+            try:
+                os.chmod(str(target_audio), 0o664)  # Assicura scrivibilità futura
+            except OSError:
+                pass
             artifact_manifest = dict(manifest)
             artifact_manifest["audio_path"] = str(target_audio)
+
         elif job.get("job_type") == "llm_generate":
             artifact_manifest = dict(manifest)
         else:
