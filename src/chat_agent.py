@@ -6,6 +6,10 @@ import time
 from datetime import datetime
 import requests
 import pytchat
+import pytchat.util
+# Monkey-patch per evitare che la VPS venga bloccata dall'anti-bot di YouTube sulla watch page
+pytchat.util.get_channelid = lambda client, video_id: "UCQOA9AoLRA8XG2g9ruogE1g"
+
 from newsica.storage.repositories.ai_music_jobs_repository import enqueue_job
 from newsica.audio.ai_music_runtime import launch_ai_music_worker
 
@@ -35,7 +39,7 @@ youtube_api_quota_exceeded_until = 0.0
 
 # Filtri di Moderazione
 MAX_MSG_LENGTH = 90
-USER_RATE_LIMIT_SECONDS = 180  # 3 minuti per utente
+USER_RATE_LIMIT_SECONDS = 15  # 15 secondi per utente
 PROFANITY_BLACKLIST = {
     "cazzo", "vaffanculo", "stronzo", "stronza", "puttana", "troia", "merda", "coglion",
     "bastardo", "bastarda", "frocio", "finocchio", "negro", "terrone", "terroni", "troie"

@@ -838,8 +838,9 @@ def draw_chat_overlay(image, accent):
                     _chat_msg_data = data
                     _chat_state = CHAT_STATE_FADE_IN
                     _chat_state_start_time = now_mono
-        except Exception:
-            pass
+                    print(f"💬 [OVERLAY CHAT] Nuovo messaggio rilevato da {data.get('author')}: '{data.get('message')}' (timestamp={msg_timestamp})")
+        except Exception as e:
+            print(f"❌ [OVERLAY CHAT ERROR] Errore caricamento o parsing: {e}")
                 
     # 2. Aggiornamento macchina a stati
     if _chat_state == CHAT_STATE_IDLE:
@@ -858,7 +859,7 @@ def draw_chat_overlay(image, accent):
             _chat_opacity = int(235 * (elapsed / duration))
             
     elif _chat_state == CHAT_STATE_DISPLAY:
-        duration = 6.0
+        duration = 60.0
         _chat_opacity = 235
         if elapsed >= duration:
             _chat_state = CHAT_STATE_FADE_OUT
