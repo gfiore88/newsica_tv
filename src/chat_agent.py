@@ -157,10 +157,16 @@ def inspect_live_video(video_id):
 
 def pick_live_video_id(candidate_ids, source_label):
     seen = set()
+    first_candidate = None
+    first_candidate_reason = None
+
     for video_id in candidate_ids:
         if not video_id or len(video_id) != 11 or video_id in seen:
             continue
         seen.add(video_id)
+
+        if first_candidate is None:
+            first_candidate = video_id
 
         info = inspect_live_video(video_id)
         if info.get("is_live"):
@@ -168,7 +174,16 @@ def pick_live_video_id(candidate_ids, source_label):
             return video_id
 
         reason = info.get("reason") or "video non live"
+        if video_id == first_candidate:
+            first_candidate_reason = reason
         print(f"ℹ️ [DISCOVERY] Scarto Video ID {video_id} da {source_label}: {reason}")
+
+    # Fallback in caso di blocco anti-bot di YouTube
+    if first_candidate:
+        reason_lc = (first_candidate_reason or "").lower()
+        if "accedi" in reason_lc or "confermare" in reason_lc or "bot" in reason_lc or "signin" in reason_lc or "sign in" in reason_lc:
+            print(f"⚠️ [DISCOVERY] Ispezione video bloccata da anti-bot YouTube. Fallback sul primo ID candidato trovato: {first_candidate}")
+            return first_candidate
 
     return None
 

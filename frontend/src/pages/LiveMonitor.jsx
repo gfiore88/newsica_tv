@@ -1,12 +1,68 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { useDialog } from '../context/useDialog'
-import { AlertTriangle, SkipForward, RefreshCw, Bell, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, SkipForward, RefreshCw, Bell, ShieldAlert, MonitorPlay } from 'lucide-react'
 
 export default function LiveMonitor() {
   const { state } = useOutletContext()
   const { showConfirm } = useDialog()
   const [loadingAction, setLoadingAction] = useState(null)
+  const [manualVideoId, setManualVideoId] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    const fetchCurrentId = async () => {
+      try {
+        const res = await fetch('/api/chat/status')
+        if (res.ok) {
+          const data = await res.json()
+          setManualVideoId(data.video_id || '')
+        }
+      } catch (err) {
+        console.error('Errore recupero ID video:', err)
+      }
+    }
+    fetchCurrentId()
+  }, [])
+
+  const handleSaveVideoId = async () => {
+    if (!manualVideoId || manualVideoId.trim().length !== 11) {
+      alert("L'ID video deve essere esattamente di 11 caratteri.");
+      return;
+    }
+    setIsSaving(true)
+    try {
+      const res = await fetch('/api/chat/video_id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ video_id: manualVideoId.trim() })
+      })
+      if (res.ok) {
+        window.location.reload()
+      }
+    } catch (err) {
+      console.error('Errore salvataggio ID video:', err)
+    }
+    setIsSaving(false)
+  }
+
+  const handleResetVideoId = async () => {
+    setIsSaving(true)
+    try {
+      const res = await fetch('/api/chat/video_id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ video_id: '' })
+      })
+      if (res.ok) {
+        setManualVideoId('')
+        window.location.reload()
+      }
+    } catch (err) {
+      console.error('Errore reset ID video:', err)
+    }
+    setIsSaving(false)
+  }
 
   const sendCommandSafe = async (cmd, msg) => {
     if (await showConfirm(msg, 'Conferma Comando')) {
@@ -92,6 +148,42 @@ export default function LiveMonitor() {
                 <span className="text-sm font-bold text-slate-300 truncate">{state.next_block || '--'}</span>
                 <span className="text-xs font-mono bg-slate-800 px-2 py-1 rounded text-slate-400">{state.next_start || '--:--'}</span>
              </div>
+           </div>
+        </div>
+
+        {/* Impostazioni Live Chat */}
+        <div className="glass rounded-xl p-6 shadow-xl border border-slate-800 flex flex-col">
+           <h2 className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-4">ID Live Stream (Chat YouTube)</h2>
+           
+           <div className="space-y-3">
+             <div className="text-xs text-slate-400 leading-normal">
+               Se l'auto-discovery fallisce, inserisci l'ID video di 11 caratteri della tua live (es. <code>2oG1HVTR0BU</code>).
+             </div>
+             
+             <div className="flex gap-2">
+               <input
+                 type="text"
+                 maxLength={11}
+                 value={manualVideoId}
+                 onChange={(e) => setManualVideoId(e.target.value)}
+                 placeholder="ID Video (11 char)"
+                 className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-indigo-500"
+               />
+               <button
+                 onClick={handleSaveVideoId}
+                 disabled={isSaving}
+                 className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg transition"
+               >
+                 {isSaving ? '...' : 'Salva'}
+               </button>
+             </div>
+             
+             <button
+               onClick={handleResetVideoId}
+               className="w-full text-[11px] font-bold text-slate-500 hover:text-slate-400 py-1 transition"
+             >
+               Ripristina Auto-Discovery
+             </button>
            </div>
         </div>
 
