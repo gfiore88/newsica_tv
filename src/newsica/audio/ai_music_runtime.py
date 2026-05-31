@@ -25,7 +25,12 @@ def resolve_ace_step_python() -> str:
     return sys.executable
 
 
-def launch_ai_music_worker() -> subprocess.Popen:
+def launch_ai_music_worker() -> subprocess.Popen | None:
+    mode = os.getenv("NEWSICA_GENERATION_MODE", "local")
+    if mode == "remote":
+        # In remote mode, the worker runs on a separate machine. We don't launch it locally.
+        return None
+
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     log_path = TMP_DIR / "ai_music_worker.log"
     log_file = open(log_path, "a", encoding="utf-8")
