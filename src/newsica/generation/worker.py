@@ -36,8 +36,8 @@ class SqliteJobBackend:
     def expire_stale_jobs(self, stale_seconds: int) -> dict:
         return jobs.expire_stale_jobs(stale_seconds)
 
-    def claim_next_job(self, worker_id: str) -> dict | None:
-        return jobs.claim_next_job(worker_id)
+    def claim_next_job(self, worker_id: str, job_types: list[str] | None = None) -> dict | None:
+        return jobs.claim_next_job(worker_id, job_types=job_types)
 
     def mark_running(self, job_id: str, worker_id: str) -> dict:
         return jobs.mark_running(job_id, worker_id)
@@ -66,8 +66,11 @@ class HttpJobBackend:
     def expire_stale_jobs(self, stale_seconds: int) -> dict:
         return {"reset": 0, "expired": 0}
 
-    def claim_next_job(self, worker_id: str) -> dict | None:
-        payload = self._post("api/generation/jobs/claim", {"worker_id": worker_id})
+    def claim_next_job(self, worker_id: str, job_types: list[str] | None = None) -> dict | None:
+        payload = {"worker_id": worker_id}
+        if job_types:
+            payload["job_types"] = job_types
+        response = self._post("api/generation/jobs/claim", payload)
         return payload.get("job")
 
     def mark_running(self, job_id: str, worker_id: str) -> dict:
@@ -170,7 +173,7 @@ def process_job(job: dict, worker_id: str, backend=None) -> dict:
         return backend.mark_failed(job["id"], worker_id, str(e))
 
 
-def run_worker(*, once: bool = False) -> None:
+def run_worker(*, once: bool = False, job_types: list[str] | None = None) -> None:
     worker_id = get_worker_id()
     poll_seconds = _env_int("NEWSICA_REMOTE_POLL_SECONDS", 10)
     idle_poll_seconds = _env_int("NEWSICA_REMOTE_IDLE_POLL_SECONDS", 30)
@@ -184,7 +187,7 @@ def run_worker(*, once: bool = False) -> None:
             if recovery.get("reset") or recovery.get("expired"):
                 logger.info("Generation recovery: %s", recovery)
 
-            job = backend.claim_next_job(worker_id)
+            job = backend.claim_next_job(worker_id, job_types=job_types)
             if job:
                 logger.info("Claimed generation job %s type=%s", job["id"], job["job_type"])
                 process_job(job, worker_id, backend=backend)
@@ -522,9 +525,18 @@ def _process_llm_generate(job: dict) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description="NewsicaTV generation job worker")
     parser.add_argument("--once", action="store_true", help="process at most one job and exit")
+    parser.add_argument("--fast-only", action="store_true", help="only process fast jobs (hourly_chime, short_tts, tts_audio, breaking_news)")
+    parser.add_argument("--heavy-only", action="store_true", help="only process heavy jobs (slot_audio, ai_music, llm_generate)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-    run_worker(once=args.once)
+    
+    job_types = None
+    if args.fast_only:
+        job_types = ["hourly_chime", "short_tts", "tts_audio", "breaking_news"]
+    elif args.heavy_only:
+        job_types = ["slot_audio", "ai_music", "llm_generate"]
+
+    run_worker(once=args.once, job_types=job_types)
 
 
 if __name__ == "__main__":
