@@ -72,7 +72,7 @@ class HttpJobBackend:
         if job_types:
             payload["job_types"] = job_types
         response = self._post("api/generation/jobs/claim", payload)
-        return payload.get("job")
+        return response.get("job")
 
     def mark_running(self, job_id: str, worker_id: str) -> dict:
         return self._post(f"api/generation/jobs/{job_id}/running", {"worker_id": worker_id}).get("job")
