@@ -290,9 +290,11 @@ function do_start() {
   fi
 
   if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ] && [ "${NEWSICA_RUN_GENERATION_WORKER:-false}" = "true" ]; then
-    if [ -z "$(get_pid "src/generation_worker.py")" ]; then
-      echo "  -> Avvio Generation Worker remoto..."
-      screen -dmS newsica-generation-worker bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/generation_worker.py' > '$TMP_DIR/generation_worker.log' 2>&1"
+    if [ -z "$(get_pid "src/generation_worker.py --fast-only")" ] && [ -z "$(get_pid "src/generation_worker.py --heavy-only")" ]; then
+      echo "  -> Avvio Generation Worker Fast remoto..."
+      screen -dmS newsica-generation-worker-fast bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/generation_worker.py' --fast-only > '$TMP_DIR/generation_worker_fast.log' 2>&1"
+      echo "  -> Avvio Generation Worker Heavy remoto..."
+      screen -dmS newsica-generation-worker-heavy bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/generation_worker.py' --heavy-only > '$TMP_DIR/generation_worker_heavy.log' 2>&1"
       sleep 1
     else
       echo "  [i] Generation Worker già attivo."
@@ -353,9 +355,11 @@ function do_worker_start() {
   fi
 
   if [ "${NEWSICA_GENERATION_MODE:-local}" = "remote" ] && [ "${NEWSICA_RUN_GENERATION_WORKER:-false}" = "true" ]; then
-    if [ -z "$(get_pid "src/generation_worker.py")" ]; then
-      echo "  -> Avvio Generation Worker remoto..."
-      screen -dmS newsica-generation-worker bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/generation_worker.py' > '$TMP_DIR/generation_worker.log' 2>&1"
+    if [ -z "$(get_pid "src/generation_worker.py --fast-only")" ] && [ -z "$(get_pid "src/generation_worker.py --heavy-only")" ]; then
+      echo "  -> Avvio Generation Worker Fast remoto..."
+      screen -dmS newsica-generation-worker-fast bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/generation_worker.py' --fast-only > '$TMP_DIR/generation_worker_fast.log' 2>&1"
+      echo "  -> Avvio Generation Worker Heavy remoto..."
+      screen -dmS newsica-generation-worker-heavy bash -lc "cd '$BASE_DIR' && exec '$VENV_PYTHON' -u '$BASE_DIR/src/generation_worker.py' --heavy-only > '$TMP_DIR/generation_worker_heavy.log' 2>&1"
       sleep 1
     else
       echo "  [i] Generation Worker già attivo."

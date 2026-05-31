@@ -64,7 +64,8 @@ class HttpJobBackend:
         self.token = _required_env("NEWSICA_REMOTE_GENERATION_TOKEN")
 
     def expire_stale_jobs(self, stale_seconds: int) -> dict:
-        return {"reset": 0, "expired": 0}
+        response = self._post("api/generation/jobs/expire_stale", {"stale_seconds": stale_seconds})
+        return response.get("result", {"reset": 0, "expired": 0})
 
     def claim_next_job(self, worker_id: str, job_types: list[str] | None = None) -> dict | None:
         payload = {"worker_id": worker_id}

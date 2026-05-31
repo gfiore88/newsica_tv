@@ -228,6 +228,16 @@ def register_system_routes(app, *, base_dir, tmp_dir, services, ace_step_python)
             ),
         })
 
+    @app.route('/api/generation/jobs/expire_stale', methods=['POST'])
+    def expire_stale_jobs():
+        auth_error = _require_generation_api_token()
+        if auth_error:
+            return auth_error
+        data = request.json or {}
+        stale_seconds = int(data.get("stale_seconds", 300))
+        result = generation_jobs_repository.expire_stale_jobs(stale_seconds)
+        return jsonify({"status": "OK", "result": result})
+
     @app.route('/api/generation/jobs/<job_id>/artifact', methods=['POST'])
     def upload_generation_job_artifact(job_id):
         auth_error = _require_generation_api_token()
