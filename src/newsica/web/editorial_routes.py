@@ -12,6 +12,7 @@ from newsica.domain.characters import get_character, load_characters
 from newsica.editorial.fallback_scripts import build_fallback_script
 from newsica.editorial.source_filters import fallback_general_news, filter_items_for_character
 
+
 MANUAL_EVENT_ORDER = (
     "news",
     "flash_60s",
@@ -89,6 +90,14 @@ MANUAL_EVENT_META = {
         "requires_brief": False,
     },
 }
+
+
+def _ollama_settings():
+    return {
+        "url": os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate"),
+        "model": os.getenv("OLLAMA_MODEL", "qwen3:4b"),
+        "timeout": int(os.getenv("OLLAMA_TIMEOUT", "180")),
+    }
 
 
 def _truncate_label(value, max_chars=40):
@@ -470,14 +479,26 @@ def register_editorial_routes(
         if not system_prompt:
             system_prompt = "Sei un duo di conduttori radiofonici e podcaster professionisti di NewsicaTV. Genera un copione per una rubrica stile podcast in formato dialogo a due voci Giulia e Marco."
 
-        user_prompt = f"Scrivi un copione per il podcast 'Newsica Podcast' sulla seguente tematica descritta dall'utente:\n\n\"{topic}\"\n\nRispetta rigorosamente eventuali indicazioni di durata o brevità fornite dall'utente nella tematica. Se non specificato, sviluppa un dialogo naturale, ricco e ben argomentato con un numero di parole adeguato alla durata del podcast così come richiesto. Se la durata non è definita dall'utente, sviluppa un dialogo di circa 450-650 parole, distribuito in un vero scambio tra i due speaker e non in poche battute sbrigative. Il dialogo deve essere diviso a turni di parola tra Giulia e Marco usando esattamente i tag [SPEAKER: Giulia] e [SPEAKER: Marco] all'inizio di ogni battuta. IMPORTANTE: I dialoghi devono essere in lingua italiana, con accenti grafici corretti per la sintesi vocale (`è`, `perché`, `cioè`, `può`, `più`, `né`, `sì`, `dà`, `lì`, `là`). Per temi tecnologici preferisci `intelligenza artificiale` o `IA` a `AI`, ed espandi le sigle tecniche alla prima occorrenza. Non includere mai `[MUSIC_BREAK]`, non promettere una ripresa dopo la musica e chiudi la puntata con un saluto finale che accompagni naturalmente verso la musica di NewsicaTV."
+        user_prompt = (
+            f"Scrivi un copione per il podcast 'Newsica Podcast' sulla seguente tematica descritta dall'utente:\n\n"
+            f"\"{topic}\"\n\n"
+            "Rispetta rigorosamente eventuali indicazioni di durata o brevità fornite dall'utente nella tematica. "
+            "Se non specificato, sviluppa un dialogo naturale, ricco e ben argomentato con un numero di parole adeguato "
+            "alla durata del podcast così come richiesto. Se la durata non è definita dall'utente, sviluppa un dialogo "
+            "di circa 450-650 parole, distribuito in un vero scambio tra i due speaker e non in poche battute sbrigative. "
+            "Il dialogo deve essere diviso a turni di parola tra Giulia e Marco usando esattamente i tag [SPEAKER: Giulia] "
+            "e [SPEAKER: Marco] all'inizio di ogni battuta. IMPORTANTE: I dialoghi devono essere in lingua italiana, "
+            "con accenti grafici corretti per la sintesi vocale (`è`, `perché`, `cioè`, `può`, `più`, `né`, `sì`, `dà`, `lì`, `là`). "
+            "Per temi tecnologici preferisci `intelligenza artificiale` o `IA` a `AI`, ed espandi le sigle tecniche alla prima occorrenza. "
+            "Non includere mai `[MUSIC_BREAK]`, non promettere una ripresa dopo la musica e chiudi la puntata con un saluto finale "
+            "che accompagni naturalmente verso la musica di NewsicaTV."
+        )
 
         import requests
 
-        ollama_url = "http://localhost:11434/api/generate"
-        model_name = os.getenv("OLLAMA_MODEL", "gemma3:12b")
+        ollama = _ollama_settings()
         payload = {
-            "model": model_name,
+            "model": ollama["model"],
             "system": system_prompt,
             "prompt": user_prompt,
             "stream": False,
@@ -488,7 +509,7 @@ def register_editorial_routes(
         script_text = ""
         llm_start = time.perf_counter()
         try:
-            response = requests.post(ollama_url, json=payload, timeout=60)
+            response = requests.post(ollama["url"], json=payload, timeout=ollama["timeout"])
             response.raise_for_status()
             script_text = response.json().get("response", "").strip()
         except Exception as e:
@@ -643,10 +664,9 @@ Istruzioni speciali:
 
         import requests
 
-        ollama_url = "http://localhost:11434/api/generate"
-        model_name = os.getenv("OLLAMA_MODEL", "gemma3:12b")
+        ollama = _ollama_settings()
         payload = {
-            "model": model_name,
+            "model": ollama["model"],
             "system": system_prompt,
             "prompt": user_prompt,
             "stream": False,
@@ -657,7 +677,7 @@ Istruzioni speciali:
         script_text = ""
         llm_start = time.perf_counter()
         try:
-            response = requests.post(ollama_url, json=payload, timeout=60)
+            response = requests.post(ollama["url"], json=payload, timeout=ollama["timeout"])
             response.raise_for_status()
             script_text = response.json().get("response", "").strip()
         except Exception as e:

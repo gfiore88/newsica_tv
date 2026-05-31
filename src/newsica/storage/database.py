@@ -228,6 +228,18 @@ def init_schema():
                 cursor.execute(
                     "ALTER TABLE shorts_library ADD COLUMN social_posts_json TEXT DEFAULT '{}'"
                 )
+            # Migration: aggiungi started_at e ended_at a generation_jobs
+            gen_jobs_columns = {
+                row["name"] for row in cursor.execute("PRAGMA table_info(generation_jobs)").fetchall()
+            }
+            if "started_at" not in gen_jobs_columns:
+                cursor.execute(
+                    "ALTER TABLE generation_jobs ADD COLUMN started_at TEXT"
+                )
+            if "ended_at" not in gen_jobs_columns:
+                cursor.execute(
+                    "ALTER TABLE generation_jobs ADD COLUMN ended_at TEXT"
+                )
             conn.commit()
     except Exception as e:
         print(f"⚠️ Failed to initialize SQLite schema: {e}")

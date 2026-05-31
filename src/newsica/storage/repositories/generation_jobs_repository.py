@@ -132,6 +132,7 @@ def mark_running(job_id, worker_id):
         job_id,
         worker_id,
         status="running",
+        started_at=_now(),
         heartbeat_at=_now(),
     )
 
@@ -151,6 +152,7 @@ def mark_ready(job_id, worker_id, artifact_manifest=None):
     updates = {
         "status": "ready",
         "completed_at": _now(),
+        "ended_at": _now(),
         "heartbeat_at": _now(),
         "error": None,
     }
@@ -166,6 +168,7 @@ def mark_failed(job_id, worker_id, error):
         status="failed",
         error=str(error),
         failed_at=_now(),
+        ended_at=_now(),
         heartbeat_at=_now(),
     )
 
@@ -193,12 +196,12 @@ def expire_stale_jobs(stale_seconds):
         cursor.execute(
             """
             UPDATE generation_jobs
-            SET status = 'expired', expired_at = ?, error = 'deadline expired'
+            SET status = 'expired', expired_at = ?, ended_at = ?, error = 'deadline expired'
             WHERE status IN ('pending', 'claimed', 'running', 'uploading')
               AND deadline_at IS NOT NULL
               AND deadline_at < ?
             """,
-            (now, now),
+            (now, now, now),
         )
         expired_count = cursor.rowcount
         conn.commit()

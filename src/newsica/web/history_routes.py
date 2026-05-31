@@ -223,3 +223,45 @@ def register_history_routes(app, *, runtime_dir):
             return jsonify({"status": "OK", "data": _load_rotation_runtime(runtime_dir)})
         except Exception as e:
             return jsonify({"status": "ERROR", "message": str(e)})
+
+    @app.route('/api/db/generation-jobs', methods=['GET'])
+    def get_db_generation_jobs():
+        from flask import request as flask_request
+        try:
+            status_filter = flask_request.args.get('status', '').strip() or None
+            limit = min(int(flask_request.args.get('limit', 200)), 500)
+            with get_connection() as conn:
+                if status_filter and status_filter != 'all':
+                    rows = conn.execute(
+                        "SELECT * FROM generation_jobs WHERE status = ? ORDER BY created_at DESC LIMIT ?",
+                        (status_filter, limit),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT * FROM generation_jobs ORDER BY created_at DESC LIMIT ?",
+                        (limit,),
+                    ).fetchall()
+            jobs = []
+            for row in rows:
+                item = dict(row)
+                # Calcola durata in secondi se started_at e ended_at sono disponibili
+                try:
+                    import datetime as _dt
+                    s = item.get("started_at")
+                    e = item.get("ended_at")
+                    if s and e:
+                        start = _dt.datetime.fromisoformat(s)
+                        end = _dt.datetime.fromisoformat(e)
+                        item["duration_seconds"] = round((end - start).total_seconds(), 1)
+                    else:
+                        item["duration_seconds"] = None
+                except Exception:
+                    item["duration_seconds"] = None
+                # Rimuovi campi pesanti non necessari per la lista
+                item.pop("payload_json", None)
+                item.pop("artifact_manifest_json", None)
+                jobs.append(item)
+            return jsonify({"status": "OK", "data": jobs})
+        except Exception as e:
+            return jsonify({"status": "ERROR", "message": str(e)})
+
