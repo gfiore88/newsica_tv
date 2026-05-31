@@ -168,17 +168,17 @@ class AIIntegratorAgent:
         if (self.work_dir / "is_multipart.txt").exists():
             (self.work_dir / "is_multipart.txt").unlink()
             
-        import sys
-        PYTHON_EXEC = sys.executable
-        tts_script = BASE_DIR / "src" / "tts_generator.py"
-        
         print("Sintesi vocale (TTS)...")
-        # Inseriamo NEWSICA_TMP_DIR nell'ambiente del subprocess
         import os
-        env = os.environ.copy()
-        env["NEWSICA_TMP_DIR"] = str(self.work_dir.resolve())
+        os.environ["NEWSICA_TMP_DIR"] = str(self.work_dir.resolve())
         
-        subprocess.run([str(PYTHON_EXEC), str(tts_script), content_data["character_id"]], env=env, check=True)
+        import sys
+        src_dir = str(BASE_DIR / "src")
+        if src_dir not in sys.path:
+            sys.path.append(src_dir)
+            
+        from tts_generator import generate_audio as do_generate_audio
+        do_generate_audio(content_data["character_id"])
         
         generated_files = []
         if (self.work_dir / "audio.wav").exists():

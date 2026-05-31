@@ -5,7 +5,7 @@ import json
 import subprocess
 import soundfile as sf
 import numpy as np
-from kokoro_onnx import Kokoro
+from newsica.utils.voice_helper import get_cached_kokoro
 
 from newsica.audio.tts_text import prepare_text_for_tts
 from newsica.domain.characters import get_character
@@ -202,7 +202,7 @@ def generate_podcast_with_chatterbox(segments):
 
 def generate_podcast_with_kokoro_fallback(segments):
     print("⚠️ Fallback podcast: uso Kokoro con voci Giulia/Marco.")
-    kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
+    kokoro = get_cached_kokoro()
     segment_files = []
 
     for idx, (speaker, text) in enumerate(segments):
@@ -217,27 +217,26 @@ def generate_podcast_with_kokoro_fallback(segments):
 
     return write_combined_podcast(segment_files, OUTPUT_AUDIO)
 
-def generate_audio():
+def generate_audio(character_id=None):
     print("Avvio modulo TTS...")
     
-    character_id = "news"
-    if len(sys.argv) > 1:
-        character_id = sys.argv[1]
+    if character_id is None:
+        character_id = "news"
+        if len(sys.argv) > 1:
+            character_id = sys.argv[1]
         
     character = get_character(character_id)
     voice = character.voice
     speed = float(os.getenv("TTS_SPEED", character.speed))
     
     if not os.path.exists(SCRIPT_FILE):
-        print(f"Errore: File {SCRIPT_FILE} non trovato. L'agente di integrazione (AIIntegratorAgent) non ha prodotto il copione in tempo.")
-        sys.exit(1)
+        raise RuntimeError(f"Errore: File {SCRIPT_FILE} non trovato. L'agente di integrazione (AIIntegratorAgent) non ha prodotto il copione in tempo.")
         
     with open(SCRIPT_FILE, 'r', encoding='utf-8') as f:
         raw_text = f.read().strip()
         
     if not raw_text:
-        print("Errore: Il copione è vuoto.")
-        sys.exit(1)
+        raise RuntimeError("Errore: Il copione è vuoto.")
         
     multipart_file = os.path.join(TMP_DIR, "is_multipart.txt")
     
@@ -261,8 +260,7 @@ def generate_audio():
                 success = generate_podcast_with_kokoro_fallback(segments)
 
             if not success:
-                print("❌ Errore critico: Nessun segmento audio generato.")
-                sys.exit(1)
+                raise RuntimeError("Errore critico: Nessun segmento audio generato.")
 
             # Rimuove semaforo multipart se esistente (i podcast sono file unici)
             if os.path.exists(multipart_file):
@@ -271,15 +269,13 @@ def generate_audio():
             print(f"✅ Podcast '{character.display_name}' sintetizzato con successo in: {OUTPUT_AUDIO}")
                 
         except Exception as e:
-            print(f"❌ Errore critico durante la generazione del podcast: {e}")
-            sys.exit(1)
+            raise RuntimeError(f"Errore critico durante la generazione del podcast: {e}")
             
     else:
-        # Percorso Kokoro standard
         print(f"Uso il personaggio: {character.id} (Voce: {voice}, velocità: {speed})")
         print(f"Inizializzazione di Kokoro ONNX per {character.display_name}...")
         try:
-            kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
+            kokoro = get_cached_kokoro()
             
             # Carica lo stile vocale personalizzato (vettore perturbato o stringa base)
             from newsica.utils.voice_helper import get_voice_style_for_character
@@ -319,8 +315,7 @@ def generate_audio():
                 print("✅ File audio generato con successo tramite Kokoro AI!")
                 
         except Exception as e:
-            print(f"❌ Errore durante la generazione dell'audio con Kokoro: {e}")
-            sys.exit(1)
+            raise RuntimeError(f"Errore durante la generazione dell'audio con Kokoro: {e}")
 
 if __name__ == "__main__":
     generate_audio()

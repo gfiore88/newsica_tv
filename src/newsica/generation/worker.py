@@ -405,12 +405,10 @@ def _process_breaking_news(job: dict) -> dict:
 
 def _synthesize_kokoro(text: str, output_file: Path, *, character: str, speed: float, voice: str | None = None) -> tuple[float, str]:
     try:
-        from kokoro_onnx import Kokoro
         import soundfile as sf
-        from newsica.utils.voice_helper import get_voice_style_for_character
+        from newsica.utils.voice_helper import get_voice_style_for_character, get_cached_kokoro
 
-        base_dir = Path(__file__).resolve().parent.parent.parent.parent
-        kokoro = Kokoro(str(base_dir / "kokoro-v1.0.onnx"), str(base_dir / "voices-v1.0.bin"))
+        kokoro = get_cached_kokoro()
         resolved_voice = voice or get_voice_style_for_character(kokoro, character)
         samples, sample_rate = kokoro.create(text, voice=resolved_voice, speed=speed, lang="it")
         sf.write(str(output_file), samples, sample_rate)

@@ -2,6 +2,24 @@ import re
 import numpy as np
 
 # Mappe di miscelazione (Blending) stabili per Kokoro ONNX
+_kokoro_instance = None
+
+def get_cached_kokoro():
+    global _kokoro_instance
+    if _kokoro_instance is None:
+        from kokoro_onnx import Kokoro
+        from pathlib import Path
+        import os
+        base_dir = Path(__file__).resolve().parent.parent.parent.parent
+        model_path = str(base_dir / "kokoro-v1.0.onnx")
+        voices_path = str(base_dir / "voices-v1.0.bin")
+        if not os.path.exists(model_path):
+            model_path = "kokoro-v1.0.onnx"
+            voices_path = "voices-v1.0.bin"
+        print(f"Loading Kokoro ONNX model from {model_path}...")
+        _kokoro_instance = Kokoro(model_path, voices_path)
+    return _kokoro_instance
+
 CHARACTER_VOICE_BLENDS = {
     # Chiara
     "chiara": [("if_sara", 1.0)],
