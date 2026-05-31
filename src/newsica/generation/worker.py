@@ -179,22 +179,28 @@ def run_worker(*, once: bool = False) -> None:
     logger.info("Generation worker started id=%s", worker_id)
 
     while True:
-        recovery = backend.expire_stale_jobs(stale_seconds)
-        if recovery.get("reset") or recovery.get("expired"):
-            logger.info("Generation recovery: %s", recovery)
+        try:
+            recovery = backend.expire_stale_jobs(stale_seconds)
+            if recovery.get("reset") or recovery.get("expired"):
+                logger.info("Generation recovery: %s", recovery)
 
-        job = backend.claim_next_job(worker_id)
-        if job:
-            logger.info("Claimed generation job %s type=%s", job["id"], job["job_type"])
-            process_job(job, worker_id, backend=backend)
+            job = backend.claim_next_job(worker_id)
+            if job:
+                logger.info("Claimed generation job %s type=%s", job["id"], job["job_type"])
+                process_job(job, worker_id, backend=backend)
+                if once:
+                    return
+                time.sleep(poll_seconds)
+                continue
+
             if once:
                 return
-            time.sleep(poll_seconds)
-            continue
-
-        if once:
-            return
-        time.sleep(idle_poll_seconds)
+            time.sleep(idle_poll_seconds)
+        except Exception as e:
+            logger.error("Error in generation worker polling loop: %s. Retrying in %s seconds...", e, idle_poll_seconds)
+            if once:
+                raise
+            time.sleep(idle_poll_seconds)
 
 
 def _process_slot_audio(job: dict) -> dict:

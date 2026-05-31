@@ -46,7 +46,13 @@ def enqueue_job(
             return active, False
 
     job_id = str(uuid.uuid4())[:12]
-    now = _now()
+    now_dt = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+    now = now_dt.isoformat()
+    
+    if not deadline_at:
+        # Default deadline to 1 hour from creation to prevent stale backlog pileups
+        deadline_at = (now_dt + datetime.timedelta(hours=1)).isoformat()
+
     payload_json = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True)
     with get_connection() as conn:
         cursor = conn.cursor()
